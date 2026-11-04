@@ -1,0 +1,65 @@
+name: Bug report
+description: Something in dsh-project-board does not work as expected
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for reporting. Please include enough detail to reproduce the issue.
+  - type: input
+    id: version
+    attributes:
+      label: Plugin version
+      description: Release tag or commit SHA you are running
+      placeholder: v1.0.0
+    validations:
+      required: true
+  - type: input
+    id: dsh
+    attributes:
+      label: DeepSeek Harness version
+      placeholder: 0.2.1-rc.5
+    validations:
+      required: true
+  - type: dropdown
+    id: area
+    attributes:
+      label: Area
+      options:
+        - Project board
+        - Floating HUD
+        - Search palette
+        - Keyboard shortcuts
+        - Conversation scrolling
+        - Notifications
+        - Settings
+        - Other
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      placeholder: |
+        1. Press Alt+N
+        2. ...
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behavior
+    validations:
+      required: true
+  - type: textarea
+    id: actual
+    attributes:
+      label: Actual behavior
+      description: Include screenshots or screen recordings when possible
+    validations:
+      required: true
+  - type: input
+    id: os
+    attributes:
+      label: Operating system
+      placeholder: Windows 11 26200 / macOS 15 / Ubuntu 24.04
