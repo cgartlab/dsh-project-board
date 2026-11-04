@@ -31,6 +31,9 @@ All notable changes to this project are documented here. The format follows
   order.
 - Shortcut-conflict repair can move a duplicate onto another free default when its natural
   fallback is already taken.
+- A turn that fails no longer reports "Task complete": when the visible session shows
+  DSH's turn-error row, the notifier reports "Task failed" instead, after giving the
+  error row a moment to mount.
 
 ### Changed
 

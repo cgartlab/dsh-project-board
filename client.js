@@ -768,6 +768,8 @@ window.__ModuleLoader__.load({
       'settings.notifySound': '通知提示音', 'settings.notifySoundDesc': '应用内通知播放提示音',
       'notif.completeTitle': '任务完成',
       'notif.completeBody': '会话「{title}」已完成',
+      'notif.failTitle': '任务失败',
+      'notif.failBody': '会话「{title}」本轮运行失败，点击查看详情',
       'notif.questionTitle': '等待回答',
       'notif.approvalTitle': '权限请求',
       'notif.pendingPrefix': '会话「{title}」',
@@ -874,6 +876,8 @@ window.__ModuleLoader__.load({
       'settings.notifySound': 'Notification sound', 'settings.notifySoundDesc': 'Play a chime for in-app notifications',
       'notif.completeTitle': 'Task complete',
       'notif.completeBody': 'Session "{title}" finished',
+      'notif.failTitle': 'Task failed',
+      'notif.failBody': 'Session "{title}" failed this turn. Click to see details',
       'notif.questionTitle': 'Waiting for your answer',
       'notif.approvalTitle': 'Permission request',
       'notif.pendingPrefix': 'Session "{title}"',
@@ -1767,6 +1771,17 @@ window.__ModuleLoader__.load({
       return t('notif.pendingPrefix', { title: title }) + (blocks.length > 0 ? '\n' + blocks.join('\n\n') : '') + multi;
     }
 
+    /** Whether the visible transcript shows a failed turn (DSH renders a turnError row). */
+    function visibleTranscriptFailed() {
+      try {
+        const flow = visibleChatFlow();
+        if (!flow) return false;
+        if (flow.querySelector('[class*="turnErrorRow"],[class*="turnErrorTitle"]')) return true;
+        const text = flow.innerText || '';
+        return /(This turn failed|本轮运行失败)/.test(text);
+      } catch (error) { return false; }
+    }
+
     function NotificationWatcher(props) {
       const { t } = props;
       const useSessions = typeof props.useSessions === 'function' ? props.useSessions : NO_SCHEDULE_HOOK;
@@ -1820,7 +1835,19 @@ window.__ModuleLoader__.load({
             return;
           }
           if (prev.status && prev.status.running === true && cur.status && cur.status.running !== true && !curPending) {
-            send(sessionId, 'success', t('notif.completeTitle'), t('notif.completeBody', { title: title }), 9000);
+            const row = byId[sessionId];
+            const visible = Boolean(row && row.retainedBy && (row.retainedBy.mainView || 0) > 0);
+            const finish = (failed) => {
+              if (failed) send(sessionId, 'warn', t('notif.failTitle'), t('notif.failBody', { title: title }), 20000);
+              else send(sessionId, 'success', t('notif.completeTitle'), t('notif.completeBody', { title: title }), 9000);
+            };
+            if (visible) {
+              /* The failure row mounts a tick after the running flag clears; let it land
+                 before deciding between "complete" and "failed". */
+              window.setTimeout(() => finish(visibleTranscriptFailed()), 700);
+            } else {
+              finish(false);
+            }
           }
         });
       }, [statuses, sessionsSnap]);
