@@ -44,6 +44,8 @@ All notable changes to this project are documented here. The format follows
 - Previous/next-instruction taps now resolve the reading-line turn (and treat the tail as
   the latest turn), so they land on the intended instruction and page in older history
   when the target turn is not loaded yet.
+- Approval notifications now show the request's localized reason instead of
+  `[object Object]`.
 
 ### Changed
 

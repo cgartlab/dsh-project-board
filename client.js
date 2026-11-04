@@ -1954,13 +1954,32 @@ window.__ModuleLoader__.load({
       } catch (error) { return false; }
     }
 
+    /** Human-readable text for an approval reason, which DSH may supply as an object. */
+    function approvalReasonText(value) {
+      if (!value) return '';
+      if (typeof value === 'string') return value;
+      if (typeof value === 'object') {
+        for (const key of ['message', 'text', 'label', 'reason', 'description', 'summary']) {
+          if (typeof value[key] === 'string' && value[key]) return value[key];
+        }
+        if (typeof value.zh === 'string' && value.zh) return value.zh;
+        if (typeof value.en === 'string' && value.en) return value.en;
+        try {
+          const json = JSON.stringify(value);
+          if (json && json !== '{}' && json !== '[]') return json;
+        } catch (error) { /* ignore */ }
+        return '';
+      }
+      return String(value);
+    }
+
     /** Full question text plus every option, or the approval reason and choices. */
     function formatPendingNotification(pending, title, t) {
       if (!pending) return '';
       if (pending.kind === 'approval') {
-        const reason = pending.displayReason || pending.reason || '';
+        const reason = approvalReasonText(pending.displayReason || pending.reason);
         return t('notif.approvalBody', { title: title, tool: pending.toolName || '' })
-          + (reason ? '\n' + String(reason) : '')
+          + (reason ? '\n' + reason : '')
           + '\n' + t('notif.approvalChoices');
       }
       const questions = Array.isArray(pending.questions) ? pending.questions : [];
