@@ -75,6 +75,7 @@ runtime dependencies of its own; host-half `index.js` is intentionally a no-op.
 - `cordis.patch.yml` — bundle insertion
 - `locale/` — zh/en trailer strings
 - `scripts/` — manifest, syntax and i18n checks used locally and in CI
+- `docs/architecture.md` — slot map, state, keyboard and notification internals
 
 ## Known limitations
 

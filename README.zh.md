@@ -69,6 +69,7 @@ plugin_manager install_bundle target="<本仓库路径>"
 - `cordis.patch.yml` —— bundle 插入声明
 - `locale/` —— zh/en 尾部字符串
 - `scripts/` —— 本地与 CI 使用的清单、语法、i18n 检查
+- `docs/architecture.md` —— 插槽映射、状态、键盘与通知内部实现
 
 ## 已知限制
 
