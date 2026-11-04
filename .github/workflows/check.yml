@@ -1,0 +1,24 @@
+name: check
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: Bundle and manifest checks
+        run: node scripts/check-bundle.cjs
+      - name: i18n parity
+        run: node scripts/check-i18n.cjs
+      - name: Syntax
+        run: |
+          node --check client.js
+          node --check index.js
