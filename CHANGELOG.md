@@ -34,6 +34,11 @@ All notable changes to this project are documented here. The format follows
 - A turn that fails no longer reports "Task complete": when the visible session shows
   DSH's turn-error row, the notifier reports "Task failed" instead, after giving the
   error row a moment to mount.
+- Hold-to-scroll and scroll-to-bottom now drive DSH's virtualised `ChatViewport` instead
+  of raw `scrollTop`, which the transcript view reverts; continuous up/down scrolling and
+  older-page prefetch work on the current DSH build.
+- Previous/next-instruction navigation falls back to DSH turn navigation when the
+  virtualised transcript exposes no user-message rows.
 
 ### Changed
 

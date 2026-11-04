@@ -320,9 +320,93 @@ window.__ModuleLoader__.load({
       });
     }
 
+    /** Turn number at the reading line of DSH's virtualised transcript, or the last loaded turn. */
+    function currentVisibleTurn(viewport) {
+      try {
+        const scroller = findChatScroller();
+        const top = scroller ? scroller.getBoundingClientRect().top : 0;
+        const height = scroller ? scroller.clientHeight : (window.innerHeight || 600);
+        /* Use a reading line below the top edge: a row merely crossing the boundary can be
+           an empty tail of the previous turn. */
+        const line = top + Math.min(180, Math.max(60, height * 0.28));
+        const rows = Array.prototype.slice.call(document.querySelectorAll('[data-chat-turn]'))
+          .map((element) => ({ element: element, rect: element.getBoundingClientRect() }))
+          .filter((row) => row.rect.height > 0)
+          .sort((left, right) => left.rect.top - right.rect.top);
+        for (const row of rows) {
+          if (row.rect.top <= line && row.rect.bottom > line) {
+            const turn = Number(row.element.getAttribute('data-chat-turn'));
+            if (Number.isSafeInteger(turn)) return turn;
+          }
+        }
+        for (const row of rows) {
+          if (row.rect.bottom <= top + 4) continue;
+          const turn = Number(row.element.getAttribute('data-chat-turn'));
+          if (Number.isSafeInteger(turn)) return turn;
+        }
+      } catch (error) { /* ignore */ }
+      const turns = viewport && Array.isArray(viewport.turns) ? viewport.turns : [];
+      return turns.length > 0 ? turns[turns.length - 1].turn : null;
+    }
+
+    function loadedTurnNumbers(viewport) {
+      return (viewport.turns || []).map((item) => item.turn).filter(Number.isSafeInteger).sort((left, right) => left - right);
+    }
+
+    /** Previous/next turn through DSH's own viewport (the virtualised transcript has no
+        user-row DOM to collect). Loads one older page when the target is not mounted yet. */
+    async function jumpUserByViewport(direction) {
+      const viewport = findChatViewport();
+      if (!viewport || typeof viewport.scrollToTurn !== 'function') return false;
+      if (userJumpLoading) return true;
+      userJumpLoading = true;
+      try {
+        let turns = loadedTurnNumbers(viewport);
+        const current = currentVisibleTurn(viewport);
+        if (current === null) return false;
+        let index = turns.indexOf(current);
+        if (index < 0) index = turns.length - 1;
+        let target = direction < 0
+          ? (index > 0 ? turns[index - 1] : current - 1)
+          : (index < turns.length - 1 ? turns[index + 1] : current + 1);
+        if (!turns.includes(target)) {
+          const button = direction < 0 ? findLoadEarlierButton() : null;
+          if (!button) return false;
+          button.click();
+          const started = Date.now();
+          while (Date.now() - started < 2500) {
+            await new Promise((resolve) => window.setTimeout(resolve, 120));
+            turns = loadedTurnNumbers(viewport);
+            if (turns.includes(target)) break;
+          }
+          if (!turns.includes(target)) return false;
+        }
+        /* Let the newly mounted rows finish layout before aligning to one. */
+        await new Promise((resolve) => window.setTimeout(resolve, 160));
+        const landing = viewport.scrollToTurn(target);
+        if (!landing) return false;
+        const row = Array.prototype.find.call(document.querySelectorAll('[data-chat-turn="' + target + '"]'), (element) => element.getBoundingClientRect().height > 0);
+        if (row) {
+          row.classList.remove('pbx-user-jump-highlight');
+          void row.offsetWidth;
+          row.classList.add('pbx-user-jump-highlight');
+          window.setTimeout(() => row.classList.remove('pbx-user-jump-highlight'), 1200);
+        }
+        return true;
+      } catch (error) { return false; }
+      finally { userJumpLoading = false; }
+    }
+
     function highlightUserTarget(target) {
       if (!target) return;
-      target.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      const viewport = findChatViewport();
+      const turn = Number(target.dataset && target.dataset.chatTurn);
+      if (viewport && typeof viewport.align === 'function') {
+        try { viewport.align(target, 24, Number.isSafeInteger(turn) ? turn : null); }
+        catch (error) { target.scrollIntoView({ behavior: 'smooth', block: 'center' }); }
+      } else {
+        target.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      }
       target.classList.remove('pbx-user-jump-highlight');
       void target.offsetWidth;
       target.classList.add('pbx-user-jump-highlight');
@@ -375,7 +459,7 @@ window.__ModuleLoader__.load({
     function jumpUserMessage(direction) {
       if (userJumpLoading) return;
       const rows = collectUserMessageTargets();
-      if (rows.length === 0) return;
+      if (rows.length === 0) { void jumpUserByViewport(direction); return; }
       const scroller = findChatScroller();
       const bounds = scroller ? scroller.getBoundingClientRect() : { top: 0, bottom: window.innerHeight };
       const viewportTop = Math.max(0, Math.min(bounds.top, window.innerHeight));
@@ -429,6 +513,59 @@ window.__ModuleLoader__.load({
       }
       const doc = document.scrollingElement || document.documentElement;
       return doc && doc.scrollHeight > doc.clientHeight + 4 ? doc : null;
+    }
+
+    let chatViewportCache = null;
+    function chatViewportUsable(viewport) {
+      try {
+        const scroller = viewport.elements && viewport.elements.scroller;
+        if (!scroller || !scroller.isConnected) return false;
+        const rect = scroller.getBoundingClientRect();
+        if (!(rect.width > 10 && rect.height > 10)) return false;
+        const known = findChatScroller();
+        if (known && scroller !== known && !scroller.contains(visibleChatFlow())) return false;
+        return viewport.metrics() !== null;
+      } catch (error) { return false; }
+    }
+    /** DSH 0.2.x owns the transcript scrollport through ChatViewport: raw scrollTop writes
+        are reverted, so scrolling must go through this viewport's own write()/metrics(). */
+    function findChatViewport() {
+      try {
+        if (chatViewportCache && chatViewportUsable(chatViewportCache)) return chatViewportCache;
+        chatViewportCache = null;
+        const rootElement = document.getElementById('root') || (document.body && document.body.firstElementChild);
+        if (!rootElement) return null;
+        const containerKey = Object.keys(rootElement).find((key) => key.startsWith('__reactContainer'));
+        const start = containerKey ? rootElement[containerKey] : null;
+        if (!start) return null;
+        const seen = new Set();
+        const queue = [start];
+        let scanned = 0;
+        while (queue.length > 0 && scanned < 120000) {
+          const fiber = queue.shift();
+          if (!fiber || seen.has(fiber)) continue;
+          seen.add(fiber);
+          scanned += 1;
+          let hook = fiber.memoizedState;
+          let hops = 0;
+          while (hook && hops < 300) {
+            const value = hook.memoizedState;
+            if (value && typeof value === 'object'
+              && typeof value.scrollToTurnAtOrAfter === 'function'
+              && typeof value.metrics === 'function'
+              && typeof value.write === 'function'
+              && chatViewportUsable(value)) {
+              chatViewportCache = value;
+              return value;
+            }
+            hook = hook.next;
+            hops += 1;
+          }
+          if (fiber.child) queue.push(fiber.child);
+          if (fiber.sibling) queue.push(fiber.sibling);
+        }
+      } catch (error) { /* ignore */ }
+      return null;
     }
 
     /** Stop the hold loop; a short tap (still pending) falls back to the message jump. */
@@ -543,6 +680,49 @@ window.__ModuleLoader__.load({
         if (state.pauseUntil > ts) { schedule(); return; }
         const frames = dt / 16.6667;
         state.speed = Math.min(30, state.speed + 0.8 * frames);
+        /* DSH virtualised transcript: all position changes go through ChatViewport. */
+        const viewport = findChatViewport();
+        if (viewport) {
+          const viewportMetrics = viewport.metrics();
+          if (viewportMetrics) {
+            const top = viewportMetrics.top;
+            const floor = viewportMetrics.floor;
+            if (state.dir > 0) {
+              if (top >= floor - 0.5) { state.stall = 0; schedule(); return; }
+              const target = Math.min(floor, top + state.speed * frames);
+              try { viewport.write(target, viewportMetrics, null, null); } catch (error) { node.scrollTop = target; }
+              const after = (viewport.metrics() || viewportMetrics).top;
+              if (Math.abs(after - top) < 0.5) state.stall += frames; else state.stall = 0;
+              schedule();
+              return;
+            }
+            if (!state.loading && !state.exhausted && top < node.clientHeight * 1.2) requestOlder(false);
+            if (top <= 0.5) {
+              if (state.exhausted) { state.mode = 'done'; return; }
+              if (!state.loading) requestOlder(true);
+              schedule();
+              return;
+            }
+            const target = Math.max(0, top - state.speed * frames);
+            try { viewport.write(target, viewportMetrics, null, null); } catch (error) { node.scrollTop = target; }
+            const after = (viewport.metrics() || viewportMetrics).top;
+            if (Math.abs(after - top) < 0.5) {
+              state.stall += frames;
+              if (state.stall > 24) {
+                state.stall = 0;
+                if (stepUpByAnchor()) { state.retries = 0; schedule(); return; }
+                state.retries += 1;
+                if (state.retries > 6) { state.mode = 'done'; return; }
+                state.pauseUntil = now() + 260;
+              }
+            } else {
+              state.stall = 0;
+              state.retries = 0;
+            }
+            schedule();
+            return;
+          }
+        }
         const max = Math.max(0, node.scrollHeight - node.clientHeight);
         if (state.dir > 0) {
           if (node.scrollTop >= max - 0.5) { state.stall = 0; schedule(); return; }
@@ -674,7 +854,15 @@ window.__ModuleLoader__.load({
         const pin = (left) => {
           const node = target.isConnected ? target : findChatScroller();
           if (!node) return;
-          node.scrollTop = node.scrollHeight;
+          const viewport = findChatViewport();
+          if (viewport) {
+            try {
+              const metrics = viewport.metrics();
+              if (metrics) viewport.write(metrics.floor, metrics, null, null);
+            } catch (error) { node.scrollTop = node.scrollHeight; }
+          } else {
+            node.scrollTop = node.scrollHeight;
+          }
           if (left > 0) window.requestAnimationFrame(() => pin(left - 1));
         };
         pin(30);
