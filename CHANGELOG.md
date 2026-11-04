@@ -4,6 +4,19 @@ All notable changes to this project are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the project uses
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.0.1] - 2026-11-05
+
+### Fixed
+
+- `Alt+S` now returns to the bottom of the conversation reliably: it presses the chat
+  view's own "back to bottom" control and then pins the bottom position across animation
+  frames, instead of a single smooth `scrollTo` that the chat view reverted.
+- Saved settings that still carried the old overlapping defaults (scroll-to-bottom and the
+  session actions dialog both on `Alt+D`) are repaired once on load: each shortcut keeps a
+  single owner and falls back to its current default when it was the duplicate.
+- The scroll-to-bottom helper no longer mistakes the plugin's own composer button for the
+  chat view's native control.
+
 ## [1.0.0] - 2026-11-05
 
 ### Added

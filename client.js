@@ -31,6 +31,7 @@ window.__ModuleLoader__.load({
       header: { capsule: true, placement: 'header' },
       hints: { shortcuts: true },
       hintsVersion: 1,
+      shortcutsVersion: 1,
       headerButtonsVersion: 3,
       headerButtons: {
         switch: { hidden: false, side: 'left', order: 10 },
@@ -60,13 +61,39 @@ window.__ModuleLoader__.load({
         for (const key of Object.keys(DEFAULT_SETTINGS.shortcuts)) {
           if (!comboHasModifier(out.shortcuts[key])) out.shortcuts[key] = DEFAULT_SETTINGS.shortcuts[key];
         }
+        if (raw.shortcutsVersion !== 1) out.shortcuts = healShortcutConflicts(out.shortcuts);
       }
       return out;
+    }
+    /** Older builds shipped overlapping defaults (scroll-to-bottom and the session menu both
+        on Alt+D); repaired saved settings keep one owner per combination. */
+    function healShortcutConflicts(shortcuts) {
+      const defaults = DEFAULT_SETTINGS.shortcuts;
+      const owners = new Map();
+      for (const action of Object.keys(defaults)) {
+        const combo = shortcuts[action];
+        if (!owners.has(combo)) owners.set(combo, [action]);
+        else owners.get(combo).push(action);
+      }
+      for (const [combo, actions] of owners) {
+        if (actions.length < 2) continue;
+        const winner = actions.find((name) => defaults[name] === combo) || actions[0];
+        for (const action of actions) {
+          if (action === winner) continue;
+          const fallback = defaults[action];
+          const taken = [...owners.keys()].includes(fallback) && fallback !== combo;
+          if (!taken) {
+            shortcuts[action] = fallback;
+            owners.set(fallback, [action]);
+          }
+        }
+      }
+      return shortcuts;
     }
     function loadSettings() {
       const raw = loadJson(SETTINGS_KEY, null);
       const merged = mergeSettings(DEFAULT_SETTINGS, raw);
-      if (raw && typeof raw === 'object' && (raw.headerButtonsVersion !== 3 || raw.hintsVersion !== 1)) {
+      if (raw && typeof raw === 'object' && (raw.headerButtonsVersion !== 3 || raw.hintsVersion !== 1 || raw.shortcutsVersion !== 1)) {
         try { persistSettings(merged); } catch (error) { /* ignore */ }
       }
       return merged;
@@ -610,6 +637,20 @@ window.__ModuleLoader__.load({
       return true;
     }
 
+    /** Native "back to bottom" control of the chat view, when it is showing. */
+    function findScrollToBottomButton() {
+      const labels = ['回到底部', 'Scroll to bottom', 'Back to bottom', 'Jump to latest'];
+      const buttons = document.querySelectorAll('button[aria-label]');
+      for (const button of buttons) {
+        if (button.closest('.pbx-root, .pbx-hud, .pbx-shortcutHints, .pbx-composerButtons')) continue;
+        const label = button.getAttribute('aria-label') || '';
+        if (!labels.some((text) => label === text || label.indexOf(text) === 0)) continue;
+        const rect = button.getBoundingClientRect();
+        if (rect.width > 0 && rect.height > 0) return button;
+      }
+      return null;
+    }
+
     /** Scroll the open conversation to its bottom and focus the composer input. */
     function scrollToComposerAndFocus() {
       const flow = visibleChatFlow();
@@ -619,8 +660,25 @@ window.__ModuleLoader__.load({
         if ((style.overflowY === 'auto' || style.overflowY === 'scroll') && scrollParent.scrollHeight > scrollParent.clientHeight + 4) break;
         scrollParent = scrollParent.parentElement;
       }
-      if (scrollParent && scrollParent !== document.body) scrollParent.scrollTo({ top: scrollParent.scrollHeight, behavior: 'smooth' });
-      else if (flow) flow.scrollIntoView({ block: 'end', behavior: 'smooth' });
+      if (scrollParent && scrollParent === document.body) scrollParent = null;
+      /* The chat view restores a programmatic position, so press its own control first and
+         then hold the bottom position across animation frames. */
+      const nativeButton = findScrollToBottomButton();
+      if (nativeButton) {
+        try { nativeButton.click(); } catch (error) { /* ignore */ }
+      }
+      const target = scrollParent || findChatScroller();
+      if (target) {
+        const pin = (left) => {
+          const node = target.isConnected ? target : findChatScroller();
+          if (!node) return;
+          node.scrollTop = node.scrollHeight;
+          if (left > 0) window.requestAnimationFrame(() => pin(left - 1));
+        };
+        pin(30);
+      } else if (flow) {
+        flow.scrollIntoView({ block: 'end', behavior: 'smooth' });
+      }
       const card = document.querySelector('[data-composer-card]');
       let input = card ? card.querySelector('textarea, [contenteditable="true"]') : null;
       if (!input) {
@@ -3338,7 +3396,7 @@ window.__ModuleLoader__.load({
         return null;
       };
       const settingsStore = createUiStore(loadSettings());
-      const writeSettings = (next) => { const merged = mergeSettings(DEFAULT_SETTINGS, next); merged.headerButtonsVersion = 3; merged.hintsVersion = 1; persistSettings(merged); settingsStore.set(merged); };
+      const writeSettings = (next) => { const merged = mergeSettings(DEFAULT_SETTINGS, next); merged.headerButtonsVersion = 3; merged.hintsVersion = 1; merged.shortcutsVersion = 1; persistSettings(merged); settingsStore.set(merged); };
       const toggleHud = () => {
         try {
           window.dispatchEvent(new CustomEvent('pbx-hud-toggle'));
