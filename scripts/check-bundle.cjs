@@ -60,6 +60,16 @@ if (pkg) {
 
 if (!checkFile('cordis.patch.yml')) fail('missing cordis.patch.yml');
 if (!checkFile('LICENSE')) fail('missing LICENSE');
+for (const readme of ['README.md', 'README.zh.md']) checkFile(readme);
+
+if (checkFile('CHANGELOG.md')) {
+  const changelog = fs.readFileSync(path.join(root, 'CHANGELOG.md'), 'utf8');
+  const heading = /^##\s*\[([^\]]+)\]/m.exec(changelog);
+  if (!heading) fail('CHANGELOG.md: missing a "## [version]" heading');
+  else if (pkg && pkg.version && heading[1] !== pkg.version) {
+    fail('CHANGELOG.md: newest entry ' + heading[1] + ' does not match package.json version ' + pkg.version);
+  }
+}
 
 if (failures.length > 0) {
   console.error('\n' + failures.length + ' check(s) failed');
