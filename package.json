@@ -2,7 +2,21 @@
   "name": "@local/dsh-project-board",
   "version": "1.0.0",
   "private": true,
-  "description": "Project board: aggregate task status across every workspace.",
+  "description": "DeepSeek Harness plugin: project/session task board, floating session HUD, keyboard-first navigation, and task notifications.",
+  "license": "CC-BY-NC-SA-4.0",
+  "author": "CGArtLab",
+  "keywords": [
+    "dsh",
+    "deepseek-harness",
+    "plugin",
+    "project-board",
+    "session-management"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/cgartlab/dsh-project-board.git"
+  },
+  "homepage": "https://github.com/cgartlab/dsh-project-board",
   "type": "module",
   "exports": {
     ".": "./index.js",

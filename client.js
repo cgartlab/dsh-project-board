@@ -10,8 +10,23 @@ window.__ModuleLoader__.load({
     const BOARD_ID = '@local/dsh-project-board/tab';
     const BOARD_KIND = 'projectBoard';
     const SETTINGS_KEY = 'dsh.project-board.settings.v1';
+    const SHORTCUT_LABEL_KEYS = {
+      palette: 'settings.shortcut.palette',
+      prev: 'settings.shortcut.prev',
+      next: 'settings.shortcut.next',
+      userPrev: 'settings.shortcut.userPrev',
+      userNext: 'settings.shortcut.userNext',
+      scrollBottom: 'settings.shortcut.scrollBottom',
+      sidebarBoard: 'settings.shortcut.sidebarBoard',
+      panelHalf: 'settings.shortcut.panelHalf',
+      panelFull: 'settings.shortcut.panelFull',
+      rename: 'settings.shortcut.rename',
+      interject: 'settings.shortcut.interject',
+      hud: 'settings.shortcut.hud',
+      sessionMenu: 'settings.shortcut.sessionMenu'
+    };
     const DEFAULT_SETTINGS = {
-      shortcuts: { palette: 'alt+KeyK', prev: 'alt+KeyI', next: 'alt+Comma', userPrev: 'alt+KeyU', userNext: 'alt+KeyM', scrollBottom: 'alt+KeyD' },
+      shortcuts: { palette: 'alt+KeyK', prev: 'alt+KeyI', next: 'alt+Comma', userPrev: 'alt+KeyU', userNext: 'alt+KeyM', scrollBottom: 'alt+KeyS', sidebarBoard: 'alt+KeyN', panelHalf: 'alt+KeyB', panelFull: 'alt+KeyV', rename: 'alt+KeyR', interject: 'alt+Enter', hud: 'alt+KeyE', sessionMenu: 'alt+KeyD' },
       palette: { enabled: true, blur: 15 },
       header: { capsule: true, placement: 'header' },
       hints: { shortcuts: true },
@@ -23,6 +38,7 @@ window.__ModuleLoader__.load({
         capsule: { hidden: false, side: 'left', order: 50 }
       },
       hud: { enabled: true, includeDone: true, defaultCollapsed: false, defaultPosition: 'top-right', recentEnabled: true, recentCount: 5, recentExcludeAuto: true, maxSessions: 6 },
+      notify: { enabled: true, sound: true },
       board: { enabled: true, wideThreshold: 520, defaultView: 'sessions' }
     };
     function cloneJson(value) { try { return JSON.parse(JSON.stringify(value)); } catch (error) { return value; } }
@@ -87,10 +103,39 @@ window.__ModuleLoader__.load({
       return parts.includes('ctrl') || parts.includes('alt') || parts.includes('meta');
     }
     function matchCombo(event, combo) { return Boolean(combo) && comboFromEvent(event) === combo; }
+    function isComposingEvent(event) {
+      if (!event) return false;
+      if (event.isComposing === true || event.keyCode === 229) return true;
+      return Boolean(event.nativeEvent && event.nativeEvent.isComposing === true);
+    }
+    /** Our stored combo ("alt+KeyK") as a binding comparable with ctx.shortcuts entries. */
+    function comboBindingOf(combo) {
+      const parts = String(combo || '').split('+');
+      const code = parts.pop();
+      if (!code || !/^[A-Za-z][A-Za-z0-9]*$/.test(code)) return null;
+      return { code: code, modifiers: parts.map((part) => part === 'ctrl' ? 'control' : part) };
+    }
+    /** Same modifiers and at least one shared non-modifier key (a single key also collides with a chord). */
+    function bindingsOverlap(left, right) {
+      if (!left || !right) return false;
+      const modsLeft = left.modifiers.slice().sort().join('+');
+      const modsRight = right.modifiers.slice().sort().join('+');
+      if (modsLeft !== modsRight) return false;
+      const leftCodes = [left.code, left.secondCode].filter(Boolean);
+      const rightCodes = [right.code, right.secondCode].filter(Boolean);
+      return leftCodes.some((code) => rightCodes.indexOf(code) >= 0);
+    }
+    function hasOpenDialog() {
+      try {
+        const nodes = document.querySelectorAll('[aria-modal="true"]');
+        for (const node of nodes) if (node.getClientRects().length > 0) return true;
+      } catch (error) { /* ignore */ }
+      return false;
+    }
     let shortcutSuppressed = false;
     let userJumpLoading = false;
-    let userJumpCursorKey = '';
-    let userJumpCursorIndex = -1;
+    let userJumpLastTarget = null;
+    let userJumpLastAt = 0;
     let suppressHeaderClickUntil = 0;
 
     function pointerViewX(event) {
@@ -225,7 +270,7 @@ window.__ModuleLoader__.load({
 
     /** Every rendered user-instruction bubble, in document order. */
     function collectUserMessageTargets() {
-      const flow = document.querySelector('[data-slot="conversation.chat.flow"]') || document;
+      const flow = visibleChatFlow() || document;
       let targets = Array.prototype.slice.call(flow.querySelectorAll('[data-slot="conversation.chat.user.content"]'));
       if (targets.length === 0) targets = Array.prototype.slice.call(flow.querySelectorAll('[class*="_userRow"]'));
       if (targets.length === 0) {
@@ -273,71 +318,301 @@ window.__ModuleLoader__.load({
       });
     }
 
-    function userJumpScrollParent() {
-      const flow = document.querySelector('[data-slot="conversation.chat.flow"]');
-      let parent = flow;
-      while (parent && parent !== document.body) {
-        const style = window.getComputedStyle(parent);
-        if ((style.overflowY === 'auto' || style.overflowY === 'scroll') && parent.scrollHeight > parent.clientHeight + 4) return parent;
-        parent = parent.parentElement;
-      }
-      return null;
-    }
-
-    function initialUserJumpIndex(rows) {
-      const scroll = userJumpScrollParent();
-      if (scroll && scroll.scrollHeight - scroll.scrollTop - scroll.clientHeight < 56) return rows.length - 1;
-      const anchorY = window.innerHeight * 0.5;
-      let bestIndex = 0;
-      let best = Infinity;
-      for (let i = 0; i < rows.length; i += 1) {
-        const rect = rows[i].getBoundingClientRect();
-        const distance = Math.abs(rect.top + rect.height / 2 - anchorY);
-        if (distance < best) { best = distance; bestIndex = i; }
-      }
-      return bestIndex;
-    }
-
     async function loadEarlierThenJump(anchor, previousCount) {
       if (userJumpLoading) return;
       userJumpLoading = true;
       try {
         const button = findLoadEarlierButton();
-        if (!button) { highlightUserTarget(anchor); return; }
+        if (!button) { highlightUserTarget(anchor); userJumpLastTarget = anchor; userJumpLastAt = Date.now(); return; }
         button.click();
         await waitForMoreTargets(previousCount, 2500);
         const rows = collectUserMessageTargets();
         const prepended = rows.length - previousCount;
-        if (prepended <= 0) { highlightUserTarget(anchor); return; }
-        const targetIndex = prepended - 1;
-        userJumpCursorKey = document.title;
-        userJumpCursorIndex = targetIndex;
-        highlightUserTarget(rows[targetIndex] || rows[0]);
+        if (prepended <= 0) { highlightUserTarget(anchor); userJumpLastTarget = anchor; userJumpLastAt = Date.now(); return; }
+        const target = rows[prepended - 1] || rows[0];
+        highlightUserTarget(target);
+        userJumpLastTarget = target;
+        userJumpLastAt = Date.now();
       } finally {
         userJumpLoading = false;
       }
     }
 
-    /** Move to the previous/next historical user instruction in the open conversation. */
+    /** Jump to the previous/next user instruction relative to whatever is visible right now. */
     function jumpUserMessage(direction) {
       if (userJumpLoading) return;
       const rows = collectUserMessageTargets();
       if (rows.length === 0) return;
-      const sessionKey = document.title || '';
-      if (userJumpCursorKey !== sessionKey || userJumpCursorIndex < 0 || userJumpCursorIndex >= rows.length) {
-        userJumpCursorIndex = initialUserJumpIndex(rows);
-        userJumpCursorKey = sessionKey;
+      const scroller = findChatScroller();
+      const bounds = scroller ? scroller.getBoundingClientRect() : { top: 0, bottom: window.innerHeight };
+      const viewportTop = Math.max(0, Math.min(bounds.top, window.innerHeight));
+      const viewportBottom = Math.max(viewportTop, Math.min(bounds.bottom, window.innerHeight));
+      const lastAt = Date.now();
+      const recent = lastAt - userJumpLastAt < 700;
+      let target = null;
+      if (direction < 0) {
+        for (let i = rows.length - 1; i >= 0; i -= 1) {
+          const row = rows[i];
+          if (recent && row === userJumpLastTarget) continue;
+          if (row.getBoundingClientRect().top < viewportTop - 2) { target = row; break; }
+        }
+        if (!target) { void loadEarlierThenJump(rows[0], rows.length); return; }
+      } else {
+        for (let i = 0; i < rows.length; i += 1) {
+          const row = rows[i];
+          if (recent && row === userJumpLastTarget) continue;
+          if (row.getBoundingClientRect().bottom > viewportBottom + 2) { target = row; break; }
+        }
+        if (!target) target = rows[rows.length - 1];
       }
-      if (direction < 0 && userJumpCursorIndex === 0) { void loadEarlierThenJump(rows[0], rows.length); return; }
-      const next = Math.max(0, Math.min(rows.length - 1, userJumpCursorIndex + direction));
-      if (next === userJumpCursorIndex) { highlightUserTarget(rows[next]); return; }
-      userJumpCursorIndex = next;
-      highlightUserTarget(rows[next]);
+      highlightUserTarget(target);
+      userJumpLastTarget = target;
+      userJumpLastAt = lastAt;
+    }
+
+    /* ------------------------------------------------ hold-to-scroll the chat */
+    const HOLD_SCROLL_DELAY = 300;
+    let holdScrollState = null;
+
+    /** The chat flow of the visible conversation (hidden retained views render zero-size). */
+    function visibleChatFlow() {
+      const flows = document.querySelectorAll('[data-slot="conversation.chat.flow"]');
+      let fallback = null;
+      for (const flow of flows) {
+        if (!fallback) fallback = flow;
+        const rect = flow.getBoundingClientRect();
+        if (rect.width > 4 && rect.height > 4) return flow;
+      }
+      return fallback;
+    }
+
+    function findChatScroller() {
+      const flow = visibleChatFlow();
+      let node = flow;
+      while (node && node !== document.body) {
+        const style = window.getComputedStyle(node);
+        if ((style.overflowY === 'auto' || style.overflowY === 'scroll' || style.overflowY === 'overlay') && node.scrollHeight > node.clientHeight + 4) return node;
+        node = node.parentElement;
+      }
+      const doc = document.scrollingElement || document.documentElement;
+      return doc && doc.scrollHeight > doc.clientHeight + 4 ? doc : null;
+    }
+
+    /** Stop the hold loop; a short tap (still pending) falls back to the message jump. */
+    function stopHoldScroll(allowJump) {
+      const state = holdScrollState;
+      if (!state) return;
+      holdScrollState = null;
+      window.clearTimeout(state.timer);
+      if (state.poll) window.clearInterval(state.poll);
+      if (state.raf) window.cancelAnimationFrame(state.raf);
+      if (typeof state.restore === 'function') { try { state.restore(); } catch (error) { /* ignore */ } }
+      if (allowJump && state.mode === 'pending') jumpUserMessage(state.dir);
+    }
+
+    function startHoldLoop(state) {
+      const initial = findChatScroller();
+      if (!initial) return;
+      state.mode = 'running';
+      state.scroller = initial;
+      state.speed = 9;
+      state.loading = false;
+      state.awaitingOlder = false;
+      state.exhausted = false;
+      state.stall = 0;
+      state.retries = 0;
+      state.pauseUntil = 0;
+      state.poll = 0;
+      state.last = window.performance && typeof window.performance.now === 'function' ? window.performance.now() : Date.now();
+      const previousBehavior = initial.style.scrollBehavior;
+      initial.style.scrollBehavior = 'auto';
+      state.restore = () => {
+        const node = state.scroller || initial;
+        try { node.style.scrollBehavior = previousBehavior; } catch (error) { /* ignore */ }
+      };
+
+      /* The chat may remount its scroll container while history grows; always use the live node. */
+      const current = () => {
+        const flow = visibleChatFlow();
+        const node = state.scroller;
+        if (node && node.isConnected && flow && node.contains(flow)) return node;
+        const next = findChatScroller();
+        if (next) { state.scroller = next; state.stall = 0; }
+        return next;
+      };
+      const now = () => (window.performance && typeof window.performance.now === 'function' ? window.performance.now() : Date.now());
+      const schedule = () => { state.raf = window.requestAnimationFrame(step); };
+
+      /** Click the history button and watch for growth without pausing the loop. */
+      const requestOlder = (block) => {
+        const node = current();
+        if (!node) { state.mode = 'done'; return false; }
+        const button = findLoadEarlierButton();
+        if (!button || button.disabled) return false;
+        const beforeHeight = node.scrollHeight;
+        state.loading = true;
+        state.awaitingOlder = block === true;
+        const started = now();
+        try { button.click(); } catch (error) { /* ignore */ }
+        if (state.poll) window.clearInterval(state.poll);
+        state.poll = window.setInterval(() => {
+          if (holdScrollState !== state || state.mode !== 'running') { window.clearInterval(state.poll); state.poll = 0; return; }
+          const live = current();
+          if (!live) { window.clearInterval(state.poll); state.poll = 0; state.mode = 'done'; return; }
+          if (live.scrollHeight > beforeHeight + 8) {
+            const grew = live.scrollHeight - beforeHeight;
+            window.clearInterval(state.poll);
+            state.poll = 0;
+            state.loading = false;
+            state.awaitingOlder = false;
+            if (block === true && live.scrollTop <= 2) live.scrollTop = grew;
+            state.last = now();
+            return;
+          }
+          if (now() - started > 2600) {
+            window.clearInterval(state.poll);
+            state.poll = 0;
+            state.loading = false;
+            state.awaitingOlder = false;
+            state.exhausted = true;
+            if (block) state.mode = 'done';
+          }
+        }, 120);
+        return true;
+      };
+
+      /** Move up one rendered anchor when plain offset writes are reverted at a fold boundary. */
+      const stepUpByAnchor = () => {
+        const node = current();
+        if (!node) return false;
+        const viewportTop = node.getBoundingClientRect().top;
+        const anchors = Array.prototype.slice.call(node.querySelectorAll('[data-chat-anchor-key]'));
+        if (anchors.length === 0) return false;
+        let index = anchors.length - 1;
+        for (let i = 0; i < anchors.length; i += 1) {
+          if (anchors[i].getBoundingClientRect().bottom > viewportTop + 4) { index = i; break; }
+        }
+        const target = anchors[Math.max(0, index - 1)];
+        if (!target) return false;
+        const before = node.scrollTop;
+        try { target.scrollIntoView({ block: 'start', behavior: 'auto' }); } catch (error) { return false; }
+        return Math.abs(node.scrollTop - before) > 1;
+      };
+
+      function step(timestamp) {
+        if (holdScrollState !== state || state.mode !== 'running') return;
+        const node = current();
+        if (!node) { state.mode = 'done'; return; }
+        const ts = typeof timestamp === 'number' ? timestamp : now();
+        const dt = Math.min(50, Math.max(0, ts - state.last));
+        state.last = ts;
+        if (state.awaitingOlder) { schedule(); return; }
+        if (state.pauseUntil > ts) { schedule(); return; }
+        const frames = dt / 16.6667;
+        state.speed = Math.min(30, state.speed + 0.8 * frames);
+        const max = Math.max(0, node.scrollHeight - node.clientHeight);
+        if (state.dir > 0) {
+          if (node.scrollTop >= max - 0.5) { state.stall = 0; schedule(); return; }
+          const before = node.scrollTop;
+          node.scrollTop = Math.min(max, before + state.speed * frames);
+          if (Math.abs(node.scrollTop - before) < 0.5) { state.stall += frames; } else { state.stall = 0; }
+          schedule();
+          return;
+        }
+        /* Prefetch the next history page one screen before the boundary so scrolling never stalls. */
+        if (!state.loading && !state.exhausted && node.scrollTop < node.clientHeight * 1.2) requestOlder(false);
+        if (node.scrollTop <= 0.5) {
+          if (state.exhausted) { state.mode = 'done'; return; }
+          if (!state.loading) requestOlder(true);
+          schedule();
+          return;
+        }
+        const before = node.scrollTop;
+        node.scrollTop = Math.max(0, before - state.speed * frames);
+        if (Math.abs(node.scrollTop - before) < 0.5) {
+          state.stall += frames;
+          if (state.stall > 24) {
+            state.stall = 0;
+            if (stepUpByAnchor()) { state.retries = 0; schedule(); return; }
+            state.retries += 1;
+            if (state.retries > 6) { state.mode = 'done'; return; }
+            state.pauseUntil = now() + 260;
+          }
+        } else {
+          state.stall = 0;
+          state.retries = 0;
+        }
+        schedule();
+      }
+      schedule();
+    }
+
+    function beginHoldScroll(direction, code) {
+      stopHoldScroll(false);
+      const state = { dir: direction, code: code || '', mode: 'pending', timer: 0, raf: 0, speed: 0, last: 0, scroller: null, restore: null };
+      holdScrollState = state;
+      state.timer = window.setTimeout(() => {
+        if (holdScrollState === state) startHoldLoop(state);
+      }, HOLD_SCROLL_DELAY);
+    }
+
+    window.addEventListener('keyup', (event) => {
+      const state = holdScrollState;
+      if (!state) return;
+      if (state.code && event.code !== state.code) return;
+      stopHoldScroll(true);
+    }, true);
+    window.addEventListener('blur', () => { stopHoldScroll(false); }, true);
+    document.addEventListener('keydown', (event) => {
+      if (holdScrollState && event.key === 'Escape') stopHoldScroll(false);
+    }, true);
+
+    /* -------------------------------------------------- interject queued input */
+    const STEER_LABELS = ['插话发送', 'Steer queued message'];
+
+    function queueDockElement() { return document.querySelector('[data-queue-dock]'); }
+
+    /** The Steer button of the earliest still-pending queued row, or null. */
+    function earliestSteerButton() {
+      const dock = queueDockElement();
+      if (!dock) return null;
+      const rows = dock.querySelectorAll('li');
+      for (const row of rows) {
+        if (row.hasAttribute('data-submission-echo')) continue;
+        const buttons = Array.prototype.slice.call(row.querySelectorAll('button'));
+        if (buttons.length === 0) continue;
+        let steer = null;
+        for (const button of buttons) {
+          const label = button.getAttribute('aria-label') || '';
+          if (STEER_LABELS.indexOf(label) >= 0) { steer = button; break; }
+        }
+        if (!steer) steer = buttons[buttons.length - 1];
+        if (!steer) continue;
+        if (steer.disabled) return null;
+        return steer;
+      }
+      return null;
+    }
+
+    /** Steer the first queued message into the running turn; expands a collapsed dock once. */
+    function interjectEarliestQueued() {
+      const steer = earliestSteerButton();
+      if (steer) { steer.click(); return true; }
+      const dock = queueDockElement();
+      if (!dock) return false;
+      const header = dock.querySelector('button[aria-controls][aria-expanded="false"]');
+      if (!header || header.disabled) return false;
+      header.click();
+      window.setTimeout(() => {
+        const retry = earliestSteerButton();
+        if (retry) retry.click();
+      }, 90);
+      return true;
     }
 
     /** Scroll the open conversation to its bottom and focus the composer input. */
     function scrollToComposerAndFocus() {
-      const flow = document.querySelector('[data-slot="conversation.chat.flow"]');
+      const flow = visibleChatFlow();
       let scrollParent = flow;
       while (scrollParent && scrollParent !== document.body) {
         const style = window.getComputedStyle(scrollParent);
@@ -379,17 +654,42 @@ window.__ModuleLoader__.load({
       'rightTab.title': '项目看板', 'compact.full': '全屏打开',
       'palette.placeholder': '搜索会话或项目…', 'palette.allProjects': '全部项目', 'palette.empty': '没有匹配的会话', 'palette.hint': '↑↓ 选择 · Enter 打开 · Esc 关闭',
       'hud.title': '活跃与最近会话', 'hud.collapsed': '活跃', 'hud.expand': '展开', 'hud.collapse': '收起', 'hud.empty': '当前没有非空闲会话', 'hud.prev': '上一个', 'hud.next': '下一个', 'hud.recent': '最近',
-      'hud.groupSession': '会话', 'hud.groupMessage': '指令', 'hud.prevInstruction': '上一条', 'hud.nextInstruction': '下一条', 'hud.toBottom': '到底部',
+      'hud.groupSession': '会话', 'hud.groupMessage': '指令', 'hud.prevInstruction': '上一条', 'hud.nextInstruction': '下一条', 'hud.toBottom': '到底部', 'hud.auto': '自动化',
       'settings.title': '项目看板设置',
       'settings.intro': '自定义项目看板的快捷键、悬浮窗与视图行为。',
       'settings.shortcuts': '快捷键',
       'settings.shortcut.palette': '打开会话搜索',
       'settings.shortcut.prev': '上一个会话',
       'settings.shortcut.next': '下一个会话',
-      'settings.shortcut.userPrev': '上一个历史指令',
-      'settings.shortcut.userNext': '下一个历史指令',
+      'settings.shortcut.userPrev': '上一条用户指令（轻按跳转，按住连续向上滚动）',
+      'settings.shortcut.userNext': '下一条用户指令（轻按跳转，按住连续向下滚动）',
       'settings.shortcut.scrollBottom': '滚动到底部并激活输入框',
-      'settings.shortcut.hint': '点击键帽后按下新的组合键；必须包含 Ctrl / Alt / Meta，Esc 取消。',
+      'settings.shortcut.sidebarBoard': '打开/关闭窄版项目看板（右侧栏 380px）',
+      'settings.shortcut.panelHalf': '打开/关闭中等宽度项目看板（右侧栏 50%）',
+      'settings.shortcut.panelFull': '切换项目看板全屏（右侧栏全屏）',
+      'settings.shortcut.rename': '重命名当前会话',
+      'settings.shortcut.interject': '插话发送最早排队的消息',
+      'settings.shortcut.hud': '收起/展开悬浮列表',
+      'settings.shortcut.sessionMenu': '打开会话操作对话框（归档 / 删除 / 取消）',
+      'rename.title': '重命名会话', 'rename.label': '会话名称', 'rename.placeholder': '输入新的会话名称', 'rename.cancel': '取消', 'rename.confirm': '保存', 'rename.saving': '保存中…', 'rename.failed': '重命名失败',
+      'toast.conflictTitle': '快捷键冲突',
+      'toast.conflictOwn': '「{combo}」已被本插件的「{name}」占用。',
+      'toast.conflictBuiltin': '「{combo}」已被 DSH 内置命令「{name}」占用。',
+      'toast.conflictExisting': '当前快捷键 {combo} 与内置命令「{name}」冲突，建议改键。',
+      'toast.conflictExistingMany': '有 {n} 个快捷键与内置命令冲突，请到设置中改键。',
+      'toast.dismiss': '关闭通知',
+      'toast.interjectNone': '当前没有可插话的排队消息（仅运行中可用）。',
+      'menu.title': '管理当前会话',
+      'menu.archive': '归档',
+      'menu.delete': '删除',
+      'menu.deleteConfirm': '再次点击确认删除',
+      'menu.cancel': '取消',
+      'menu.archiveHint': '归档后会话从列表隐藏，数据保留。',
+      'menu.deleteHint': '删除不可逆。',
+      'menu.deleteUnavailable': '当前 DSH 客户端未开放会话删除接口，请使用归档。',
+      'menu.failed': '操作失败：{message}',
+      'menu.busy': '处理中…',
+      'settings.shortcut.hint': '点击键帽后按下新的组合键；必须包含 Ctrl / Alt / Meta，Esc 取消。与 DSH 内置命令冲突时会拒绝录制并弹出提示。',
       'settings.shortcutNeedModifier': '快捷键必须包含 Ctrl、Alt 或 Meta，不能使用裸键。',
       'settings.shortcutConflict': '该组合键已被其他功能占用，请换一个。',
       'settings.shortcutResetHint': '点击录制，双击恢复默认',
@@ -404,6 +704,18 @@ window.__ModuleLoader__.load({
       'settings.hb.switch': '会话搜索', 'settings.hb.historyNav': '历史指令与底部', 'settings.hb.capsule': '状态胶囊',
       'settings.hb.sideLeft': '左侧', 'settings.hb.sideRight': '右侧', 'settings.hb.followPlacement': '跟随统一位置',
       'settings.hudEnabled': '启用悬浮窗', 'settings.hudEnabledDesc': '实时显示非空闲会话与计时',
+      'settings.notifyEnabled': '启用任务通知', 'settings.notifyEnabledDesc': '会话完成、模型提问或权限请求时提醒',
+      'settings.notifySound': '通知提示音', 'settings.notifySoundDesc': '应用内通知播放提示音',
+      'notif.completeTitle': '任务完成',
+      'notif.completeBody': '会话「{title}」已完成',
+      'notif.questionTitle': '等待回答',
+      'notif.approvalTitle': '权限请求',
+      'notif.pendingPrefix': '会话「{title}」',
+      'notif.approvalBody': '会话「{title}」请求使用「{tool}」权限',
+      'notif.approvalChoices': '请在应用内选择：允许 / 拒绝',
+      'notif.multiSelect': '（可多选）',
+      'notif.openHint': '点击打开会话',
+      'notif.dismiss': '关闭通知',
       'settings.shortcutHints': '显示快捷键提示', 'settings.shortcutHintsDesc': '在输入框下方状态信息中显示快捷键提示，可随时关闭',
       'hints.dismiss': '不再显示快捷键提示',
       'settings.hudDone': '悬浮窗包含已完成未读', 'settings.hudDoneDesc': '关闭后悬浮窗只显示运行中和待处理',
@@ -448,17 +760,42 @@ window.__ModuleLoader__.load({
       'rightTab.title': 'Project Board', 'compact.full': 'Open full screen',
       'palette.placeholder': 'Search sessions or projects…', 'palette.allProjects': 'All projects', 'palette.empty': 'No matching sessions', 'palette.hint': '↑↓ select · Enter open · Esc close',
       'hud.title': 'Active & recent', 'hud.collapsed': 'Active', 'hud.expand': 'Expand', 'hud.collapse': 'Collapse', 'hud.empty': 'No active sessions', 'hud.prev': 'Previous', 'hud.next': 'Next', 'hud.recent': 'Recent',
-      'hud.groupSession': 'Session', 'hud.groupMessage': 'Instruction', 'hud.prevInstruction': 'Previous', 'hud.nextInstruction': 'Next', 'hud.toBottom': 'Bottom',
+      'hud.groupSession': 'Session', 'hud.groupMessage': 'Instruction', 'hud.prevInstruction': 'Previous', 'hud.nextInstruction': 'Next', 'hud.toBottom': 'Bottom', 'hud.auto': 'Auto',
       'settings.title': 'Project Board settings',
       'settings.intro': 'Customize shortcuts, floating status, and board behavior.',
       'settings.shortcuts': 'Shortcuts',
       'settings.shortcut.palette': 'Open session search',
       'settings.shortcut.prev': 'Previous session',
       'settings.shortcut.next': 'Next session',
-      'settings.shortcut.userPrev': 'Previous user message',
-      'settings.shortcut.userNext': 'Next user message',
+      'settings.shortcut.userPrev': 'Previous user message (tap to jump, hold to scroll up)',
+      'settings.shortcut.userNext': 'Next user message (tap to jump, hold to scroll down)',
       'settings.shortcut.scrollBottom': 'Scroll to bottom and focus input',
-      'settings.shortcut.hint': 'Click a keycap, then press the new combination; Ctrl / Alt / Meta is required; Esc cancels.',
+      'settings.shortcut.sidebarBoard': 'Toggle narrow board (right sidebar, 380px)',
+      'settings.shortcut.panelHalf': 'Toggle medium board (right sidebar, 50%)',
+      'settings.shortcut.panelFull': 'Toggle board fullscreen (right sidebar)',
+      'settings.shortcut.rename': 'Rename current session',
+      'settings.shortcut.interject': 'Interject the earliest queued message',
+      'settings.shortcut.hud': 'Collapse/expand floating list',
+      'settings.shortcut.sessionMenu': 'Open session actions dialog (archive / delete / cancel)',
+      'rename.title': 'Rename session', 'rename.label': 'Session name', 'rename.placeholder': 'Enter a new session name', 'rename.cancel': 'Cancel', 'rename.confirm': 'Save', 'rename.saving': 'Saving…', 'rename.failed': 'Rename failed',
+      'toast.conflictTitle': 'Shortcut conflict',
+      'toast.conflictOwn': '"{combo}" is already used by this plugin\'s "{name}".',
+      'toast.conflictBuiltin': '"{combo}" is already used by the built-in DSH command "{name}".',
+      'toast.conflictExisting': 'Saved shortcut {combo} conflicts with the built-in command "{name}". Rebind it.',
+      'toast.conflictExistingMany': '{n} shortcuts conflict with built-in commands. Rebind them in Settings.',
+      'toast.dismiss': 'Dismiss notification',
+      'toast.interjectNone': 'No queued message can be steered right now (available only while running).',
+      'menu.title': 'Manage session',
+      'menu.archive': 'Archive',
+      'menu.delete': 'Delete',
+      'menu.deleteConfirm': 'Click again to confirm',
+      'menu.cancel': 'Cancel',
+      'menu.archiveHint': 'Archiving hides the session from lists; its data is kept.',
+      'menu.deleteHint': 'Deletion is irreversible.',
+      'menu.deleteUnavailable': 'This DSH client does not expose session deletion yet. Use archive instead.',
+      'menu.failed': 'Failed: {message}',
+      'menu.busy': 'Working…',
+      'settings.shortcut.hint': 'Click a keycap, then press the new combination; Ctrl / Alt / Meta is required; Esc cancels. Combinations that clash with built-in DSH commands are rejected with a notice.',
       'settings.shortcutNeedModifier': 'A shortcut must include Ctrl, Alt, or Meta; bare keys are not allowed.',
       'settings.shortcutConflict': 'That combination is already used by another action.',
       'settings.shortcutResetHint': 'Click to record, double-click to reset',
@@ -473,6 +810,18 @@ window.__ModuleLoader__.load({
       'settings.hb.switch': 'Session search', 'settings.hb.historyNav': 'History & bottom', 'settings.hb.capsule': 'Status capsule',
       'settings.hb.sideLeft': 'Left', 'settings.hb.sideRight': 'Right', 'settings.hb.followPlacement': 'Follows global placement',
       'settings.hudEnabled': 'Enable floating status', 'settings.hudEnabledDesc': 'Live non-idle sessions and timers',
+      'settings.notifyEnabled': 'Enable task notifications', 'settings.notifyEnabledDesc': 'Notify on completion, questions, or approvals',
+      'settings.notifySound': 'Notification sound', 'settings.notifySoundDesc': 'Play a chime for in-app notifications',
+      'notif.completeTitle': 'Task complete',
+      'notif.completeBody': 'Session "{title}" finished',
+      'notif.questionTitle': 'Waiting for your answer',
+      'notif.approvalTitle': 'Permission request',
+      'notif.pendingPrefix': 'Session "{title}"',
+      'notif.approvalBody': 'Session "{title}" requests permission for "{tool}"',
+      'notif.approvalChoices': 'Choose Allow or Deny in the app',
+      'notif.multiSelect': '(multiple selection allowed)',
+      'notif.openHint': 'Click to open the session',
+      'notif.dismiss': 'Dismiss notification',
       'settings.shortcutHints': 'Show shortcut hints', 'settings.shortcutHintsDesc': 'Show shortcut hints with the composer status row; dismissible anytime',
       'hints.dismiss': 'Never show shortcut hints',
       'settings.hudDone': 'Include completed-unread in floating status', 'settings.hudDoneDesc': 'When off, only running and attention appear',
@@ -553,6 +902,8 @@ window.__ModuleLoader__.load({
       clock: ['M12 21a9 9 0 1 0 0-18 9 9 0 0 0 0 18z', 'M12 7v5l3 2'],
       search: ['M11 19a8 8 0 1 0 0-16 8 8 0 0 0 0 16z', 'M21 21l-4.3-4.3'],
       expand: ['M4 9V4h5', 'M20 15v5h-5', 'M15 4h5v5', 'M9 20H4v-5'],
+      collapse: ['M9 4v5H4', 'M15 20v-5h5', 'M20 9h-5V4', 'M4 15h5v5'],
+      alert: ['M12 4l9 16H3z', 'M12 10v4', 'M12 17h.01'],
       close: ['M6 6l12 12', 'M18 6L6 18'],
       up: ['M6 15l6-6 6 6'],
       down: ['M6 9l6 6 6-6'],
@@ -964,11 +1315,13 @@ window.__ModuleLoader__.load({
           h('div', { className: 'pbx-titleRow' }, h('span', { className: 'pbx-glyph' }, h(Icon, { name: 'board', size: 20 })), h('span', null, t('title'))),
           h('div', { className: 'pbx-subtitle' }, t('subtitle'))
         ),
-        h('div', { className: 'pbx-totals' },
-          h('span', { className: 'pbx-total' }, h('strong', null, String(totals.workspaces)), t('stat.workspaces')),
-          h('span', { className: 'pbx-total' }, h('strong', null, String(totals.sessions)), t('stat.sessions')),
-          totals.attention > 0 ? h('span', { className: 'pbx-total' }, h('strong', { style: { color: 'var(--dsw-alias-state-error-primary)' } }, String(totals.attention)), t('stat.attention')) : null,
-          totals.running > 0 ? h('span', { className: 'pbx-total' }, h('strong', { style: { color: 'var(--dsw-alias-brand-primary)' } }, String(totals.running)), t('stat.running')) : null
+        h('div', { className: 'pbx-headerRight' },
+          h('div', { className: 'pbx-totals' },
+            h('span', { className: 'pbx-total' }, h('strong', null, String(totals.workspaces)), t('stat.workspaces')),
+            h('span', { className: 'pbx-total' }, h('strong', null, String(totals.sessions)), t('stat.sessions')),
+            totals.attention > 0 ? h('span', { className: 'pbx-total' }, h('strong', { style: { color: 'var(--dsw-alias-state-error-primary)' } }, String(totals.attention)), t('stat.attention')) : null,
+            totals.running > 0 ? h('span', { className: 'pbx-total' }, h('strong', { style: { color: 'var(--dsw-alias-brand-primary)' } }, String(totals.running)), t('stat.running')) : null
+          )
         )
       );
 
@@ -1061,7 +1414,7 @@ window.__ModuleLoader__.load({
           h('div', { className: 'pbx-compactHead' },
             h('div', { className: 'pbx-compactTitle' }, h(Icon, { name: 'board', size: 16 }), h('span', null, t('title'))),
             h('div', { className: 'pbx-compactMeta' }, String(totals.running) + ' ' + t('stat.running') + ' · ' + String(totals.attention) + ' ' + t('stat.attention')),
-            typeof openFullBoard === 'function' ? h('button', { type: 'button', className: 'pbx-compactFull', title: t('compact.full'), onClick: () => openFullBoard() }, h(Icon, { name: 'expand', size: 14 })) : null
+            (typeof openFullBoard === 'function' ? h('button', { type: 'button', className: 'pbx-compactFull', title: t('compact.full'), onClick: () => openFullBoard() }, h(Icon, { name: 'expand', size: 14 })) : null)
           ),
           groups.map((group) => h('div', { className: 'pbx-cgroup', key: group.tone },
             h('div', { className: 'pbx-cgroupHead' },
@@ -1248,6 +1601,209 @@ window.__ModuleLoader__.load({
       );
     }
 
+    /* ------------------------------------------------------------- notifications */
+    function ToastStack(props) {
+      const { t, dismissToast } = props;
+      const useToasts = typeof props.useToasts === 'function' ? props.useToasts : NO_SCHEDULE_HOOK;
+      const snap = useToasts((value) => value);
+      const items = (snap && snap.items) || [];
+      if (items.length === 0) return null;
+      return h('div', { className: 'pbx-toasts', role: 'status', 'aria-live': 'polite' },
+        items.map((item) => h('div', { key: item.id, className: 'pbx-toast', 'data-tone': item.tone || 'warn' },
+          h('span', { className: 'pbx-toastIcon' }, h(Icon, { name: 'alert', size: 15 })),
+          h('div', { className: 'pbx-toastMain' },
+            item.title ? h('div', { className: 'pbx-toastTitle' }, item.title) : null,
+            item.message ? h('div', { className: 'pbx-toastMsg' }, item.message) : null
+          ),
+          h('button', {
+            type: 'button', className: 'pbx-toastClose', title: t('toast.dismiss'), 'aria-label': t('toast.dismiss'),
+            onClick: () => { if (typeof dismissToast === 'function') dismissToast(item.id); }
+          }, h(Icon, { name: 'close', size: 12 }))
+        ))
+      );
+    }
+
+    /* --------------------------------------------------- task notifications */
+    let notificationAudio = null;
+    function playNotifyChime() {
+      try {
+        const Ctor = window.AudioContext || window.webkitAudioContext;
+        if (!Ctor) return;
+        if (!notificationAudio) notificationAudio = new Ctor();
+        const context = notificationAudio;
+        if (context.state === 'suspended') { try { context.resume(); } catch (error) { /* ignore */ } }
+        const start = context.currentTime + 0.01;
+        [880, 1174.66].forEach((frequency, index) => {
+          const at = start + index * 0.13;
+          const oscillator = context.createOscillator();
+          const gain = context.createGain();
+          oscillator.type = 'sine';
+          oscillator.frequency.value = frequency;
+          gain.gain.setValueAtTime(0.0001, at);
+          gain.gain.exponentialRampToValueAtTime(0.16, at + 0.03);
+          gain.gain.exponentialRampToValueAtTime(0.0001, at + 0.32);
+          oscillator.connect(gain);
+          gain.connect(context.destination);
+          oscillator.start(at);
+          oscillator.stop(at + 0.34);
+        });
+      } catch (error) { /* ignore */ }
+    }
+
+    function notificationChannelFocused() {
+      try { return document.visibilityState === 'visible' && document.hasFocus(); } catch (error) { return true; }
+    }
+
+    function showSystemNotification(title, body, sessionId, onOpen) {
+      try {
+        const Ctor = window.Notification;
+        if (typeof Ctor !== 'function') return false;
+        const present = () => {
+          try {
+            const note = new Ctor(title, { body: body, tag: String(sessionId || 'dsh-task') });
+            note.onclick = () => {
+              try { window.focus(); } catch (error) { /* ignore */ }
+              if (typeof onOpen === 'function') onOpen();
+              try { note.close(); } catch (error) { /* ignore */ }
+            };
+            return true;
+          } catch (error) { return false; }
+        };
+        if (Ctor.permission === 'granted') return present();
+        if (Ctor.permission === 'default' && typeof Ctor.requestPermission === 'function') {
+          Ctor.requestPermission().then((result) => { if (result === 'granted') present(); }).catch(() => {});
+          return true;
+        }
+        return false;
+      } catch (error) { return false; }
+    }
+
+    /** Full question text plus every option, or the approval reason and choices. */
+    function formatPendingNotification(pending, title, t) {
+      if (!pending) return '';
+      if (pending.kind === 'approval') {
+        const reason = pending.displayReason || pending.reason || '';
+        return t('notif.approvalBody', { title: title, tool: pending.toolName || '' })
+          + (reason ? '\n' + String(reason) : '')
+          + '\n' + t('notif.approvalChoices');
+      }
+      const questions = Array.isArray(pending.questions) ? pending.questions : [];
+      const blocks = questions.map((question, index) => {
+        const head = (questions.length > 1 ? String(index + 1) + '. ' : '') + String(question.question || '');
+        const options = (Array.isArray(question.options) ? question.options : [])
+          .map((option, optionIndex) => '  ' + String(optionIndex + 1) + ') ' + String(option.label || '') + (option.description ? ' — ' + String(option.description) : ''))
+          .join('\n');
+        return options ? head + '\n' + options : head;
+      });
+      const multi = questions.some((question) => question.multiSelect === true) ? '\n' + t('notif.multiSelect') : '';
+      return t('notif.pendingPrefix', { title: title }) + (blocks.length > 0 ? '\n' + blocks.join('\n\n') : '') + multi;
+    }
+
+    function NotificationWatcher(props) {
+      const { t } = props;
+      const useSessions = typeof props.useSessions === 'function' ? props.useSessions : NO_SCHEDULE_HOOK;
+      const useStatus = typeof props.useSessionStatus === 'function' ? props.useSessionStatus : NO_SCHEDULE_HOOK;
+      const useSettings = typeof props.useSettings === 'function' ? props.useSettings : NO_SCHEDULE_HOOK;
+      const sessionsSnap = useSessions((value) => value);
+      const statuses = useStatus((value) => value);
+      const config = useSettings((value) => value) || DEFAULT_SETTINGS;
+      const previousRef = useRef(null);
+      const configRef = useRef(config);
+      configRef.current = config;
+      useEffect(() => {
+        if (!statuses) return;
+        const previous = previousRef.current;
+        const next = new Map();
+        statuses.forEach((status, sessionId) => {
+          const pending = status ? status.pendingInteraction : null;
+          const sig = (status && status.running === true ? 'run' : 'idle')
+            + '|' + (pending ? String(pending.kind) + ':' + String(pending.key || '') : '')
+            + '|' + (status && status.completionUnread === true ? 'unread' : '');
+          next.set(sessionId, { status: status, pending: pending, sig: sig });
+        });
+        previousRef.current = next;
+        if (previous === null) return;
+        const settings = configRef.current || DEFAULT_SETTINGS;
+        if (settings.notify && settings.notify.enabled === false) return;
+        const byId = (sessionsSnap && sessionsSnap.byId) || {};
+        const focused = notificationChannelFocused();
+        const sound = !(settings.notify && settings.notify.sound === false);
+        const openSession = typeof props.openSession === 'function' ? props.openSession : null;
+        const emit = typeof props.notify === 'function' ? props.notify : null;
+        const send = (sessionId, tone, title, body, ttl) => {
+          if (!body || !emit) return;
+          if (!focused && typeof props.system === 'function') {
+            const delivered = props.system(title, body, sessionId, openSession ? () => openSession(sessionId) : null);
+            if (delivered) return;
+          }
+          emit({ tone: tone, title: title, body: body, ttl: ttl, sessionId: sessionId });
+          if (sound) playNotifyChime();
+        };
+        previous.forEach((prev, sessionId) => {
+          const cur = next.get(sessionId);
+          if (!cur || !prev) return;
+          if (prev.sig === cur.sig) return;
+          const title = sessionTitleOf(byId[sessionId], t) || sessionId;
+          const prevPending = prev.pending;
+          const curPending = cur.pending;
+          if (curPending && (!prevPending || prevPending.key !== curPending.key)) {
+            const head = curPending.kind === 'approval' ? t('notif.approvalTitle') : t('notif.questionTitle');
+            send(sessionId, 'warn', head, formatPendingNotification(curPending, title, t), 20000);
+            return;
+          }
+          if (prev.status && prev.status.running === true && cur.status && cur.status.running !== true && !curPending) {
+            send(sessionId, 'success', t('notif.completeTitle'), t('notif.completeBody', { title: title }), 9000);
+          }
+        });
+      }, [statuses, sessionsSnap]);
+      return null;
+    }
+
+    function NotificationDock(props) {
+      const { t } = props;
+      const useNotifications = typeof props.useNotifications === 'function' ? props.useNotifications : NO_SCHEDULE_HOOK;
+      const snap = useNotifications((value) => value);
+      const items = (snap && snap.items) || [];
+      const [bounds, setBounds] = useState({ right: 16, bottom: 16 });
+      useEffect(() => {
+        const update = () => {
+          const scroller = findChatScroller();
+          const rect = scroller ? scroller.getBoundingClientRect() : null;
+          const right = rect && rect.width > 4 ? Math.max(12, window.innerWidth - rect.right + 12) : 16;
+          setBounds((previous) => (Math.abs(previous.right - right) < 1 ? previous : { right: right, bottom: 16 }));
+        };
+        update();
+        window.addEventListener('resize', update);
+        const timer = window.setInterval(update, 1000);
+        return () => { window.removeEventListener('resize', update); window.clearInterval(timer); };
+      }, []);
+      if (items.length === 0) return null;
+      const open = (item) => {
+        if (typeof props.openSession === 'function' && item.sessionId) props.openSession(item.sessionId);
+        if (typeof props.dismissNotif === 'function') props.dismissNotif(item.id);
+      };
+      return h('div', { className: 'pbx-notifDock', style: { right: bounds.right + 'px', bottom: bounds.bottom + 'px' }, role: 'status', 'aria-live': 'polite' },
+        items.map((item) => h('div', {
+          key: item.id, className: 'pbx-notifCard', 'data-tone': item.tone || 'success', role: 'button', tabIndex: 0,
+          onClick: () => open(item),
+          onKeyDown: (event) => {
+            if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); open(item); }
+          }
+        },
+          h('div', { className: 'pbx-notifHead' },
+            h('span', { className: 'pbx-notifGlyph' }, h(Icon, { name: item.tone === 'success' ? 'check' : 'alert', size: 14 })),
+            h('span', { className: 'pbx-notifTitle' }, item.title || ''),
+            h('button', {
+              type: 'button', className: 'pbx-notifClose', title: t('notif.dismiss'), 'aria-label': t('notif.dismiss'),
+              onClick: (event) => { event.stopPropagation(); if (typeof props.dismissNotif === 'function') props.dismissNotif(item.id); }
+            }, h(Icon, { name: 'close', size: 12 }))
+          ),
+          item.body ? h('div', { className: 'pbx-notifBody' }, item.body) : null,
+          h('div', { className: 'pbx-notifFoot' }, t('notif.openHint'))
+        ))
+      );
+    }
+
     /* ---------------------------------------------------------- command palette */
     function Palette(props) {
       const { useSessions, useSessionStatus, useWorkspaces, t, openSession } = props;
@@ -1272,8 +1828,11 @@ window.__ModuleLoader__.load({
       const [closing, setClosing] = useState(false);
       const inputRef = useRef(null);
       const cycleRef = useRef({ active: [], current: undefined });
+      const listRef = useRef(null);
+      const paletteOpenerRef = useRef(null);
       const openRef = useRef(openSession);
       const paletteOpenRef = useRef(false);
+      const renameRef = useRef(null);
       openRef.current = openSession;
       paletteOpenRef.current = state.open;
 
@@ -1303,6 +1862,7 @@ window.__ModuleLoader__.load({
       }
       let currentId;
       for (const id of ids) { const row = byId[id]; if (row && row.retainedBy && (row.retainedBy.mainView || 0) > 0) { currentId = id; break; } }
+      renameRef.current = currentId ? { id: currentId, title: (byId[currentId] && (byId[currentId].displayTitle || byId[currentId].title)) || '' } : null;
       const cycleRows = rows.slice().sort((a, b) => {
         const rank = (row) => row.info.tone === 'running' ? 0 : row.info.tone === 'attention' ? 1 : 2;
         const diff = rank(a) - rank(b);
@@ -1325,8 +1885,24 @@ window.__ModuleLoader__.load({
         if (!mounted || !state.open || !inputRef.current) return;
         inputRef.current.focus({ preventScroll: true });
       }, [mounted, state.open]);
+      useEffect(() => {
+        if (!mounted || !state.open) return;
+        const list = listRef.current;
+        if (!list) return;
+        const node = list.querySelectorAll('.pbx-prow')[index];
+        if (node && typeof node.scrollIntoView === 'function') node.scrollIntoView({ block: 'nearest' });
+      }, [index, mounted, state.open, query, scope]);
       useEffect(() => { setIndex(0); }, [query, scope]);
       useEffect(() => { if (state.open) { setQuery(''); setScope(null); setIndex(0); } }, [state.open]);
+      useEffect(() => {
+        if (state.open) { paletteOpenerRef.current = document.activeElement; return undefined; }
+        const opener = paletteOpenerRef.current;
+        paletteOpenerRef.current = null;
+        if (opener && opener.isConnected && typeof opener.focus === 'function') {
+          try { opener.focus({ preventScroll: true }); } catch (error) { /* ignore */ }
+        }
+        return undefined;
+      }, [state.open]);
       useEffect(() => {
         if (state.open && config.palette.enabled !== false) { setMounted(true); setClosing(false); return undefined; }
         if (!mounted) return undefined;
@@ -1342,14 +1918,72 @@ window.__ModuleLoader__.load({
       }, [state.open, config.palette.enabled]);
       useEffect(() => {
         const onShortcut = (event) => {
-          if (event.isComposing || shortcutSuppressed) return;
+          if (event.isComposing || event.repeat || shortcutSuppressed) return;
           const eventCombo = comboFromEvent(event);
           if (!eventCombo || !comboHasModifier(eventCombo)) return;
           const shortcuts = (settingsRef.current && settingsRef.current.shortcuts) || DEFAULT_SETTINGS.shortcuts;
+          if (hasOpenDialog()) return;
           if (matchCombo(event, shortcuts.palette)) {
             event.preventDefault();
             event.stopPropagation();
+            stopHoldScroll(false);
             if (settingsRef.current.palette.enabled !== false && palette) palette.toggle('open');
+            return;
+          }
+          const isSidebarBoard = matchCombo(event, shortcuts.sidebarBoard);
+          const isPanelHalf = matchCombo(event, shortcuts.panelHalf);
+          const isPanelFull = matchCombo(event, shortcuts.panelFull);
+          const isRename = matchCombo(event, shortcuts.rename);
+          if (isRename) {
+            const target = renameRef.current;
+            if (!target || hasOpenDialog()) return;
+            stopHoldScroll(false);
+            if (paletteOpenRef.current && palette) palette.set({ open: false });
+            event.preventDefault();
+            event.stopPropagation();
+            if (typeof props.requestRename === 'function') props.requestRename(target.id, target.title);
+            return;
+          }
+          const isSessionMenu = matchCombo(event, shortcuts.sessionMenu);
+          if (isSessionMenu) {
+            const target = renameRef.current;
+            if (!target || hasOpenDialog()) return;
+            stopHoldScroll(false);
+            if (paletteOpenRef.current && palette) palette.set({ open: false });
+            event.preventDefault();
+            event.stopPropagation();
+            if (typeof props.requestSessionMenu === 'function') props.requestSessionMenu(target.id, target.title);
+            return;
+          }
+          if (isSidebarBoard || isPanelHalf || isPanelFull) {
+            event.preventDefault();
+            event.stopPropagation();
+            stopHoldScroll(false);
+            if (paletteOpenRef.current && palette) palette.set({ open: false });
+            if (typeof props.toggleBoard === 'function') {
+              props.toggleBoard(isSidebarBoard ? 'narrow' : isPanelHalf ? 'half' : 'full');
+            }
+            return;
+          }
+          const isHudToggle = matchCombo(event, shortcuts.hud);
+          if (isHudToggle) {
+            if (paletteOpenRef.current) return;
+            event.preventDefault();
+            event.stopPropagation();
+            stopHoldScroll(false);
+            if (typeof props.toggleHud === 'function') props.toggleHud();
+            return;
+          }
+          const isInterject = matchCombo(event, shortcuts.interject);
+          if (isInterject) {
+            if (paletteOpenRef.current) return;
+            event.preventDefault();
+            event.stopPropagation();
+            stopHoldScroll(false);
+            const acted = interjectEarliestQueued();
+            if (!acted && typeof props.notify === 'function') {
+              props.notify({ tone: 'warn', title: '', message: t('toast.interjectNone') });
+            }
             return;
           }
           const isUserNext = matchCombo(event, shortcuts.userNext);
@@ -1358,13 +1992,14 @@ window.__ModuleLoader__.load({
             if (paletteOpenRef.current) return;
             event.preventDefault();
             event.stopPropagation();
-            jumpUserMessage(isUserNext ? 1 : -1);
+            beginHoldScroll(isUserNext ? 1 : -1, event.code);
             return;
           }
           if (matchCombo(event, shortcuts.scrollBottom)) {
             if (paletteOpenRef.current) return;
             event.preventDefault();
             event.stopPropagation();
+            stopHoldScroll(false);
             scrollToComposerAndFocus();
             return;
           }
@@ -1402,17 +2037,26 @@ window.__ModuleLoader__.load({
         if (typeof openSession === 'function') openSession(row.id);
       };
       const onKeyDown = (event) => {
+        if (isComposingEvent(event)) return;
         if (event.key === 'ArrowDown') { event.preventDefault(); setIndex((value) => Math.min(value + 1, Math.max(0, visible.length - 1))); }
         else if (event.key === 'ArrowUp') { event.preventDefault(); setIndex((value) => Math.max(0, value - 1)); }
         else if (event.key === 'Enter') { event.preventDefault(); choose(visible[index]); }
-        else if (event.key === 'Escape') { event.preventDefault(); if (scope) setScope(null); else close(); }
+        else if (event.key === 'Escape') { event.preventDefault(); event.stopPropagation(); if (scope) setScope(null); else close(); }
       };
 
       const blur = Math.min(32, Math.max(6, Number(config.palette.blur) || 15));
       const backdropStyle = { background: 'rgba(8,10,14,.20)', backdropFilter: 'blur(' + blur + 'px) saturate(1.35)', WebkitBackdropFilter: 'blur(' + blur + 'px) saturate(1.35)' };
       const panelStyle = { backdropFilter: 'blur(' + Math.round(blur * 1.7) + 'px) saturate(1.55)', WebkitBackdropFilter: 'blur(' + Math.round(blur * 1.7) + 'px) saturate(1.55)' };
       return h('div', { className: 'pbx-paletteBackdrop' + (closing ? ' closing' : ''), style: backdropStyle, onClick: close },
-        h('div', { className: 'pbx-palette', style: panelStyle, onClick: (event) => event.stopPropagation() },
+        h('div', {
+          className: 'pbx-palette', style: panelStyle,
+          onClick: (event) => event.stopPropagation(),
+          onKeyDown: (event) => {
+            if (event.key !== 'Escape' || isComposingEvent(event)) return;
+            event.preventDefault();
+            if (scope) setScope(null); else close();
+          }
+        },
           h('div', { className: 'pbx-paletteHead' },
             h(Icon, { name: 'search', size: 16 }),
             h('input', { ref: inputRef, className: 'pbx-paletteInput', value: query, placeholder: t('palette.placeholder'), onChange: (event) => setQuery(event.target.value), onKeyDown: onKeyDown })
@@ -1427,7 +2071,7 @@ window.__ModuleLoader__.load({
               project.name
             ))
           ),
-          h('div', { className: 'pbx-paletteList' },
+          h('div', { className: 'pbx-paletteList', ref: listRef },
             visible.length === 0
               ? h('div', { className: 'pbx-paletteEmpty' }, t('palette.empty'))
               : visible.map((row, i) => h('button', {
@@ -1490,6 +2134,9 @@ window.__ModuleLoader__.load({
         } catch (error) { /* ignore */ }
         return Boolean(config.hud.defaultCollapsed);
       });
+      const [mounted, setMounted] = useState(() => config.hud.enabled !== false);
+      const [swap, setSwap] = useState('');
+      const swapTimersRef = useRef([]);
       const [pos, setPos] = useState(() => { const value = loadJson(HUD_POS_KEY, null); return value && typeof value.x === 'number' ? value : null; });
       const [dragging, setDragging] = useState(false);
       const [hasDragged, setHasDragged] = useState(false);
@@ -1517,20 +2164,81 @@ window.__ModuleLoader__.load({
         return () => window.clearInterval(timer);
       }, [config.hud.enabled]);
 
+      /* Keep the card mounted for one exit frame so hiding it can animate. */
       useEffect(() => {
-        if (!pos) return;
-        const box = hudRef.current;
-        const width = box ? box.offsetWidth : 300;
-        const height = box ? box.offsetHeight : 220;
-        const next = {
-          x: Math.min(Math.max(4, pos.x), Math.max(4, window.innerWidth - width - 4)),
-          y: Math.min(Math.max(4, pos.y), Math.max(4, window.innerHeight - height - 4))
-        };
-        if (next.x !== pos.x || next.y !== pos.y) {
-          setPos(next);
-          saveJson(HUD_POS_KEY, next);
+        if (config.hud.enabled === false) {
+          const timer = window.setTimeout(() => setMounted(false), 220);
+          return () => window.clearTimeout(timer);
         }
-      }, []);
+        setMounted(true);
+        return undefined;
+      }, [config.hud.enabled]);
+
+      /* Alt+E swaps the pill and the list with a short crossfade. */
+      const configRef = useRef(config);
+      configRef.current = config;
+      useEffect(() => {
+        const runSwap = (mutate) => {
+          swapTimersRef.current.forEach((timer) => window.clearTimeout(timer));
+          setSwap('out');
+          swapTimersRef.current = [
+            window.setTimeout(() => {
+              mutate();
+              setSwap('in');
+            }, 110),
+            window.setTimeout(() => setSwap(''), 400)
+          ];
+        };
+        const persist = (next) => {
+          try { window.localStorage.setItem(HUD_COLLAPSE_KEY, next ? '1' : '0'); } catch (error) { /* ignore */ }
+        };
+        const onToggle = () => {
+          const current = configRef.current || DEFAULT_SETTINGS;
+          if (current.hud.enabled === false) {
+            if (typeof saveSettings === 'function') {
+              const next = cloneJson(current);
+              next.hud = Object.assign({}, current.hud, { enabled: true });
+              saveSettings(next);
+            }
+            setCollapsed(false);
+            persist(false);
+            return;
+          }
+          runSwap(() => {
+            setCollapsed((value) => {
+              const next = !value;
+              persist(next);
+              return next;
+            });
+          });
+        };
+        window.addEventListener('pbx-hud-toggle', onToggle);
+        return () => {
+          window.removeEventListener('pbx-hud-toggle', onToggle);
+          swapTimersRef.current.forEach((timer) => window.clearTimeout(timer));
+        };
+      }, [config.hud.enabled, saveSettings]);
+
+      useEffect(() => {
+        if (!pos) return undefined;
+        const clamp = () => {
+          if (dragging) return;
+          const box = hudRef.current;
+          const width = box ? box.offsetWidth : 300;
+          const height = box ? box.offsetHeight : 220;
+          const next = {
+            x: Math.min(Math.max(4, posRef.current.x), Math.max(4, window.innerWidth - width - 4)),
+            y: Math.min(Math.max(4, posRef.current.y), Math.max(4, window.innerHeight - height - 4))
+          };
+          if (next.x !== posRef.current.x || next.y !== posRef.current.y) {
+            setPos(next);
+            saveJson(HUD_POS_KEY, next);
+          }
+        };
+        clamp();
+        window.addEventListener('resize', clamp);
+        return () => window.removeEventListener('resize', clamp);
+      }, [pos, dragging]);
 
       useEffect(() => {
         const handler = () => { setCollapsed(Boolean(config.hud.defaultCollapsed)); setPos(null); startsRef.current = { running: {}, attention: {} }; };
@@ -1545,13 +2253,13 @@ window.__ModuleLoader__.load({
         setCollapsed(Boolean(config.hud.defaultCollapsed));
       }, [config.hud.defaultCollapsed]);
 
-      useEffect(() => {
+      const useLayoutEffectSafe = typeof React.useLayoutEffect === 'function' ? React.useLayoutEffect : useEffect;
+      useLayoutEffectSafe(() => {
         const element = listContentRef.current;
         if (!element) return;
         const next = Math.min(element.scrollHeight, hudListMaxHeight);
         setListHeight((previous) => Math.abs(previous - next) > 0.5 ? next : previous);
       });
-
       useEffect(() => {
         if (!dragging) return undefined;
         const move = (event) => {
@@ -1716,8 +2424,8 @@ window.__ModuleLoader__.load({
         store.set({ ids: fullOrderIds });
       }, [orderKey, config.hud.enabled]);
 
-      if (config.hud.enabled === false) return null;
-      const closing = rows.length === 0 && present;
+      if (config.hud.enabled === false && !mounted) return null;
+      const closing = config.hud.enabled === false || (rows.length === 0 && present);
       if (rows.length === 0 && !present) return null;
 
       const positionMode = config.hud.defaultPosition || 'top-right';
@@ -1728,7 +2436,11 @@ window.__ModuleLoader__.load({
         return h('button', {
           ref: hudRef, type: 'button', className: className + ' collapsed', style: style, title: t('hud.expand'),
           onPointerDown: onDragStart,
-          onClick: () => { setCollapsed(false); try { window.localStorage.setItem(HUD_COLLAPSE_KEY, '0'); } catch (error) { /* ignore */ } }
+          onClick: () => {
+            if (hudDragMovedRef.current) { hudDragMovedRef.current = false; return; }
+            setCollapsed(false);
+            try { window.localStorage.setItem(HUD_COLLAPSE_KEY, '0'); } catch (error) { /* ignore */ }
+          }
         },
           h('span', { className: 'pbx-liveDot on' }),
           h('span', { className: 'pbx-hudPillText' }, String(rows.length)),
@@ -1736,26 +2448,29 @@ window.__ModuleLoader__.load({
         );
       }
       return h('div', { ref: hudRef, className: className, style: style },
-        h('div', { className: 'pbx-hudHead', onPointerDown: onDragStart },
-          h('span', { className: 'pbx-hudGrip', 'aria-hidden': 'true' }),
-          h('span', { className: 'pbx-hudHeadTitle' }, t('hud.title')),
-          h('span', { className: 'pbx-hudCount' }, String(rows.length)),
-          h('button', { type: 'button', className: 'pbx-hudCollapse', title: t('hud.collapse'), onClick: () => { setCollapsed(true); try { window.localStorage.setItem(HUD_COLLAPSE_KEY, '1'); } catch (error) { /* ignore */ } } }, '—')
-        ),
-        h('div', { className: 'pbx-hudList', style: Object.assign({ maxHeight: hudListMaxHeight + 'px' }, listHeight > 0 ? { height: listHeight + 'px' } : {}) },
-          h('div', { ref: listContentRef, className: 'pbx-hudListInner' },
-            rows.map((row) => h('button', {
-            key: row.id, type: 'button', 'data-hud-id': row.id, className: 'pbx-hudRow' + (row.tone === 'running' ? ' live' : '') + (row.current ? ' current' : '') + (row.spotlight ? ' spotlight' : ''),
-            title: t('card.open'), onClick: () => { if (typeof openSession === 'function') openSession(row.id); }
-          },
-            h('span', { className: 'pbx-rdot', 'data-tone': row.tone }),
-            h('span', { className: 'pbx-hudRowMain' },
-              h('span', { className: 'pbx-hudRowTitle' }, row.title),
-              h('span', { className: 'pbx-hudRowMeta' }, t(row.labelKey) + (row.project ? ' · ' + row.project : '') + (row.current ? ' · ' + t('card.current') : row.recent ? ' · ' + t('hud.recent') : ''))
-            ),
-            h('span', { className: 'pbx-hudTimer' }, row.timed ? fmtElapsed(now - row.start) : relTime(row.updatedAt, t))
+        h('div', { className: 'pbx-hudInner' + (swap ? ' ' + swap : '') },
+          h('div', { className: 'pbx-hudHead', onPointerDown: onDragStart },
+            h('span', { className: 'pbx-hudGrip', 'aria-hidden': 'true' }),
+            h('span', { className: 'pbx-hudHeadTitle' }, t('hud.title')),
+            h('span', { className: 'pbx-hudCount' }, String(rows.length)),
+            h('button', { type: 'button', className: 'pbx-hudCollapse', title: t('hud.collapse'), onClick: () => { setCollapsed(true); try { window.localStorage.setItem(HUD_COLLAPSE_KEY, '1'); } catch (error) { /* ignore */ } } }, '—')
+          ),
+          h('div', { className: 'pbx-hudList', style: Object.assign({ maxHeight: hudListMaxHeight + 'px' }, listHeight > 0 ? { height: listHeight + 'px' } : {}) },
+            h('div', { ref: listContentRef, className: 'pbx-hudListInner' },
+              rows.map((row) => h('button', {
+              key: row.id, type: 'button', 'data-hud-id': row.id, className: 'pbx-hudRow' + (row.auto ? ' auto' : '') + (row.tone === 'running' ? ' live' : '') + (row.current ? ' current' : '') + (row.spotlight ? ' spotlight' : ''),
+              title: t('card.open'), onClick: () => { if (typeof openSession === 'function') openSession(row.id); }
+            },
+              h('span', { className: 'pbx-rdot', 'data-tone': row.tone }),
+              row.auto ? h('span', { className: 'pbx-hudAuto', title: t('kind.auto') }, h(Icon, { name: 'clock', size: 11 })) : null,
+              h('span', { className: 'pbx-hudRowMain' },
+                h('span', { className: 'pbx-hudRowTitle' }, row.title),
+                h('span', { className: 'pbx-hudRowMeta' }, t(row.labelKey) + (row.auto ? ' · ' + t('hud.auto') : '') + (row.project ? ' · ' + row.project : '') + (row.current ? ' · ' + t('card.current') : row.recent ? ' · ' + t('hud.recent') : ''))
+              ),
+              h('span', { className: 'pbx-hudTimer' }, row.timed ? fmtElapsed(now - row.start) : relTime(row.updatedAt, t))
+            ))
           ))
-        ))
+        )
       );
     }
 
@@ -1763,7 +2478,7 @@ window.__ModuleLoader__.load({
     function ResponsiveBoard(props) {
       const useSettings = typeof props.useSettings === 'function' ? props.useSettings : NO_SCHEDULE_HOOK;
       const config = useSettings((snapshot) => snapshot) || DEFAULT_SETTINGS;
-      const threshold = Math.min(1000, Math.max(320, Number(config.board.wideThreshold) || 520));
+      const threshold = Math.min(1000, Math.max(320, Number(props.wideThreshold) || Number(config.board.wideThreshold) || 520));
       const boxRef = useRef(null);
       const [wide, setWide] = useState(false);
       useEffect(() => {
@@ -1783,6 +2498,203 @@ window.__ModuleLoader__.load({
       return h('div', { ref: boxRef, className: 'pbx-responsive' }, h(ProjectBoard, Object.assign({}, props, { compact: !wide })));
     }
 
+    /* ------------------------------------------------------------ rename dialog */
+    function RenameDialog(props) {
+      const useRename = typeof props.useRename === 'function' ? props.useRename : NO_SCHEDULE_HOOK;
+      const snap = useRename((value) => value) || {};
+      if (!snap.sessionId) return null;
+      return h(RenameForm, Object.assign({}, props, {
+        key: snap.sessionId + ':' + (snap.at || 0),
+        request: { sessionId: snap.sessionId, currentTitle: snap.currentTitle || '', at: snap.at || 0 }
+      }));
+    }
+
+    function RenameForm(props) {
+      const { t, request } = props;
+      const [draft, setDraft] = useState(request.currentTitle);
+      const [busy, setBusy] = useState(false);
+      const [error, setError] = useState('');
+      const inputRef = useRef(null);
+      const openerRef = useRef(null);
+      useEffect(() => {
+        openerRef.current = document.activeElement;
+        if (inputRef.current) {
+          inputRef.current.focus({ preventScroll: true });
+          inputRef.current.select();
+        }
+        return () => {
+          const opener = openerRef.current;
+          if (opener && opener.isConnected && typeof opener.focus === 'function') {
+            try { opener.focus({ preventScroll: true }); } catch (error) { /* ignore */ }
+          }
+        };
+      }, []);
+      const close = () => { if (!busy) props.rename.set({ sessionId: null, currentTitle: '' }); };
+      useEffect(() => {
+        const onKey = (event) => {
+          if (event.key !== 'Escape' || busy || isComposingEvent(event)) return;
+          event.preventDefault();
+          event.stopPropagation();
+          props.rename.set({ sessionId: null, currentTitle: '' });
+        };
+        document.addEventListener('keydown', onKey, true);
+        return () => document.removeEventListener('keydown', onKey, true);
+      }, [busy, props.rename]);
+      const trimmed = draft.trim();
+      const submit = () => {
+        if (busy || !trimmed) return;
+        setBusy(true);
+        setError('');
+        Promise.resolve(props.renameSession(request.sessionId, trimmed)).then((result) => {
+          if (result && result.ok === false) {
+            setBusy(false);
+            setError((result.error && result.error.message) || t('rename.failed'));
+            return;
+          }
+          props.rename.set({ sessionId: null, currentTitle: '' });
+        }).catch((reason) => {
+          setBusy(false);
+          setError((reason && reason.message) || t('rename.failed'));
+        });
+      };
+      const onKeyDown = (event) => {
+        if (event.key !== 'Enter' || isComposingEvent(event)) return;
+        event.preventDefault();
+        event.stopPropagation();
+        submit();
+      };
+      const onCardKeyDown = (event) => {
+        if (event.key !== 'Tab') return;
+        const card = event.currentTarget;
+        const nodes = Array.prototype.slice.call(card.querySelectorAll('input, button'))
+          .filter((node) => !node.disabled && node.getClientRects().length > 0);
+        if (nodes.length === 0) return;
+        const first = nodes[0];
+        const last = nodes[nodes.length - 1];
+        if (event.shiftKey && document.activeElement === first) { event.preventDefault(); last.focus(); }
+        else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first.focus(); }
+      };
+      return h('div', { className: 'pbx-renameBackdrop', onClick: close },
+        h('div', {
+          className: 'pbx-renameCard', role: 'dialog', 'aria-modal': 'true', 'aria-label': t('rename.title'),
+          onClick: (event) => event.stopPropagation(), onKeyDown: onCardKeyDown
+        },
+          h('div', { className: 'pbx-renameTitle' }, t('rename.title')),
+          h('div', { className: 'pbx-renameLabel' }, t('rename.label')),
+          h('input', {
+            ref: inputRef, className: 'pbx-renameInput', value: draft, spellCheck: false, 'aria-label': t('rename.label'),
+            placeholder: t('rename.placeholder'),
+            onChange: (event) => { setDraft(event.target.value); if (error) setError(''); },
+            onKeyDown: onKeyDown
+          }),
+          error ? h('div', { className: 'pbx-renameError' }, error) : null,
+          h('div', { className: 'pbx-renameActions' },
+            h('button', { type: 'button', className: 'pbx-renameBtn', disabled: busy, onClick: close }, t('rename.cancel')),
+            h('button', { type: 'button', className: 'pbx-renameBtn primary', disabled: busy || !trimmed, onClick: submit }, busy ? t('rename.saving') : t('rename.confirm'))
+          )
+        )
+      );
+    }
+
+    /* -------------------------------------------------------- session actions */
+    function SessionMenuDialog(props) {
+      const useMenu = typeof props.useSessionMenu === 'function' ? props.useSessionMenu : NO_SCHEDULE_HOOK;
+      const snap = useMenu((value) => value) || {};
+      if (!snap.sessionId) return null;
+      return h(SessionMenuForm, Object.assign({}, props, {
+        key: snap.sessionId + ':' + String(snap.at || ''),
+        sessionId: snap.sessionId,
+        sessionTitle: snap.title || ''
+      }));
+    }
+
+    function SessionMenuForm(props) {
+      const { t, sessionId, sessionTitle } = props;
+      const [busy, setBusy] = useState('');
+      const [error, setError] = useState('');
+      const [confirmDelete, setConfirmDelete] = useState(false);
+      const cardRef = useRef(null);
+      const cancelRef = useRef(null);
+      const openerRef = useRef(null);
+      const close = () => {
+        if (typeof props.closeSessionMenu === 'function') props.closeSessionMenu();
+      };
+      useEffect(() => {
+        openerRef.current = document.activeElement;
+        if (cancelRef.current) cancelRef.current.focus({ preventScroll: true });
+        return () => {
+          const opener = openerRef.current;
+          if (opener && typeof opener.focus === 'function' && document.contains(opener)) opener.focus({ preventScroll: true });
+        };
+      }, []);
+      useEffect(() => {
+        const onKey = (event) => {
+          if (event.key !== 'Escape' || isComposingEvent(event) || busy) return;
+          event.preventDefault();
+          event.stopPropagation();
+          close();
+        };
+        document.addEventListener('keydown', onKey, true);
+        return () => document.removeEventListener('keydown', onKey, true);
+      }, [busy]);
+      const run = async (kind) => {
+        if (busy) return;
+        if (kind === 'delete' && confirmDelete !== true) { setConfirmDelete(true); return; }
+        setError('');
+        setBusy(kind);
+        try {
+          const result = kind === 'archive'
+            ? await props.archiveSession(sessionId)
+            : await props.deleteSession(sessionId);
+          if (result && result.ok) { close(); return; }
+          const code = result && result.error ? result.error.code : '';
+          if (kind === 'delete' && (code === 'unsupported' || code === 'unavailable')) {
+            setError(t('menu.deleteUnavailable'));
+          } else {
+            setError(t('menu.failed', { message: (result && result.error && result.error.message) || code || 'failed' }));
+          }
+        } catch (errorValue) {
+          setError(t('menu.failed', { message: String(errorValue && errorValue.message ? errorValue.message : errorValue) }));
+        } finally {
+          setBusy('');
+        }
+      };
+      const onCardKeyDown = (event) => {
+        if (event.key !== 'Tab' || !cardRef.current) return;
+        const nodes = Array.prototype.slice.call(cardRef.current.querySelectorAll('button'))
+          .filter((node) => !node.disabled && node.getClientRects().length > 0);
+        if (nodes.length === 0) return;
+        const first = nodes[0];
+        const last = nodes[nodes.length - 1];
+        if (event.shiftKey && document.activeElement === first) { event.preventDefault(); last.focus(); }
+        else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first.focus(); }
+      };
+      const deleteSupported = props.deleteSupported === true;
+      return h('div', { className: 'pbx-renameBackdrop', onClick: close },
+        h('div', {
+          ref: cardRef, className: 'pbx-renameCard', role: 'dialog', 'aria-modal': 'true', 'aria-label': t('menu.title'),
+          onClick: (event) => event.stopPropagation(), onKeyDown: onCardKeyDown
+        },
+          h('div', { className: 'pbx-renameTitle' }, t('menu.title')),
+          h('div', { className: 'pbx-renameLabel' }, sessionTitle || sessionId),
+          h('div', { className: 'pbx-menuHint' }, t('menu.archiveHint')),
+          h('div', { className: 'pbx-menuHint' }, t('menu.deleteHint')),
+          deleteSupported ? null : h('div', { className: 'pbx-menuHint' }, t('menu.deleteUnavailable')),
+          error ? h('div', { className: 'pbx-renameError' }, error) : null,
+          h('div', { className: 'pbx-renameActions' },
+            h('button', { type: 'button', className: 'pbx-renameBtn', disabled: Boolean(busy), onClick: () => run('archive') },
+              busy === 'archive' ? t('menu.busy') : t('menu.archive')),
+            h('button', {
+              type: 'button', className: 'pbx-renameBtn danger', disabled: Boolean(busy) || !deleteSupported,
+              title: deleteSupported ? t('menu.deleteHint') : t('menu.deleteUnavailable'),
+              onClick: () => run('delete')
+            }, busy === 'delete' ? t('menu.busy') : (confirmDelete ? t('menu.deleteConfirm') : t('menu.delete'))),
+            h('button', { ref: cancelRef, type: 'button', className: 'pbx-renameBtn', disabled: Boolean(busy), onClick: close }, t('menu.cancel'))
+          )
+        )
+      );
+    }
+
     /* --------------------------------------------------------------- settings */
     function SettingsPage(props) {
       const { t } = props;
@@ -1791,11 +2703,14 @@ window.__ModuleLoader__.load({
       const saveSettings = typeof props.saveSettings === 'function' ? props.saveSettings : function () {};
       const [recording, setRecording] = useState(null);
       const [recordError, setRecordError] = useState('');
+      const [builtinWarnings, setBuiltinWarnings] = useState([]);
+      const scannedConflictsRef = useRef(new Set());
 
       useEffect(() => {
         if (!recording) return undefined;
         shortcutSuppressed = true;
         const onKey = (event) => {
+          if (isComposingEvent(event)) return;
           if (event.key === 'Escape' && !event.altKey && !event.ctrlKey && !event.metaKey && !event.shiftKey) {
             event.preventDefault(); event.stopPropagation(); setRecording(null); setRecordError(''); return;
           }
@@ -1805,7 +2720,21 @@ window.__ModuleLoader__.load({
           if (!comboHasModifier(combo)) { setRecordError(t('settings.shortcutNeedModifier')); return; }
           const next = cloneJson(config);
           const conflict = Object.keys(next.shortcuts).find((key) => key !== recording && next.shortcuts[key] === combo);
-          if (conflict) { setRecordError(t('settings.shortcutConflict')); return; }
+          if (conflict) {
+            const message = t('toast.conflictOwn', { combo: comboDisplay(combo), name: t(SHORTCUT_LABEL_KEYS[conflict] || 'settings.shortcut.palette') });
+            setRecordError(message);
+            if (typeof props.notify === 'function') props.notify({ tone: 'warn', title: t('toast.conflictTitle'), message: message });
+            return;
+          }
+          if (typeof props.findBuiltinConflict === 'function') {
+            const builtin = props.findBuiltinConflict(combo);
+            if (builtin) {
+              const message = t('toast.conflictBuiltin', { combo: comboDisplay(combo), name: builtin.label });
+              setRecordError(message);
+              if (typeof props.notify === 'function') props.notify({ tone: 'warn', title: t('toast.conflictTitle'), message: message });
+              return;
+            }
+          }
           setRecordError('');
           next.shortcuts[recording] = combo;
           saveSettings(next);
@@ -1814,6 +2743,30 @@ window.__ModuleLoader__.load({
         document.addEventListener('keydown', onKey, true);
         return () => { shortcutSuppressed = false; document.removeEventListener('keydown', onKey, true); };
       }, [recording, config, saveSettings]);
+
+      const useShortcutsCatalog = typeof props.useShortcutsCatalog === 'function' ? props.useShortcutsCatalog : NO_SCHEDULE_HOOK;
+      const shortcutsCatalog = useShortcutsCatalog((value) => value);
+      useEffect(() => {
+        if (typeof props.findBuiltinConflict !== 'function') return;
+        const found = [];
+        for (const key of Object.keys(config.shortcuts || {})) {
+          const conflict = props.findBuiltinConflict(config.shortcuts[key]);
+          if (conflict) found.push({ key: key, combo: config.shortcuts[key], label: conflict.label });
+        }
+        setBuiltinWarnings(found);
+        const present = new Set(found.map((item) => item.key + ':' + item.combo));
+        for (const signature of Array.from(scannedConflictsRef.current)) {
+          if (!present.has(signature)) scannedConflictsRef.current.delete(signature);
+        }
+        for (const item of found) {
+          const signature = item.key + ':' + item.combo;
+          if (scannedConflictsRef.current.has(signature)) continue;
+          scannedConflictsRef.current.add(signature);
+          if (typeof props.notify === 'function') {
+            props.notify({ tone: 'warn', title: t('toast.conflictTitle'), message: t('toast.conflictExisting', { combo: comboDisplay(item.combo), name: item.label }) });
+          }
+        }
+      }, [config.shortcuts, shortcutsCatalog]);
 
       const update = (section, patch) => { const next = cloneJson(config); Object.assign(next[section], patch); saveSettings(next); };
       const resetAll = () => {
@@ -1931,6 +2884,16 @@ window.__ModuleLoader__.load({
           shortcutRow('userPrev', 'settings.shortcut.userPrev'),
           shortcutRow('userNext', 'settings.shortcut.userNext'),
           shortcutRow('scrollBottom', 'settings.shortcut.scrollBottom'),
+          shortcutRow('sidebarBoard', 'settings.shortcut.sidebarBoard'),
+          shortcutRow('panelHalf', 'settings.shortcut.panelHalf'),
+          shortcutRow('panelFull', 'settings.shortcut.panelFull'),
+          shortcutRow('rename', 'settings.shortcut.rename'),
+          shortcutRow('sessionMenu', 'settings.shortcut.sessionMenu'),
+          shortcutRow('interject', 'settings.shortcut.interject'),
+          shortcutRow('hud', 'settings.shortcut.hud'),
+          builtinWarnings.map((item) => h('div', { key: 'warn-' + item.key, className: 'pbx-setWarn' },
+            t('toast.conflictExisting', { combo: comboDisplay(item.combo), name: item.label })
+          )),
           recordError ? h('div', { className: 'pbx-setError' }, recordError) : null,
           h('div', { className: 'pbx-setHint' }, t('settings.shortcut.hint'))
         ),
@@ -1967,6 +2930,8 @@ window.__ModuleLoader__.load({
             { value: 'sessions', labelKey: 'view.sessions' },
             { value: 'projects', labelKey: 'view.projects' }
           ]),
+          toggleRow('notify', 'enabled', 'settings.notifyEnabled', 'settings.notifyEnabledDesc'),
+          toggleRow('notify', 'sound', 'settings.notifySound', 'settings.notifySoundDesc'),
           rangeRow('palette', 'blur', 'settings.blur', 6, 32, 1)
         ),
 
@@ -2047,7 +3012,7 @@ window.__ModuleLoader__.load({
       '.pbx-check.on{background:var(--dsw-alias-brand-primary);border-color:var(--dsw-alias-brand-primary)}',
       '.pbx-modeTag{display:inline-block;max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:12px;padding:2px 8px;border-radius:6px;background:var(--dsw-alias-bg-layer-2);color:var(--dsw-alias-label-primary);border:1px solid var(--dsw-alias-border-l1)}',
       '.pbx-modeTag.empty{color:var(--dsw-alias-label-secondary);background:transparent;border-color:transparent;padding-left:2px}',
-      '.pbx-kindTag{display:inline-flex;align-items:center;gap:5px;font-size:12px;color:var(--dsw-alias-label-secondary)}',
+      '.pbx-kindTag{display:inline-flex;align-items:center;gap:5px;font-size:12px;color:var(--dsw-alias-label-secondary);white-space:nowrap}',
       '.pbx-kindTag.auto{color:var(--dsw-alias-state-warn-primary);background:color-mix(in srgb,var(--dsw-alias-state-warn-primary) 15%,transparent);padding:2px 8px;border-radius:999px;font-weight:500}',
       '.pbx-autoGlyph{display:inline-flex;color:var(--dsw-alias-state-warn-primary);flex:none}',
       '.pbx-num{text-align:right;font-variant-numeric:tabular-nums;color:var(--dsw-alias-label-secondary)}',
@@ -2133,7 +3098,7 @@ window.__ModuleLoader__.load({
       '.pbx-pchipIcon{width:17px;height:17px;border-radius:5px;display:inline-flex;align-items:center;justify-content:center;flex:none}',
       '.pbx-pchip:hover{background:var(--dsw-alias-interactive-bg-hover)}',
       '.pbx-pchip.on{background:color-mix(in srgb,var(--dsw-alias-brand-primary) 15%,transparent);border-color:color-mix(in srgb,var(--dsw-alias-brand-primary) 45%,var(--dsw-alias-border-l1));color:var(--dsw-alias-brand-primary)}',
-      '.pbx-paletteList{overflow:auto;padding:8px;min-height:84px}',
+      '.pbx-paletteList{overflow:auto;padding:8px;flex:1 1 auto;min-height:0}',
       '.pbx-prow{display:flex;align-items:center;gap:10px;width:100%;padding:9px 11px;border:none;background:transparent;border-radius:9px;cursor:pointer;font:inherit;text-align:left;color:var(--dsw-alias-label-primary)}',
       '.pbx-prow{animation:pbxProwIn .18s ease both;transition:background .16s ease}',
       '.pbx-prow.active{background:var(--dsw-alias-interactive-bg-hover)}',
@@ -2143,7 +3108,12 @@ window.__ModuleLoader__.load({
       '.pbx-prowTime{font-size:11.5px;color:var(--dsw-alias-label-secondary);flex:none;min-width:44px;text-align:right}',
       '.pbx-paletteEmpty{padding:24px;text-align:center;color:var(--dsw-alias-label-secondary);font-size:13.5px}',
       '.pbx-paletteFoot{padding:9px 16px;border-top:1px solid var(--dsw-alias-border-l1);font-size:12px;color:var(--dsw-alias-label-secondary)}',
-      '.pbx-hud{position:fixed;z-index:900;width:300px;max-width:calc(100vw - 16px);background:linear-gradient(180deg,color-mix(in srgb,var(--dsw-alias-bg-overlay) 88%,transparent),color-mix(in srgb,var(--dsw-alias-bg-overlay) 78%,transparent));backdrop-filter:blur(26px) saturate(1.35);-webkit-backdrop-filter:blur(26px) saturate(1.35);border:1px solid var(--dsw-alias-border-l1);border-radius:14px;box-shadow:0 18px 48px rgba(0,0,0,.28);overflow:hidden;pointer-events:auto;animation:pbxHudIn .22s cubic-bezier(.2,.8,.2,1) both}',
+      '.pbx-hud{position:fixed;z-index:900;width:300px;max-width:calc(100vw - 16px);background:linear-gradient(180deg,color-mix(in srgb,var(--dsw-alias-bg-overlay) 88%,transparent),color-mix(in srgb,var(--dsw-alias-bg-overlay) 78%,transparent));backdrop-filter:blur(26px) saturate(1.35);-webkit-backdrop-filter:blur(26px) saturate(1.35);border:1px solid var(--dsw-alias-border-l1);border-radius:14px;box-shadow:0 18px 48px rgba(0,0,0,.28);overflow:hidden;pointer-events:auto;transform-origin:top right}',
+      '.pbx-hud.swap-out{animation:pbxHudSwapOut .12s cubic-bezier(.4,0,1,1) both}',
+      '.pbx-hud.swap-in{animation:pbxHudSwapIn .26s cubic-bezier(.22,.82,.3,1) both}',
+      '.pbx-hudInner{display:flex;flex-direction:column;min-height:0}',
+      '.pbx-hudInner.swap-out{animation:pbxHudSwapOut .12s cubic-bezier(.4,0,1,1) both}',
+      '.pbx-hudInner.swap-in{animation:pbxHudSwapIn .26s cubic-bezier(.22,.82,.3,1) both}',
       '.pbx-hud.default{right:18px;top:72px}',
       '.pbx-hud.moved{right:auto;top:auto}',
       '.pbx-hud.dragging{cursor:grabbing}',
@@ -2160,8 +3130,12 @@ window.__ModuleLoader__.load({
       '.pbx-hud:hover .pbx-hudList::-webkit-scrollbar-thumb{background:var(--dsw-alias-border-l2);border-radius:3px}',
       '.pbx-hud:hover .pbx-hudList::-webkit-scrollbar-track{background:transparent}',
       '.pbx-hudListInner{display:flex;flex-direction:column;}',
-      '.pbx-hudRow{display:flex;align-items:center;gap:9px;width:100%;padding:8px 9px;border:none;background:transparent;border-radius:9px;cursor:pointer;font:inherit;text-align:left;color:var(--dsw-alias-label-primary);transition:background .45s ease,box-shadow .45s ease;animation:pbxHudRowIn .2s ease both}',
+      '.pbx-hudRow{position:relative;display:flex;align-items:center;gap:9px;width:100%;padding:8px 9px;border:none;background:transparent;border-radius:9px;cursor:pointer;font:inherit;text-align:left;color:var(--dsw-alias-label-primary);transition:background .45s ease,box-shadow .45s ease;animation:pbxHudRowIn .26s cubic-bezier(.2,.8,.2,1) both}',
       '.pbx-hudRow:hover{background:var(--dsw-alias-interactive-bg-hover)}',
+      '.pbx-hudRow.auto{background:color-mix(in srgb,var(--dsw-alias-state-warn-primary) 6%,transparent)}',
+      '.pbx-hudRow.auto:hover{background:color-mix(in srgb,var(--dsw-alias-state-warn-primary) 12%,var(--dsw-alias-interactive-bg-hover))}',
+      '.pbx-hudRow.auto::before{content:"";position:absolute;left:0;top:7px;bottom:7px;width:2px;border-radius:2px;background:var(--dsw-alias-state-warn-primary);opacity:.75}',
+      '.pbx-hudAuto{display:inline-flex;align-items:center;color:var(--dsw-alias-state-warn-primary);flex:none}',
       '.pbx-hudRow.current{box-shadow:inset 0 0 0 1px color-mix(in srgb,var(--dsw-alias-brand-primary) 45%,transparent)}',
       '.pbx-hudRow.spotlight{box-shadow:inset 0 0 0 1px var(--dsw-alias-brand-primary)}',
       '.pbx-hudRow.live .pbx-hudTimer{color:var(--dsw-alias-brand-primary)}',
@@ -2180,6 +3154,46 @@ window.__ModuleLoader__.load({
       '.pbx-hudPillLabel{font-size:11.5px;color:var(--dsw-alias-label-secondary)}',
       '.pbx-responsive{height:100%;min-height:0;display:flex;flex-direction:column}',
       '.pbx-responsive>.pbx-root{flex:1;min-height:0}',
+      '.pbx-headerRight{display:flex;align-items:center;gap:10px;flex-wrap:wrap}',
+      '.pbx-renameBackdrop{position:fixed;inset:0;z-index:1100;display:flex;justify-content:center;align-items:flex-start;padding-top:16vh;background:rgba(8,10,14,.34);backdrop-filter:blur(3px);-webkit-backdrop-filter:blur(3px);pointer-events:auto;animation:pbxBackdropIn .16s ease-out both}',
+      '.pbx-renameCard{width:min(420px,calc(100vw - 32px));box-sizing:border-box;background:var(--dsw-alias-bg-layer-2);border:1px solid var(--dsw-alias-border-l2);border-radius:var(--dsw-radius-xl);box-shadow:0 24px 64px rgba(0,0,0,.32);padding:18px;display:flex;flex-direction:column;gap:7px;animation:pbxPaletteIn .18s cubic-bezier(.2,.8,.2,1) both}',
+      '.pbx-renameTitle{font-size:15px;font-weight:600;color:var(--dsw-alias-label-primary);margin-bottom:2px}',
+      '.pbx-renameLabel{font-size:12px;color:var(--dsw-alias-label-secondary)}',
+      '.pbx-renameInput{height:34px;box-sizing:border-box;border:1px solid var(--dsw-alias-border-l1);background:var(--dsw-alias-bg-layer-1);color:var(--dsw-alias-label-primary);border-radius:var(--dsw-radius-sm);padding:0 10px;font:inherit;font-size:13px;outline:none}',
+      '.pbx-renameInput:focus{border-color:var(--dsw-alias-brand-primary)}',
+      '.pbx-renameError{font-size:12px;color:var(--dsw-alias-state-error-primary);overflow-wrap:anywhere}',
+      '.pbx-renameActions{display:flex;justify-content:flex-end;gap:8px;margin-top:6px}',
+      '.pbx-renameBtn{height:30px;padding:0 12px;border-radius:var(--dsw-radius-sm);border:1px solid var(--dsw-alias-border-l1);background:transparent;color:var(--dsw-alias-label-primary);font:inherit;font-size:12.5px;cursor:pointer}',
+      '.pbx-renameBtn:hover:not(:disabled){background:var(--dsw-alias-interactive-bg-hover)}',
+      '.pbx-renameBtn:disabled{opacity:.5;cursor:default}',
+      '.pbx-renameBtn.primary{background:var(--dsw-alias-label-primary);border-color:transparent;color:var(--dsw-alias-bg-base);font-weight:600}',
+      '.pbx-renameBtn.primary:hover:not(:disabled){opacity:.9}',
+      '.pbx-renameBtn.danger{color:var(--dsw-alias-state-error-primary);border-color:color-mix(in srgb,var(--dsw-alias-state-error-primary) 45%,var(--dsw-alias-border-l1))}',
+      '.pbx-renameBtn.danger:hover:not(:disabled){background:color-mix(in srgb,var(--dsw-alias-state-error-primary) 12%,transparent)}',
+      '.pbx-menuHint{font-size:11.5px;color:var(--dsw-alias-label-secondary);line-height:1.45;overflow-wrap:anywhere}',
+      '.pbx-toasts{position:fixed;top:calc(var(--dsh-windows-titlebar-height,0px) + 12px);left:50%;transform:translateX(-50%);z-index:1200;display:flex;flex-direction:column;align-items:center;gap:8px;pointer-events:none}',
+      '.pbx-toast{pointer-events:auto;display:flex;align-items:flex-start;gap:10px;min-width:260px;max-width:min(520px,calc(100vw - 32px));box-sizing:border-box;padding:10px 12px;background:var(--dsw-alias-bg-layer-2);border:1px solid var(--dsw-alias-border-l2);border-radius:var(--dsw-radius-md);box-shadow:0 12px 32px rgba(0,0,0,.28);animation:pbxToastIn .18s ease-out both}',
+      '.pbx-toast[data-tone=warn]{border-color:color-mix(in srgb,var(--dsw-alias-state-warn-primary) 55%,var(--dsw-alias-border-l2))}',
+      '.pbx-toastIcon{display:inline-flex;color:var(--dsw-alias-state-warn-primary);flex:none;padding-top:1px}',
+      '.pbx-toastMain{flex:1;min-width:0;display:flex;flex-direction:column;gap:2px}',
+      '.pbx-toastTitle{font-size:12.5px;font-weight:600;color:var(--dsw-alias-label-primary);line-height:1.4}',
+      '.pbx-toastMsg{font-size:12px;color:var(--dsw-alias-label-secondary);line-height:1.45;overflow-wrap:anywhere}',
+      '.pbx-toastClose{display:inline-flex;align-items:center;justify-content:center;width:22px;height:22px;border:none;background:transparent;color:var(--dsw-alias-label-secondary);border-radius:var(--dsw-radius-xs);cursor:pointer;flex:none}',
+      '.pbx-toastClose:hover{background:var(--dsw-alias-interactive-bg-hover);color:var(--dsw-alias-label-primary)}',
+      '.pbx-notifDock{position:fixed;z-index:1180;display:flex;flex-direction:column;align-items:flex-end;gap:8px;pointer-events:none;max-width:min(420px,calc(100vw - 24px))}',
+      '.pbx-notifCard{pointer-events:auto;box-sizing:border-box;min-width:280px;max-width:100%;background:var(--dsw-alias-bg-layer-2);border:1px solid var(--dsw-alias-border-l2);border-radius:var(--dsw-radius-md);box-shadow:0 16px 40px rgba(0,0,0,.32);padding:10px 12px;display:flex;flex-direction:column;gap:6px;cursor:pointer;animation:pbxNotifIn .2s ease-out both;outline:none}',
+      '.pbx-notifCard[data-tone=success]{background:color-mix(in srgb,var(--dsw-alias-state-success-primary) 11%,var(--dsw-alias-bg-layer-2));border-color:color-mix(in srgb,var(--dsw-alias-state-success-primary) 38%,var(--dsw-alias-border-l2))}',
+      '.pbx-notifCard[data-tone=warn]{background:color-mix(in srgb,var(--dsw-alias-state-warn-primary) 12%,var(--dsw-alias-bg-layer-2));border-color:color-mix(in srgb,var(--dsw-alias-state-warn-primary) 42%,var(--dsw-alias-border-l2))}',
+      '.pbx-notifHead{display:flex;align-items:center;gap:8px}',
+      '.pbx-notifGlyph{display:inline-flex;color:var(--dsw-alias-label-secondary);flex:none}',
+      '.pbx-notifCard[data-tone=success] .pbx-notifGlyph{color:var(--dsw-alias-state-success-primary)}',
+      '.pbx-notifCard[data-tone=warn] .pbx-notifGlyph{color:var(--dsw-alias-state-warn-primary)}',
+      '.pbx-notifTitle{flex:1;min-width:0;font-size:12.5px;font-weight:600;color:var(--dsw-alias-label-primary);line-height:1.4}',
+      '.pbx-notifClose{display:inline-flex;align-items:center;justify-content:center;width:20px;height:20px;border:none;background:transparent;color:var(--dsw-alias-label-secondary);border-radius:var(--dsw-radius-xs);cursor:pointer;flex:none}',
+      '.pbx-notifClose:hover{background:var(--dsw-alias-interactive-bg-hover);color:var(--dsw-alias-label-primary)}',
+      '.pbx-notifBody{font-size:12px;color:var(--dsw-alias-label-secondary);line-height:1.5;white-space:pre-wrap;overflow-wrap:anywhere;max-height:220px;overflow:auto}',
+      '.pbx-notifFoot{font-size:11px;color:var(--dsw-alias-label-secondary);opacity:.78}',
+      '.pbx-setWarn{font-size:11.5px;color:var(--dsw-alias-state-warn-primary);line-height:1.45;overflow-wrap:anywhere}',
       '.pbx-compact{padding:0}',
       '.pbx-compactWrap{padding:14px 12px 28px;max-width:none}',
       '.pbx-compactHead{display:flex;align-items:center;gap:8px;margin-bottom:10px}',
@@ -2238,8 +3252,11 @@ window.__ModuleLoader__.load({
       '.pbx-hud.closing{animation:pbxHudOut .2s ease both;pointer-events:none}',
       '.pbx-paletteBackdrop.closing{animation:pbxBackdropOut .18s ease both;pointer-events:none}',
       '.pbx-paletteBackdrop.closing .pbx-palette{animation:pbxPaletteOut .18s cubic-bezier(.4,0,1,1) both}',
-      '@keyframes pbxHudIn{from{opacity:0;transform:translateY(-6px) scale(.985)}to{opacity:1;transform:none}}',
-      '@keyframes pbxHudPillIn{from{opacity:0;transform:scale(.94)}to{opacity:1;transform:none}}',
+      '@keyframes pbxToastIn{from{opacity:0;transform:translateY(-6px)}to{opacity:1;transform:none}}',
+      '@keyframes pbxNotifIn{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:none}}',
+      '@keyframes pbxHudPillIn{from{opacity:0;transform:translateY(2px)}to{opacity:1;transform:none}}',
+      '@keyframes pbxHudSwapOut{from{opacity:1;transform:translateY(0)}to{opacity:0;transform:translateY(3px)}}',
+      '@keyframes pbxHudSwapIn{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}',
       '@keyframes pbxHudOut{from{opacity:1;transform:none}to{opacity:0;transform:translateY(-4px) scale(.99)}}',
       '@keyframes pbxHudRowIn{from{opacity:0;transform:translateX(-4px)}to{opacity:1;transform:none}}',
       '@keyframes pbxProwIn{from{opacity:0;transform:translateY(-3px)}to{opacity:1;transform:none}}',
@@ -2247,7 +3264,7 @@ window.__ModuleLoader__.load({
       '@keyframes pbxPaletteOut{from{opacity:1;transform:none}to{opacity:0;transform:translateY(-6px) scale(.99)}}',
       '@keyframes pbxBackdropIn{from{opacity:0}to{opacity:1}}',
       '@keyframes pbxPaletteIn{from{opacity:0;transform:translateY(-10px) scale(.985)}to{opacity:1;transform:translateY(0) scale(1)}}',
-      '@media (prefers-reduced-motion: reduce){.pbx-kdot,.pbx-rdot,.pbx-statusPill,.pbx-liveDot,.pbx-palette,.pbx-paletteBackdrop,.pbx-hud,.pbx-hudRow,.pbx-prow,.pbx-user-jump-highlight{animation:none!important}}'
+      '@media (prefers-reduced-motion: reduce){.pbx-kdot,.pbx-rdot,.pbx-statusPill,.pbx-liveDot,.pbx-palette,.pbx-paletteBackdrop,.pbx-renameBackdrop,.pbx-renameCard,.pbx-toast,.pbx-notifCard,.pbx-hud,.pbx-hudInner,.pbx-hudRow,.pbx-prow,.pbx-user-jump-highlight{animation:none!important}}'
     ].join('\n');
 
     /* ----------------------------------------------------------------- apply */
@@ -2278,20 +3295,233 @@ window.__ModuleLoader__.load({
       }, 'project-board: agent presets');
 
       const uiWorkspace = ctx.get('uiWorkspace');
+      const shortcutsService = ctx.get('shortcuts');
       const openSession = (sessionId) => { try { if (uiWorkspace) uiWorkspace.openSession(sessionId); } catch (error) { console.warn('project-board: open session failed', error); } };
       const paletteStore = createUiStore({ open: false });
       const focusStore = createUiStore({ id: null, at: 0 });
       const hudOrderStore = createUiStore({ ids: [] });
       const headerDragStore = createUiStore({ id: null, side: null, index: -1, width: 0 });
+      const toastStore = createUiStore({ items: [], seq: 0 });
+      let toastSeq = 0;
+      const dismissToast = (id) => { toastStore.set({ items: toastStore.getSnapshot().items.filter((item) => item.id !== id) }); };
+      const pushToast = (input) => {
+        const source = input || {};
+        toastSeq += 1;
+        const item = { id: toastSeq, tone: source.tone || 'warn', title: source.title || '', message: source.message || '' };
+        toastStore.set({ seq: toastSeq, items: toastStore.getSnapshot().items.concat([item]).slice(-4) });
+        window.setTimeout(() => dismissToast(item.id), 4800);
+        return item.id;
+      };
+      const notifStore = createUiStore({ items: [], seq: 0 });
+      let notifSeq = 0;
+      const dismissNotif = (id) => { notifStore.set({ items: notifStore.getSnapshot().items.filter((item) => item.id !== id) }); };
+      const pushNotif = (input) => {
+        const source = input || {};
+        notifSeq += 1;
+        const item = { id: notifSeq, tone: source.tone || 'success', title: source.title || '', body: source.body || '', sessionId: source.sessionId || null };
+        notifStore.set({ seq: notifSeq, items: notifStore.getSnapshot().items.concat([item]).slice(-3) });
+        window.setTimeout(() => dismissNotif(item.id), Math.max(4000, Number(source.ttl) || 9000));
+        return item.id;
+      };
+      /** Read the DSH shortcut catalog and report the first built-in command already using this combo. */
+      const findBuiltinConflict = (combo) => {
+        try {
+          const shortcuts = ctx.get('shortcuts');
+          const rows = shortcuts && shortcuts.catalog && typeof shortcuts.catalog.getSnapshot === 'function' ? shortcuts.catalog.getSnapshot() : null;
+          if (!Array.isArray(rows) || rows.length === 0) return null;
+          const target = comboBindingOf(combo);
+          if (!target) return null;
+          for (const row of rows) {
+            if (!row || !row.binding || row.issue) continue;
+            if (Array.isArray(row.conflicts) && row.conflicts.length > 0) continue;
+            if (bindingsOverlap(target, row.binding)) return { id: row.id, label: row.label || row.id };
+          }
+        } catch (error) { /* ignore */ }
+        return null;
+      };
       const settingsStore = createUiStore(loadSettings());
       const writeSettings = (next) => { const merged = mergeSettings(DEFAULT_SETTINGS, next); merged.headerButtonsVersion = 3; merged.hintsVersion = 1; persistSettings(merged); settingsStore.set(merged); };
+      const toggleHud = () => {
+        try {
+          window.dispatchEvent(new CustomEvent('pbx-hud-toggle'));
+        } catch (error) { console.warn('project-board: toggle hud failed', error); }
+      };
       const boardHooks = () => Object.assign(
         { settings: settingsStore },
         scheduleSource ? { scheduleCatalog: scheduleSource } : {},
         presetSource ? { presets: presetSource } : {}
       );
-      const openBoard = () => { try { if (ctx.sidebarRight) ctx.sidebarRight.openTab(BOARD_KIND); } catch (error) { console.warn('project-board: open board tab failed', error); } };
-      const boardInject = () => ({ openSession: openSession, openBoard: openBoard, openFullBoard: () => { try { ctx.layout.selectPanel('project-board'); } catch (error) { /* ignore */ } }, hooks: boardHooks() });
+      /* The board lives in the native right sidebar: narrow / medium widths and
+         the sidebar's own fullscreen mode, exactly like its panel button. */
+      const rightBoardActive = () => {
+        try {
+          const active = ctx.sidebarRight && typeof ctx.sidebarRight.active === 'function' ? ctx.sidebarRight.active() : undefined;
+          return Boolean(active && active.kind === BOARD_KIND);
+        } catch (error) { return false; }
+      };
+      const collapseRightBoard = () => {
+        try {
+          const sidebarRight = ctx.sidebarRight;
+          if (!sidebarRight) return;
+          const expanded = typeof sidebarRight.isExpanded === 'function' ? sidebarRight.isExpanded() : false;
+          if (expanded && rightBoardActive()) sidebarRight.toggleExpanded();
+        } catch (error) { /* ignore */ }
+      };
+      const rightbarWidthNow = () => {
+        const column = document.querySelector('[data-rightbar-col]');
+        return column ? column.getBoundingClientRect().width : 0;
+      };
+      const rightbarFullscreen = () => Boolean(document.querySelector('[data-sidebar-right-panel="fullscreen"]')) || Boolean(document.querySelector('[data-rightbar-fullscreen]'));
+      const setRightbarWidth = (px) => {
+        try {
+          const panels = ctx.layout && ctx.layout.panels;
+          if (panels && typeof panels.setRightbar === 'function') panels.setRightbar(px);
+        } catch (error) { /* ignore */ }
+      };
+      const toggleRightbarFullscreen = () => {
+        try {
+          const sidebarRight = ctx.sidebarRight;
+          const target = sidebarRight && typeof sidebarRight.commandTarget === 'function' ? sidebarRight.commandTarget() : undefined;
+          if (target && typeof sidebarRight.toggleFullscreen === 'function') sidebarRight.toggleFullscreen(target);
+        } catch (error) { /* ignore */ }
+      };
+      const showNativeBoard = (mode) => {
+        try {
+          const sidebarRight = ctx.sidebarRight;
+          if (!sidebarRight) return;
+          if (!rightBoardActive()) sidebarRight.openTab(BOARD_KIND);
+          if (!sidebarRight.isExpanded()) sidebarRight.toggleExpanded();
+          if (mode === 'full') {
+            if (!rightbarFullscreen()) toggleRightbarFullscreen();
+            return;
+          }
+          if (rightbarFullscreen()) toggleRightbarFullscreen();
+          const viewport = window.innerWidth || 1200;
+          const width = mode === 'narrow' ? 380 : Math.round(viewport * 0.5);
+          setRightbarWidth(width);
+          /* A presentation persisted from a fullscreen open lands one render later. */
+          window.setTimeout(() => {
+            if (rightbarFullscreen()) toggleRightbarFullscreen();
+            setRightbarWidth(width);
+          }, 130);
+        } catch (error) { console.warn('project-board: native board failed', error); }
+      };
+      const toggleNativeBoard = (mode) => {
+        try {
+          const sidebarRight = ctx.sidebarRight;
+          if (!sidebarRight) return;
+          const visible = rightBoardActive();
+          const expanded = typeof sidebarRight.isExpanded === 'function' ? sidebarRight.isExpanded() : false;
+          const full = rightbarFullscreen();
+          if (mode === 'full') {
+            if (visible && expanded && full) {
+              /* Same key again closes the panel, like the narrow/medium toggles. */
+              sidebarRight.toggleExpanded();
+              return;
+            }
+            showNativeBoard('full');
+            return;
+          }
+          const viewport = window.innerWidth || 1200;
+          const targetWidth = mode === 'narrow' ? 380 : Math.round(viewport * 0.5);
+          if (visible && expanded && !full && Math.abs(rightbarWidthNow() - targetWidth) < 40) {
+            sidebarRight.toggleExpanded();
+            return;
+          }
+          showNativeBoard(mode);
+        } catch (error) { console.warn('project-board: toggle native board failed', error); }
+      };
+      const openBoard = () => {
+        try { if (ctx.sidebarRight) ctx.sidebarRight.openTab(BOARD_KIND); } catch (error) { console.warn('project-board: open board tab failed', error); }
+      };
+      const openFullBoard = () => { collapseRightBoard(); try { ctx.layout.selectPanel('project-board'); } catch (error) { /* ignore */ } };
+      const renameStore = createUiStore({ sessionId: null, currentTitle: '', at: 0 });
+      const requestRename = (sessionId, currentTitle) => {
+        if (!sessionId) return;
+        renameStore.set({ sessionId: sessionId, currentTitle: currentTitle || '', at: Date.now() });
+      };
+      const renameSession = async (sessionId, title) => {
+        try {
+          if (!ctx.remote || !ctx.remote.session || typeof ctx.remote.session.rename !== 'function') {
+            return { ok: false, error: { message: 'session rename is unavailable' } };
+          }
+          return await ctx.remote.session.rename({ sessionId: sessionId, title: title });
+        } catch (error) {
+          return { ok: false, error: { message: String(error && error.message ? error.message : error) } };
+        }
+      };
+      const boardInject = () => ({ openSession: openSession, openBoard: openBoard, openFullBoard: openFullBoard, hooks: boardHooks() });
+
+      const sessionMenuStore = createUiStore({ sessionId: null, title: '', at: 0 });
+      const requestSessionMenu = (sessionId, title) => {
+        if (sessionId) sessionMenuStore.set({ sessionId: sessionId, title: title || '', at: Date.now() });
+      };
+      const closeSessionMenu = () => sessionMenuStore.set({ sessionId: null, title: '', at: 0 });
+      const archiveSession = async (sessionId) => {
+        try {
+          const workspaces = ctx.get('workspaces');
+          if (!workspaces || typeof workspaces.archiveSession !== 'function') {
+            return { ok: false, error: { code: 'unsupported', message: 'session archive is unavailable' } };
+          }
+          await workspaces.archiveSession(sessionId);
+          return { ok: true };
+        } catch (error) {
+          const rpc = error && error.rpcError;
+          return { ok: false, error: { code: rpc && rpc.code ? rpc.code : '', message: String(error && error.message ? error.message : error) } };
+        }
+      };
+      const sessionDeleteApi = () => {
+        const owns = (object, name) => {
+          try {
+            return Boolean(object) && Object.prototype.hasOwnProperty.call(object, name) && typeof object[name] === 'function';
+          } catch (error) { return false; }
+        };
+        try {
+          const session = ctx.remote && ctx.remote.session;
+          if (owns(session, 'delete')) return session.delete.bind(session);
+          if (owns(session, 'remove')) return session.remove.bind(session);
+          if (owns(ctx.remote, 'deleteSession')) return ctx.remote.deleteSession.bind(ctx.remote);
+        } catch (error) { /* ignore */ }
+        return null;
+      };
+      const deleteSession = async (sessionId) => {
+        const remove = sessionDeleteApi();
+        if (!remove) return { ok: false, error: { code: 'unsupported', message: 'session delete is unavailable' } };
+        try {
+          const result = await remove({ sessionId: sessionId });
+          if (!result || result.ok !== false) return { ok: true };
+          return { ok: false, error: result.error || { message: 'delete failed' } };
+        } catch (error) {
+          return { ok: false, error: { message: String(error && error.message ? error.message : error) } };
+        }
+      };
+
+      /* Warn once at startup when saved shortcuts collide with built-in DSH commands. */
+      /* Warn once at startup when saved shortcuts collide with built-in DSH commands. */
+      ctx.effect(() => {
+        const timer = window.setTimeout(() => {
+          try {
+            const snap = settingsStore.getSnapshot();
+            const translate = ctx.locale.bind(NS);
+            const conflicts = [];
+            for (const key of Object.keys(snap.shortcuts || {})) {
+              const conflict = findBuiltinConflict(snap.shortcuts[key]);
+              if (conflict) conflicts.push({ key: key, combo: snap.shortcuts[key], label: conflict.label });
+            }
+            if (conflicts.length === 0) return;
+            const first = conflicts[0];
+            pushToast({
+              tone: 'warn',
+              title: translate('toast.conflictTitle'),
+              message: conflicts.length === 1
+                ? translate('toast.conflictExisting', { combo: comboDisplay(first.combo), name: first.label })
+                : translate('toast.conflictExistingMany', { n: conflicts.length })
+            });
+          } catch (error) { /* ignore */ }
+        }, 1500);
+        return () => window.clearTimeout(timer);
+      }, 'project-board: shortcut conflict scan');
+
 
       ctx.slots.inject('sidebar.panellist', () => ctx.slots.register({
         name: 'sidebar.panellist', id: 'project-board', order: 50, locale: NS,
@@ -2335,21 +3565,46 @@ window.__ModuleLoader__.load({
 
       ctx.slots.inject('shell.overlay', () => ctx.slots.register({
         name: 'shell.overlay', id: 'project-board-palette', order: 40, locale: NS,
-        inject: () => ({ openSession: openSession, palette: paletteStore, focus: focusStore, hooks: { palette: paletteStore, settings: settingsStore, focus: focusStore, hudOrder: hudOrderStore } })
+        inject: () => ({ openSession: openSession, palette: paletteStore, focus: focusStore, toggleBoard: toggleNativeBoard, toggleHud: toggleHud, requestRename: requestRename, requestSessionMenu: requestSessionMenu, notify: pushToast, hooks: { palette: paletteStore, settings: settingsStore, focus: focusStore, hudOrder: hudOrderStore } })
       }, Palette));
+
+      ctx.slots.inject('shell.overlay', () => ctx.slots.register({
+        name: 'shell.overlay', id: 'project-board-session-menu', order: 41, locale: NS,
+        inject: () => ({ archiveSession: archiveSession, deleteSession: deleteSession, deleteSupported: Boolean(sessionDeleteApi()), closeSessionMenu: closeSessionMenu, hooks: { sessionMenu: sessionMenuStore } })
+      }, SessionMenuDialog));
+
+      ctx.slots.inject('shell.overlay', () => ctx.slots.register({
+        name: 'shell.overlay', id: 'project-board-rename', order: 39, locale: NS,
+        inject: () => ({ renameSession: renameSession, rename: renameStore, hooks: { rename: renameStore } })
+      }, RenameDialog));
 
       ctx.slots.inject('shell.overlay', () => ctx.slots.register({
         name: 'shell.overlay', id: 'project-board-hud', order: 35, locale: NS,
         inject: () => ({ openSession: openSession, hudOrder: hudOrderStore, saveSettings: writeSettings, hooks: Object.assign({ settings: settingsStore, focus: focusStore }, scheduleSource ? { scheduleCatalog: scheduleSource } : {}) })
       }, FloatingStatus));
 
+      ctx.slots.inject('shell.overlay', () => ctx.slots.register({
+        name: 'shell.overlay', id: 'project-board-toast', order: 45, locale: NS,
+        inject: () => ({ dismissToast: dismissToast, hooks: { toasts: toastStore } })
+      }, ToastStack));
+
+      ctx.slots.inject('shell.overlay', () => ctx.slots.register({
+        name: 'shell.overlay', id: 'project-board-notifier', order: 36, locale: NS,
+        inject: () => ({ notify: pushNotif, system: showSystemNotification, openSession: openSession, hooks: { settings: settingsStore } })
+      }, NotificationWatcher));
+
+      ctx.slots.inject('shell.overlay', () => ctx.slots.register({
+        name: 'shell.overlay', id: 'project-board-notification-dock', order: 44, locale: NS,
+        inject: () => ({ dismissNotif: dismissNotif, openSession: openSession, hooks: { notifications: notifStore } })
+      }, NotificationDock));
+
       ctx.slots.inject('settings.section', () => ctx.slots.register({
         name: 'settings.section', id: 'project-board-settings', order: 60, locale: NS,
         label: () => { try { return ctx.locale.bind(NS)('settings.title'); } catch (error) { return '项目看板设置'; } },
-        inject: () => ({ settings: settingsStore, saveSettings: writeSettings, hooks: { settings: settingsStore } })
+        inject: () => ({ settings: settingsStore, saveSettings: writeSettings, notify: pushToast, findBuiltinConflict: findBuiltinConflict, hooks: Object.assign({ settings: settingsStore }, shortcutsService && shortcutsService.catalog ? { shortcutsCatalog: shortcutsService.catalog } : {}) })
       }, SettingsPage));
     }
 
-    return { inject: ['slots', 'locale', 'uiWorkspace', 'remote', 'remote.schedule', 'remote.agentPresets', 'sidebarRight', 'sidebarRightTabs', 'layout'], apply: apply };
+    return { inject: ['slots', 'locale', 'uiWorkspace', 'remote', 'remote.session', 'remote.schedule', 'remote.agentPresets', 'sidebarRight', 'sidebarRightTabs', 'layout'], apply: apply };
   }
 });
