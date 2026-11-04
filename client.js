@@ -3109,8 +3109,6 @@ window.__ModuleLoader__.load({
       '.pbx-paletteEmpty{padding:24px;text-align:center;color:var(--dsw-alias-label-secondary);font-size:13.5px}',
       '.pbx-paletteFoot{padding:9px 16px;border-top:1px solid var(--dsw-alias-border-l1);font-size:12px;color:var(--dsw-alias-label-secondary)}',
       '.pbx-hud{position:fixed;z-index:900;width:300px;max-width:calc(100vw - 16px);background:linear-gradient(180deg,color-mix(in srgb,var(--dsw-alias-bg-overlay) 88%,transparent),color-mix(in srgb,var(--dsw-alias-bg-overlay) 78%,transparent));backdrop-filter:blur(26px) saturate(1.35);-webkit-backdrop-filter:blur(26px) saturate(1.35);border:1px solid var(--dsw-alias-border-l1);border-radius:14px;box-shadow:0 18px 48px rgba(0,0,0,.28);overflow:hidden;pointer-events:auto;transform-origin:top right}',
-      '.pbx-hud.swap-out{animation:pbxHudSwapOut .12s cubic-bezier(.4,0,1,1) both}',
-      '.pbx-hud.swap-in{animation:pbxHudSwapIn .26s cubic-bezier(.22,.82,.3,1) both}',
       '.pbx-hudInner{display:flex;flex-direction:column;min-height:0}',
       '.pbx-hudInner.swap-out{animation:pbxHudSwapOut .12s cubic-bezier(.4,0,1,1) both}',
       '.pbx-hudInner.swap-in{animation:pbxHudSwapIn .26s cubic-bezier(.22,.82,.3,1) both}',
