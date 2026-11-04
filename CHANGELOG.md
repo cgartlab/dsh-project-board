@@ -10,10 +10,34 @@ All notable changes to this project are documented here. The format follows
 
 - The status capsule's tooltip now names the board shortcuts it actually responds to
   (`Alt+N / Alt+B / Alt+V`); it previously showed the previous/next-session bindings.
+- The floating HUD keeps clear of an open right sidebar: it is positioned over the
+  conversation column instead of covering the project board.
+- Dragging the HUD no longer overrides a later "default position" choice; picking
+  top-right/bottom-right takes effect without a reload.
+- The responsive board renders at its wide layout again after being disabled and
+  re-enabled from settings instead of staying compact.
+- Settings migration keeps per-button header customisations (hidden/side/order) instead
+  of resetting the whole header-button table.
+- A pending system-notification permission no longer swallows the alert: the in-app card
+  is shown while permission is requested, and the system channel is used once granted.
+- Archiving a session reports a host rejection (`ok: false`) as a failure instead of
+  pretending it succeeded, matching the rename/delete paths.
+- Hold-to-scroll release, blur and Escape listeners are registered with the plugin
+  lifecycle, so a reload no longer stacks duplicate handlers.
+- IME composition (including keyCode 229) no longer triggers board shortcuts.
+- "Steer queued message" no longer falls back to clicking an unrelated trailing button
+  when the steer button cannot be identified.
+- Session grouping now follows the project table's sort order instead of raw workspace
+  order.
+- Shortcut-conflict repair can move a duplicate onto another free default when its natural
+  fallback is already taken.
 
 ### Changed
 
 - Dropped the now-unused `nav.cycle` dictionary key from both locales.
+- Notification-dock positioning only runs its polling while a notification is visible.
+- Board/native-sidebar helper calls now guard the optional `sidebarRight` and `layout`
+  APIs instead of failing silently.
 
 ## [1.0.1] - 2026-11-05
 

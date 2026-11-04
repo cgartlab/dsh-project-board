@@ -54,7 +54,8 @@ window.__ModuleLoader__.load({
         }
         const migratingButtons = raw.headerButtonsVersion !== 3;
         if (migratingButtons) {
-          out.headerButtons = cloneJson(DEFAULT_SETTINGS.headerButtons);
+          /* Keep the per-id values already merged above; only fold the legacy
+             header.capsule flag into the capsule button. */
           if (raw.header && raw.header.capsule === false) out.headerButtons.capsule.hidden = true;
         }
         if (raw.hintsVersion !== 1) out.hints = cloneJson(DEFAULT_SETTINGS.hints);
@@ -75,7 +76,7 @@ window.__ModuleLoader__.load({
         if (!owners.has(combo)) owners.set(combo, [action]);
         else owners.get(combo).push(action);
       }
-      for (const [combo, actions] of owners) {
+      for (const [combo, actions] of Array.from(owners)) {
         if (actions.length < 2) continue;
         const winner = actions.find((name) => defaults[name] === combo) || actions[0];
         for (const action of actions) {
@@ -85,6 +86,11 @@ window.__ModuleLoader__.load({
           if (!taken) {
             shortcuts[action] = fallback;
             owners.set(fallback, [action]);
+          } else {
+            /* The natural fallback is occupied by a third action; give the loser the
+               first still-free default so the duplicate does not survive the repair. */
+            const free = Object.values(defaults).find((candidate) => !owners.has(candidate));
+            if (free) { shortcuts[action] = free; owners.set(free, [action]); }
           }
         }
       }
@@ -583,16 +589,8 @@ window.__ModuleLoader__.load({
       }, HOLD_SCROLL_DELAY);
     }
 
-    window.addEventListener('keyup', (event) => {
-      const state = holdScrollState;
-      if (!state) return;
-      if (state.code && event.code !== state.code) return;
-      stopHoldScroll(true);
-    }, true);
-    window.addEventListener('blur', () => { stopHoldScroll(false); }, true);
-    document.addEventListener('keydown', (event) => {
-      if (holdScrollState && event.key === 'Escape') stopHoldScroll(false);
-    }, true);
+    /* Hold-to-scroll release/blur/cancel listeners are registered per plugin
+       lifecycle from apply() so a reload cannot stack duplicate handlers. */
 
     /* -------------------------------------------------- interject queued input */
     const STEER_LABELS = ['插话发送', 'Steer queued message'];
@@ -613,7 +611,11 @@ window.__ModuleLoader__.load({
           const label = button.getAttribute('aria-label') || '';
           if (STEER_LABELS.indexOf(label) >= 0) { steer = button; break; }
         }
-        if (!steer) steer = buttons[buttons.length - 1];
+        if (!steer) {
+          /* Fall back only to a button whose own label still reads like "steer";
+             never click the last button blindly, which could be Delete/Discard. */
+          steer = buttons.find((button) => /steer|插话/i.test((button.getAttribute('aria-label') || '') + ' ' + (button.textContent || ''))) || null;
+        }
         if (!steer) continue;
         if (steer.disabled) return null;
         return steer;
@@ -1249,6 +1251,11 @@ window.__ModuleLoader__.load({
         return rows;
       }, [projectModels, query, projectSorts]);
 
+      /* Session groups follow the project table's sort order. */
+      const orderedProjects = useMemo(() => {
+        return projectModels.slice().sort(compareBySorts(projectSorts, projectSortValue));
+      }, [projectModels, projectSorts]);
+
       const renderPopover = (workspaceId, color, icon) => {
         const spec = appearance[workspaceId] || {};
         return h('div', { className: 'pbx-pop', ref: popRef, onClick: (event) => event.stopPropagation() },
@@ -1332,7 +1339,7 @@ window.__ModuleLoader__.load({
         }
         if (!grouped) return filteredSessions.map(renderSessionRow);
         const rows = [];
-        for (const project of projectModels) {
+        for (const project of orderedProjects) {
           const groupRows = filteredSessions.filter((s) => s.workspaceId === project.workspaceId);
           if (groupRows.length === 0) continue;
           rows.push(renderGroupHeader(project.workspaceId, project.name, groupRows.length));
@@ -1729,8 +1736,11 @@ window.__ModuleLoader__.load({
         };
         if (Ctor.permission === 'granted') return present();
         if (Ctor.permission === 'default' && typeof Ctor.requestPermission === 'function') {
-          Ctor.requestPermission().then((result) => { if (result === 'granted') present(); }).catch(() => {});
-          return true;
+          /* Ask for permission in the background, but report "not delivered" so the
+             caller still shows the in-app card instead of silently dropping the alert.
+             The next notification uses the system channel once permission is granted. */
+          Ctor.requestPermission().catch(() => {});
+          return false;
         }
         return false;
       } catch (error) { return false; }
@@ -1824,6 +1834,7 @@ window.__ModuleLoader__.load({
       const items = (snap && snap.items) || [];
       const [bounds, setBounds] = useState({ right: 16, bottom: 16 });
       useEffect(() => {
+        if (items.length === 0) return undefined;
         const update = () => {
           const scroller = findChatScroller();
           const rect = scroller ? scroller.getBoundingClientRect() : null;
@@ -1834,7 +1845,7 @@ window.__ModuleLoader__.load({
         window.addEventListener('resize', update);
         const timer = window.setInterval(update, 1000);
         return () => { window.removeEventListener('resize', update); window.clearInterval(timer); };
-      }, []);
+      }, [items.length]);
       if (items.length === 0) return null;
       const open = (item) => {
         if (typeof props.openSession === 'function' && item.sessionId) props.openSession(item.sessionId);
@@ -1976,7 +1987,7 @@ window.__ModuleLoader__.load({
       }, [state.open, config.palette.enabled]);
       useEffect(() => {
         const onShortcut = (event) => {
-          if (event.isComposing || event.repeat || shortcutSuppressed) return;
+          if (isComposingEvent(event) || event.repeat || shortcutSuppressed) return;
           const eventCombo = comboFromEvent(event);
           if (!eventCombo || !comboHasModifier(eventCombo)) return;
           const shortcuts = (settingsRef.current && settingsRef.current.shortcuts) || DEFAULT_SETTINGS.shortcuts;
@@ -2210,6 +2221,7 @@ window.__ModuleLoader__.load({
       const dragRef = useRef(null);
       const posRef = useRef(pos);
       const startsRef = useRef(null);
+      const startsDirtyRef = useRef(false);
       if (startsRef.current === null) {
         const stored = loadJson(HUD_STARTS_KEY, {});
         startsRef.current = { running: (stored && stored.running) || {}, attention: (stored && stored.attention) || {} };
@@ -2221,6 +2233,13 @@ window.__ModuleLoader__.load({
         const timer = window.setInterval(() => setNow(Date.now()), 1000);
         return () => window.clearInterval(timer);
       }, [config.hud.enabled]);
+
+      /* Persist running/attention start stamps after commit, never during render. */
+      useEffect(() => {
+        if (!startsDirtyRef.current) return;
+        startsDirtyRef.current = false;
+        saveJson(HUD_STARTS_KEY, startsRef.current);
+      });
 
       /* Keep the card mounted for one exit frame so hiding it can animate. */
       useEffect(() => {
@@ -2311,6 +2330,12 @@ window.__ModuleLoader__.load({
         setCollapsed(Boolean(config.hud.defaultCollapsed));
       }, [config.hud.defaultCollapsed]);
 
+      /* A drag switches the saved placement to "last"; when the user later picks a
+         different default position, stop treating the dragged coordinates as active. */
+      useEffect(() => {
+        if (config.hud.defaultPosition !== 'last') setHasDragged(false);
+      }, [config.hud.defaultPosition]);
+
       const useLayoutEffectSafe = typeof React.useLayoutEffect === 'function' ? React.useLayoutEffect : useEffect;
       useLayoutEffectSafe(() => {
         const element = listContentRef.current;
@@ -2398,7 +2423,7 @@ window.__ModuleLoader__.load({
       }
       for (const key of Object.keys(starts.running)) if (!seenRunning.has(key)) { delete starts.running[key]; dirty = true; }
       for (const key of Object.keys(starts.attention)) if (!seenAttention.has(key)) { delete starts.attention[key]; dirty = true; }
-      if (dirty) saveJson(HUD_STARTS_KEY, starts);
+      if (dirty) startsDirtyRef.current = true;
 
       const nonIdle = allRows.filter((row) => row.tone !== 'idle' && !(row.tone === 'done' && config.hud.includeDone === false));
       const included = new Set(nonIdle.map((row) => row.id));
@@ -2488,7 +2513,23 @@ window.__ModuleLoader__.load({
 
       const positionMode = config.hud.defaultPosition || 'top-right';
       const useSavedPosition = Boolean(pos) && (positionMode === 'last' || dragging || hasDragged);
-      const style = useSavedPosition ? { left: pos.x + 'px', top: pos.y + 'px' } : null;
+      /* Keep the floating card over the conversation column, left of an open right
+         sidebar, instead of covering the board or another right-hand panel. */
+      const defaultRight = (() => {
+        try {
+          const col = document.querySelector('[data-rightbar-col]');
+          const open = document.querySelector('[data-sidebar-right-open="true"]');
+          if (col && open) {
+            const width = Math.round(col.getBoundingClientRect().width);
+            if (width > 40) return width + 18;
+          }
+          const scroller = findChatScroller();
+          const rect = scroller ? scroller.getBoundingClientRect() : null;
+          if (rect && rect.width > 4) return Math.max(12, window.innerWidth - rect.right + 12);
+        } catch (error) { /* ignore */ }
+        return 18;
+      })();
+      const style = useSavedPosition ? { left: pos.x + 'px', top: pos.y + 'px' } : { right: defaultRight + 'px' };
       const className = 'pbx-hud' + (useSavedPosition ? ' moved' : ' default' + (positionMode === 'bottom-right' ? ' bottom' : '')) + (dragging ? ' dragging' : '') + (closing ? ' closing' : '');
       if (collapsed) {
         return h('button', {
@@ -2551,9 +2592,12 @@ window.__ModuleLoader__.load({
         }
         window.addEventListener('resize', update);
         return () => window.removeEventListener('resize', update);
-      }, [threshold]);
-      if (config.board.enabled === false) return h('div', { className: 'pbx-responsive' }, h('div', { className: 'pbx-disabled' }, props.t('settings.boardDisabled')));
-      return h('div', { ref: boxRef, className: 'pbx-responsive' }, h(ProjectBoard, Object.assign({}, props, { compact: !wide })));
+      }, [threshold, config.board.enabled]);
+      return h('div', { ref: boxRef, className: 'pbx-responsive' },
+        config.board.enabled === false
+          ? h('div', { className: 'pbx-disabled' }, props.t('settings.boardDisabled'))
+          : h(ProjectBoard, Object.assign({}, props, { compact: !wide }))
+      );
     }
 
     /* ------------------------------------------------------------ rename dialog */
@@ -3444,7 +3488,7 @@ window.__ModuleLoader__.load({
       const showNativeBoard = (mode) => {
         try {
           const sidebarRight = ctx.sidebarRight;
-          if (!sidebarRight) return;
+          if (!sidebarRight || typeof sidebarRight.openTab !== 'function' || typeof sidebarRight.isExpanded !== 'function' || typeof sidebarRight.toggleExpanded !== 'function') return;
           if (!rightBoardActive()) sidebarRight.openTab(BOARD_KIND);
           if (!sidebarRight.isExpanded()) sidebarRight.toggleExpanded();
           if (mode === 'full') {
@@ -3465,7 +3509,7 @@ window.__ModuleLoader__.load({
       const toggleNativeBoard = (mode) => {
         try {
           const sidebarRight = ctx.sidebarRight;
-          if (!sidebarRight) return;
+          if (!sidebarRight || typeof sidebarRight.isExpanded !== 'function' || typeof sidebarRight.toggleExpanded !== 'function') return;
           const visible = rightBoardActive();
           const expanded = typeof sidebarRight.isExpanded === 'function' ? sidebarRight.isExpanded() : false;
           const full = rightbarFullscreen();
@@ -3488,9 +3532,14 @@ window.__ModuleLoader__.load({
         } catch (error) { console.warn('project-board: toggle native board failed', error); }
       };
       const openBoard = () => {
-        try { if (ctx.sidebarRight) ctx.sidebarRight.openTab(BOARD_KIND); } catch (error) { console.warn('project-board: open board tab failed', error); }
+        try { if (ctx.sidebarRight && typeof ctx.sidebarRight.openTab === 'function') ctx.sidebarRight.openTab(BOARD_KIND); } catch (error) { console.warn('project-board: open board tab failed', error); }
       };
-      const openFullBoard = () => { collapseRightBoard(); try { ctx.layout.selectPanel('project-board'); } catch (error) { /* ignore */ } };
+      const openFullBoard = () => {
+        collapseRightBoard();
+        try {
+          if (ctx.layout && typeof ctx.layout.selectPanel === 'function') ctx.layout.selectPanel('project-board');
+        } catch (error) { /* ignore */ }
+      };
       const renameStore = createUiStore({ sessionId: null, currentTitle: '', at: 0 });
       const requestRename = (sessionId, currentTitle) => {
         if (!sessionId) return;
@@ -3519,8 +3568,9 @@ window.__ModuleLoader__.load({
           if (!workspaces || typeof workspaces.archiveSession !== 'function') {
             return { ok: false, error: { code: 'unsupported', message: 'session archive is unavailable' } };
           }
-          await workspaces.archiveSession(sessionId);
-          return { ok: true };
+          const result = await workspaces.archiveSession(sessionId);
+          if (!result || result.ok !== false) return { ok: true };
+          return { ok: false, error: result.error || { code: 'archive-failed', message: 'archive rejected by host' } };
         } catch (error) {
           const rpc = error && error.rpcError;
           return { ok: false, error: { code: rpc && rpc.code ? rpc.code : '', message: String(error && error.message ? error.message : error) } };
@@ -3552,7 +3602,29 @@ window.__ModuleLoader__.load({
         }
       };
 
-      /* Warn once at startup when saved shortcuts collide with built-in DSH commands. */
+      /* Hold-to-scroll global listeners: registered with the plugin lifecycle so a
+         reload or HMR pass replaces them instead of stacking duplicate handlers. */
+      ctx.effect(() => {
+        const onKeyUp = (event) => {
+          const state = holdScrollState;
+          if (!state) return;
+          if (state.code && event.code !== state.code) return;
+          stopHoldScroll(true);
+        };
+        const onBlur = () => stopHoldScroll(false);
+        const onKeyDown = (event) => {
+          if (holdScrollState && event.key === 'Escape') stopHoldScroll(false);
+        };
+        window.addEventListener('keyup', onKeyUp, true);
+        window.addEventListener('blur', onBlur, true);
+        document.addEventListener('keydown', onKeyDown, true);
+        return () => {
+          window.removeEventListener('keyup', onKeyUp, true);
+          window.removeEventListener('blur', onBlur, true);
+          document.removeEventListener('keydown', onKeyDown, true);
+        };
+      }, 'project-board: hold-scroll listeners');
+
       /* Warn once at startup when saved shortcuts collide with built-in DSH commands. */
       ctx.effect(() => {
         const timer = window.setTimeout(() => {
