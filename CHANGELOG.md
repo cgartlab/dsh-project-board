@@ -46,6 +46,9 @@ All notable changes to this project are documented here. The format follows
   when the target turn is not loaded yet.
 - Approval notifications now show the request's localized reason instead of
   `[object Object]`.
+- Completion notifications also consult a resident session's `lastAgentError` /
+  `promptError` snapshot when available, so a failed background turn is less likely to be
+  announced as complete.
 
 ### Changed
 

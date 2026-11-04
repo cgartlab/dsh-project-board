@@ -2005,6 +2005,18 @@ window.__ModuleLoader__.load({
       } catch (error) { return false; }
     }
 
+    /** Session snapshot (with lastAgentError/promptError) for an already-retained session. */
+    function sessionSnapshotOf(sessionId) {
+      try {
+        const sessions = ctx.get('sessions');
+        if (!sessions) return null;
+        const scope = typeof sessions.scope === 'function' ? sessions.scope(sessionId) : null;
+        const session = scope && typeof sessions.sessionOf === 'function' ? sessions.sessionOf(scope) : null;
+        if (!session || typeof session.getSnapshot !== 'function') return null;
+        return session.getSnapshot();
+      } catch (error) { return null; }
+    }
+
     function NotificationWatcher(props) {
       const { t } = props;
       const useSessions = typeof props.useSessions === 'function' ? props.useSessions : NO_SCHEDULE_HOOK;
@@ -2064,12 +2076,15 @@ window.__ModuleLoader__.load({
               if (failed) send(sessionId, 'warn', t('notif.failTitle'), t('notif.failBody', { title: title }), 20000);
               else send(sessionId, 'success', t('notif.completeTitle'), t('notif.completeBody', { title: title }), 9000);
             };
+            const snapshot = sessionSnapshotOf(sessionId);
+            const snapshotFailed = Boolean(snapshot && (snapshot.lastAgentError
+              || (snapshot.promptError && (snapshot.promptError.error || snapshot.promptError.message))));
             if (visible) {
               /* The failure row mounts a tick after the running flag clears; let it land
                  before deciding between "complete" and "failed". */
-              window.setTimeout(() => finish(visibleTranscriptFailed()), 700);
+              window.setTimeout(() => finish(snapshotFailed || visibleTranscriptFailed()), 700);
             } else {
-              finish(false);
+              finish(snapshotFailed);
             }
           }
         });
