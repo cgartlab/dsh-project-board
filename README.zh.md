@@ -82,10 +82,11 @@ plugin_manager install_bundle target="<本仓库路径>"
 
 ```bash
 node scripts/check-bundle.cjs   # 清单、exports、语法
-node scripts/check-i18n.cjs     # zh/en 字典一致性
+node scripts/check-i18n.cjs     # zh/en 字典一致性（含间接引用键）
+node --test test/load.test.cjs  # bundle 在打桩宿主服务下加载并挂载
 ```
 
-两者都会在每次推送和 PR 时由 CI 执行（`.github/workflows/check.yml`）。
+这些检查都会在每次推送和 PR 时由 CI 执行（`.github/workflows/check.yml`）。
 
 ## 协议
 

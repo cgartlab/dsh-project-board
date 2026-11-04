@@ -92,10 +92,11 @@ runtime dependencies of its own; host-half `index.js` is intentionally a no-op.
 
 ```bash
 node scripts/check-bundle.cjs   # manifest, exports, syntax
-node scripts/check-i18n.cjs     # zh/en dictionary parity
+node scripts/check-i18n.cjs     # zh/en dictionary parity (direct and indirect keys)
+node --test test/load.test.cjs  # bundle loads and mounts against stubbed host services
 ```
 
-Both run in CI on every push and pull request (`.github/workflows/check.yml`).
+All of them run in CI on every push and pull request (`.github/workflows/check.yml`).
 
 ## License
 

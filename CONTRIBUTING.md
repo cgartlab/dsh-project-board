@@ -14,10 +14,11 @@ plugin; keep changes focused and verify them against a running harness.
    ```bash
    node scripts/check-bundle.cjs
    node scripts/check-i18n.cjs
+   node --test test/load.test.cjs
    node --check client.js
    ```
 
-   Both scripts also run in CI on every push and pull request.
+   All of them also run in CI on every push and pull request.
 
 ## Rules of thumb
 

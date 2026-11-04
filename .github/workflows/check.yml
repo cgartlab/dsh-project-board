@@ -18,6 +18,8 @@ jobs:
         run: node scripts/check-bundle.cjs
       - name: i18n parity
         run: node scripts/check-i18n.cjs
+      - name: Load test
+        run: node --test test/load.test.cjs
       - name: Syntax
         run: |
           node --check client.js
