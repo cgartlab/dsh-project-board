@@ -323,6 +323,18 @@ window.__ModuleLoader__.load({
     /** Turn number at the reading line of DSH's virtualised transcript, or the last loaded turn. */
     function currentVisibleTurn(viewport) {
       try {
+        const metrics = viewport && typeof viewport.metrics === 'function' ? viewport.metrics() : null;
+        /* At the tail the next answer belongs to the latest turn, even when the reading
+           line still sits on the previous turn's last row. */
+        if (metrics && metrics.top >= metrics.floor - 24 && Number.isSafeInteger(viewport.latestTurn)) {
+          return viewport.latestTurn;
+        }
+        const reference = viewport && typeof viewport.readingReference === 'function' ? viewport.readingReference() : null;
+        if (reference) {
+          const holder = reference.closest ? reference.closest('[data-chat-turn]') : null;
+          const turn = Number((holder || reference).getAttribute('data-chat-turn'));
+          if (Number.isSafeInteger(turn)) return turn;
+        }
         const scroller = findChatScroller();
         const top = scroller ? scroller.getBoundingClientRect().top : 0;
         const height = scroller ? scroller.clientHeight : (window.innerHeight || 600);
@@ -929,6 +941,8 @@ window.__ModuleLoader__.load({
       'toast.interjectNone': '当前没有可插话的排队消息（仅运行中可用）。',
       'menu.title': '管理当前会话',
       'menu.archive': '归档',
+      'menu.stop': '停止运行',
+      'menu.stopHint': '停止当前运行中的回合，排队的消息会保留。',
       'menu.delete': '删除',
       'menu.deleteConfirm': '再次点击确认删除',
       'menu.cancel': '取消',
@@ -1037,6 +1051,8 @@ window.__ModuleLoader__.load({
       'toast.interjectNone': 'No queued message can be steered right now (available only while running).',
       'menu.title': 'Manage session',
       'menu.archive': 'Archive',
+      'menu.stop': 'Stop turn',
+      'menu.stopHint': 'Stop the running turn; queued work is preserved.',
       'menu.delete': 'Delete',
       'menu.deleteConfirm': 'Click again to confirm',
       'menu.cancel': 'Cancel',
@@ -2962,7 +2978,9 @@ window.__ModuleLoader__.load({
         try {
           const result = kind === 'archive'
             ? await props.archiveSession(sessionId)
-            : await props.deleteSession(sessionId);
+            : kind === 'cancel'
+              ? await props.cancelSession(sessionId)
+              : await props.deleteSession(sessionId);
           if (result && result.ok) { close(); return; }
           const code = result && result.error ? result.error.code : '';
           if (kind === 'delete' && (code === 'unsupported' || code === 'unavailable')) {
@@ -2994,11 +3012,14 @@ window.__ModuleLoader__.load({
         },
           h('div', { className: 'pbx-renameTitle' }, t('menu.title')),
           h('div', { className: 'pbx-renameLabel' }, sessionTitle || sessionId),
+          h('div', { className: 'pbx-menuHint' }, t('menu.stopHint')),
           h('div', { className: 'pbx-menuHint' }, t('menu.archiveHint')),
           h('div', { className: 'pbx-menuHint' }, t('menu.deleteHint')),
           deleteSupported ? null : h('div', { className: 'pbx-menuHint' }, t('menu.deleteUnavailable')),
           error ? h('div', { className: 'pbx-renameError' }, error) : null,
           h('div', { className: 'pbx-renameActions' },
+            h('button', { type: 'button', className: 'pbx-renameBtn', disabled: Boolean(busy), onClick: () => run('cancel') },
+              busy === 'cancel' ? t('menu.busy') : t('menu.stop')),
             h('button', { type: 'button', className: 'pbx-renameBtn', disabled: Boolean(busy), onClick: () => run('archive') },
               busy === 'archive' ? t('menu.busy') : t('menu.archive')),
             h('button', {
@@ -3791,6 +3812,20 @@ window.__ModuleLoader__.load({
           return { ok: false, error: { code: rpc && rpc.code ? rpc.code : '', message: String(error && error.message ? error.message : error) } };
         }
       };
+      const cancelSession = async (sessionId) => {
+        try {
+          const session = ctx.remote && ctx.remote.session;
+          if (!session || typeof session.cancel !== 'function') {
+            return { ok: false, error: { code: 'unsupported', message: 'stop is unavailable' } };
+          }
+          const result = await session.cancel({ sessionId: sessionId });
+          if (!result || result.ok !== false) return { ok: true };
+          return { ok: false, error: result.error || { code: 'cancel-failed', message: 'stop rejected by host' } };
+        } catch (error) {
+          const rpc = error && error.rpcError;
+          return { ok: false, error: { code: rpc && rpc.code ? rpc.code : '', message: String(error && error.message ? error.message : error) } };
+        }
+      };
       const sessionDeleteApi = () => {
         const owns = (object, name) => {
           try {
@@ -3913,7 +3948,7 @@ window.__ModuleLoader__.load({
 
       ctx.slots.inject('shell.overlay', () => ctx.slots.register({
         name: 'shell.overlay', id: 'project-board-session-menu', order: 41, locale: NS,
-        inject: () => ({ archiveSession: archiveSession, deleteSession: deleteSession, deleteSupported: Boolean(sessionDeleteApi()), closeSessionMenu: closeSessionMenu, hooks: { sessionMenu: sessionMenuStore } })
+        inject: () => ({ archiveSession: archiveSession, cancelSession: cancelSession, deleteSession: deleteSession, deleteSupported: Boolean(sessionDeleteApi()), closeSessionMenu: closeSessionMenu, hooks: { sessionMenu: sessionMenuStore } })
       }, SessionMenuDialog));
 
       ctx.slots.inject('shell.overlay', () => ctx.slots.register({

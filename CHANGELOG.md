@@ -39,6 +39,11 @@ All notable changes to this project are documented here. The format follows
   older-page prefetch work on the current DSH build.
 - Previous/next-instruction navigation falls back to DSH turn navigation when the
   virtualised transcript exposes no user-message rows.
+- The session actions dialog now offers **Stop turn** (`remote.session.cancel`), so a
+  running or waiting turn can be stopped before archiving.
+- Previous/next-instruction taps now resolve the reading-line turn (and treat the tail as
+  the latest turn), so they land on the intended instruction and page in older history
+  when the target turn is not loaded yet.
 
 ### Changed
 
