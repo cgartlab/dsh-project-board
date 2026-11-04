@@ -4,6 +4,17 @@ All notable changes to this project are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the project uses
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.0.2] - 2026-11-05
+
+### Fixed
+
+- The status capsule's tooltip now names the board shortcuts it actually responds to
+  (`Alt+N / Alt+B / Alt+V`); it previously showed the previous/next-session bindings.
+
+### Changed
+
+- Dropped the now-unused `nav.cycle` dictionary key from both locales.
+
 ## [1.0.1] - 2026-11-05
 
 ### Fixed
