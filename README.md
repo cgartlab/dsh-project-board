@@ -76,6 +76,18 @@ runtime dependencies of its own; host-half `index.js` is intentionally a no-op.
 - `locale/` — zh/en trailer strings
 - `scripts/` — manifest, syntax and i18n checks used locally and in CI
 
+## Known limitations
+
+- Session deletion depends on the client contract; this build of DeepSeek Harness only
+  exposes archive and turn cancellation, so the session dialog disables delete and points
+  to archive instead.
+- Archiving a session that is still running is rejected by the host; the dialog surfaces
+  the error rather than forcing it.
+- System notifications follow the OS/browser notification permission and the harness
+  WebView autoplay policy for the chime.
+- The plugin targets the current client slot and service surface; a harness update that
+  renames those slots would need a matching plugin update.
+
 ## Development
 
 ```bash
