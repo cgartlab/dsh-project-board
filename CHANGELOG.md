@@ -49,6 +49,8 @@ All notable changes to this project are documented here. The format follows
 - Completion notifications also consult a resident session's `lastAgentError` /
   `promptError` snapshot when available, so a failed background turn is less likely to be
   announced as complete.
+- Failure notifications now include the available error text (from the transcript error
+  row or the session snapshot) instead of only "failed this turn".
 
 ### Changed
 

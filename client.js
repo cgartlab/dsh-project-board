@@ -972,6 +972,7 @@ window.__ModuleLoader__.load({
       'notif.completeBody': '会话「{title}」已完成',
       'notif.failTitle': '任务失败',
       'notif.failBody': '会话「{title}」本轮运行失败，点击查看详情',
+      'notif.failBodyReason': '会话「{title}」本轮运行失败：{reason}',
       'notif.questionTitle': '等待回答',
       'notif.approvalTitle': '权限请求',
       'notif.pendingPrefix': '会话「{title}」',
@@ -1082,6 +1083,7 @@ window.__ModuleLoader__.load({
       'notif.completeBody': 'Session "{title}" finished',
       'notif.failTitle': 'Task failed',
       'notif.failBody': 'Session "{title}" failed this turn. Click to see details',
+      'notif.failBodyReason': 'Session "{title}" failed this turn: {reason}',
       'notif.questionTitle': 'Waiting for your answer',
       'notif.approvalTitle': 'Permission request',
       'notif.pendingPrefix': 'Session "{title}"',
@@ -2017,6 +2019,33 @@ window.__ModuleLoader__.load({
       } catch (error) { return null; }
     }
 
+    /** Human-readable failure text from a session snapshot. */
+    function sessionFailureReason(snapshot) {
+      if (!snapshot) return '';
+      const raw = snapshot.lastAgentError
+        || (snapshot.promptError && (snapshot.promptError.error || snapshot.promptError.message || snapshot.promptError));
+      if (!raw) return '';
+      if (typeof raw === 'string') return raw.slice(0, 240);
+      if (typeof raw === 'object') {
+        if (typeof raw.message === 'string' && raw.message) return raw.message.slice(0, 240);
+        if (raw.error && typeof raw.error.message === 'string' && raw.error.message) return raw.error.message.slice(0, 240);
+        try { return JSON.stringify(raw).slice(0, 240); } catch (error) { /* ignore */ }
+      }
+      return String(raw).slice(0, 240);
+    }
+
+    /** Failure text from the visible transcript's turn-error row. */
+    function visibleFailureReason() {
+      try {
+        const flow = visibleChatFlow();
+        if (!flow) return '';
+        const row = flow.querySelector('[class*="turnErrorRow"],[class*="turnErrorTitle"]');
+        if (!row) return '';
+        const message = row.querySelector('[class*="turnErrorMessage"]');
+        return String((message || row).innerText || '').replace(/\s+/g, ' ').trim().slice(0, 240);
+      } catch (error) { return ''; }
+    }
+
     function NotificationWatcher(props) {
       const { t } = props;
       const useSessions = typeof props.useSessions === 'function' ? props.useSessions : NO_SCHEDULE_HOOK;
@@ -2072,19 +2101,29 @@ window.__ModuleLoader__.load({
           if (prev.status && prev.status.running === true && cur.status && cur.status.running !== true && !curPending) {
             const row = byId[sessionId];
             const visible = Boolean(row && row.retainedBy && (row.retainedBy.mainView || 0) > 0);
-            const finish = (failed) => {
-              if (failed) send(sessionId, 'warn', t('notif.failTitle'), t('notif.failBody', { title: title }), 20000);
-              else send(sessionId, 'success', t('notif.completeTitle'), t('notif.completeBody', { title: title }), 9000);
+            const finish = (failed, reason) => {
+              if (failed) {
+                const body = reason
+                  ? t('notif.failBodyReason', { title: title, reason: reason })
+                  : t('notif.failBody', { title: title });
+                send(sessionId, 'warn', t('notif.failTitle'), body, 20000);
+              } else {
+                send(sessionId, 'success', t('notif.completeTitle'), t('notif.completeBody', { title: title }), 9000);
+              }
             };
             const snapshot = sessionSnapshotOf(sessionId);
             const snapshotFailed = Boolean(snapshot && (snapshot.lastAgentError
               || (snapshot.promptError && (snapshot.promptError.error || snapshot.promptError.message))));
+            const snapshotReason = sessionFailureReason(snapshot);
             if (visible) {
               /* The failure row mounts a tick after the running flag clears; let it land
                  before deciding between "complete" and "failed". */
-              window.setTimeout(() => finish(snapshotFailed || visibleTranscriptFailed()), 700);
+              window.setTimeout(() => {
+                const domFailed = visibleTranscriptFailed();
+                finish(snapshotFailed || domFailed, domFailed ? visibleFailureReason() : snapshotReason);
+              }, 700);
             } else {
-              finish(snapshotFailed);
+              finish(snapshotFailed, snapshotReason);
             }
           }
         });
