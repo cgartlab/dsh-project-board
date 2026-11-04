@@ -740,7 +740,7 @@ window.__ModuleLoader__.load({
       'card.current': '当前', 'card.open': '打开',
       'status.attention': '待处理', 'status.approval': '等待批准', 'status.plan': '等待计划确认', 'status.question': '等待回答',
       'status.running': '运行中', 'status.done': '已完成', 'status.idle': '空闲',
-      'appearance': '外观', 'appearance.color': '颜色', 'appearance.icon': '图标', 'appearance.reset': '恢复默认',
+      'appearance.color': '颜色', 'appearance.icon': '图标', 'appearance.reset': '恢复默认',
       'empty.title': '还没有工作区', 'empty.desc': '添加一个工作区后，这里会显示它的会话与项目。',
       'loading': '正在读取工作区…', 'session.untitled': '未命名会话', 'workspace.default': '默认工作区',
       'time.now': '刚刚', 'time.min': '{n}分钟', 'time.hour': '{n}小时', 'time.day': '{n}天'
@@ -846,7 +846,7 @@ window.__ModuleLoader__.load({
       'card.current': 'Current', 'card.open': 'Open',
       'status.attention': 'Attention', 'status.approval': 'Waiting approval', 'status.plan': 'Plan review', 'status.question': 'Waiting answer',
       'status.running': 'Running', 'status.done': 'Completed', 'status.idle': 'Idle',
-      'appearance': 'Appearance', 'appearance.color': 'Color', 'appearance.icon': 'Icon', 'appearance.reset': 'Reset to default',
+      'appearance.color': 'Color', 'appearance.icon': 'Icon', 'appearance.reset': 'Reset to default',
       'empty.title': 'No workspaces yet', 'empty.desc': 'Add a workspace and its sessions and projects appear here.',
       'loading': 'Loading workspaces…', 'session.untitled': 'Untitled session', 'workspace.default': 'Default workspace',
       'time.now': 'now', 'time.min': '{n}min', 'time.hour': '{n}h', 'time.day': '{n}d'
