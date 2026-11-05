@@ -1606,7 +1606,7 @@ window.__ModuleLoader__.load({
           h('td', { className: 'pbx-num pbx-strong' }, String(project.counts.total)),
           h('td', { className: 'pbx-num', style: { color: project.counts.auto > 0 ? 'var(--dsw-alias-state-warn-primary)' : undefined } }, String(project.counts.auto)),
           h('td', { className: 'pbx-num', style: { color: project.counts.running > 0 ? 'var(--dsw-alias-brand-primary)' : undefined } }, String(project.counts.running)),
-          h('td', { className: 'pbx-num', style: { color: project.counts.attention > 0 ? 'var(--dsw-alias-state-error-primary)' : undefined } }, String(project.counts.attention)),
+          h('td', { className: 'pbx-num', style: { color: project.counts.attention > 0 ? '#f59e0b' : undefined } }, String(project.counts.attention)),
           h('td', { className: 'pbx-num' }, String(project.counts.done)),
           h('td', { className: 'pbx-num' }, String(project.counts.idle)),
           h('td', { className: 'pbx-num' }, relTime(project.lastUpdated, t))
@@ -1622,7 +1622,7 @@ window.__ModuleLoader__.load({
           h('div', { className: 'pbx-totals' },
             h('span', { className: 'pbx-total' }, h('strong', null, String(totals.workspaces)), t('stat.workspaces')),
             h('span', { className: 'pbx-total' }, h('strong', null, String(totals.sessions)), t('stat.sessions')),
-            totals.attention > 0 ? h('span', { className: 'pbx-total' }, h('strong', { style: { color: 'var(--dsw-alias-state-error-primary)' } }, String(totals.attention)), t('stat.attention')) : null,
+            totals.attention > 0 ? h('span', { className: 'pbx-total' }, h('strong', { style: { color: '#f59e0b' } }, String(totals.attention)), t('stat.attention')) : null,
             totals.running > 0 ? h('span', { className: 'pbx-total' }, h('strong', { style: { color: 'var(--dsw-alias-brand-primary)' } }, String(totals.running)), t('stat.running')) : null
           )
         )
@@ -1712,7 +1712,7 @@ window.__ModuleLoader__.load({
           { tone: 'done', titleKey: 'col.done' },
           { tone: 'idle', titleKey: 'col.idle' }
         ];
-        const toneColor = (tone) => tone === 'running' ? '#2f6fed' : tone === 'attention' ? 'var(--dsw-alias-state-error-primary)' : tone === 'done' ? 'var(--dsw-alias-state-success-primary)' : 'var(--dsw-alias-state-idle-primary)';
+        const toneColor = (tone) => tone === 'running' ? '#2f6fed' : tone === 'attention' ? '#f59e0b' : tone === 'done' ? 'var(--dsw-alias-state-success-primary)' : 'var(--dsw-alias-state-idle-primary)';
         const groups = defs.map((def) => ({ tone: def.tone, titleKey: def.titleKey, rows: allSessions.filter((row) => row.info.tone === def.tone).slice().sort((a, b) => b.updatedAt - a.updatedAt) }));
         return h('div', { className: 'pbx-root pbx-compact' }, h('div', { className: 'pbx-compactWrap' },
           h('div', { className: 'pbx-compactHead' },
@@ -3668,7 +3668,7 @@ window.__ModuleLoader__.load({
       '.pbx-rdot{width:8px;height:8px;border-radius:50%;flex:none}',
       '.pbx-kdot{width:7px;height:7px;border-radius:50%;flex:none}',
       '.pbx-rdot[data-tone=running],.pbx-kdot[data-tone=running]{background:#2f6fed;box-shadow:0 0 0 0 rgba(47,111,237,.55);animation:pbxRunningDotPulse 1.6s ease-out infinite}',
-      '.pbx-rdot[data-tone=attention],.pbx-kdot[data-tone=attention]{background:var(--dsw-alias-state-error-primary)}',
+      '.pbx-rdot[data-tone=attention],.pbx-kdot[data-tone=attention]{background:#f59e0b}',
       '.pbx-rdot[data-tone=done],.pbx-kdot[data-tone=done]{background:var(--dsw-alias-state-success-primary)}',
       '.pbx-rdot[data-tone=idle],.pbx-kdot[data-tone=idle]{background:var(--dsw-alias-state-idle-primary)}',
       '.pbx-chip{display:inline-flex;align-items:center;gap:6px;max-width:220px}',
@@ -3677,7 +3677,7 @@ window.__ModuleLoader__.load({
       '.pbx-chipName{font-size:12.5px;color:var(--dsw-alias-label-secondary);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}',
       '.pbx-statusPill{display:inline-flex;align-items:center;gap:6px;padding:2px 9px;border-radius:999px;font-size:12px;font-weight:500;white-space:nowrap}',
       '.pbx-statusPill[data-tone=running]{background:color-mix(in srgb,var(--dsw-alias-brand-primary) 14%,transparent);color:var(--dsw-alias-brand-primary);animation:pbxPillBreathe 2.2s ease-in-out infinite}',
-      '.pbx-statusPill[data-tone=attention]{background:color-mix(in srgb,var(--dsw-alias-state-error-primary) 14%,transparent);color:var(--dsw-alias-state-error-primary)}',
+      '.pbx-statusPill[data-tone=attention]{background:color-mix(in srgb,#f59e0b 16%,transparent);color:#f59e0b}',
       '.pbx-statusPill[data-tone=done]{background:color-mix(in srgb,var(--dsw-alias-state-success-primary) 14%,transparent);color:var(--dsw-alias-state-success-primary)}',
       '.pbx-statusPill[data-tone=idle]{background:var(--dsw-alias-bg-layer-2);color:var(--dsw-alias-label-secondary)}',
       '.pbx-curTag{font-size:10.5px;color:var(--dsw-alias-brand-primary);border:1px solid color-mix(in srgb,var(--dsw-alias-brand-primary) 45%,transparent);border-radius:999px;padding:0 6px;line-height:16px;flex:none}',
@@ -3757,10 +3757,10 @@ window.__ModuleLoader__.load({
       '.pbx-capsule:hover{background:var(--dsw-alias-interactive-bg-hover);color:var(--dsw-alias-label-primary)}',
       '.pbx-capStat{display:inline-flex;align-items:center;gap:5px;color:var(--dsw-alias-label-secondary);font-variant-numeric:tabular-nums}',
       '.pbx-capStat.live{color:var(--dsw-alias-brand-primary)}',
-      '.pbx-capStat.attn{color:var(--dsw-alias-state-error-primary)}',
+      '.pbx-capStat.attn{color:#f59e0b}',
       '.pbx-liveDot{width:7px;height:7px;border-radius:50%;background:var(--dsw-alias-state-idle-primary);flex:none}',
       '.pbx-capStat.live .pbx-liveDot{background:var(--dsw-alias-brand-primary);animation:pbxDotPulse 1.6s ease-out infinite}',
-      '.pbx-capDot{width:7px;height:7px;border-radius:50%;background:var(--dsw-alias-state-error-primary);flex:none}',
+      '.pbx-capDot{width:7px;height:7px;border-radius:50%;background:#f59e0b;flex:none}',
       '.pbx-capBoard{display:inline-flex;align-items:center;gap:5px;padding-left:8px;border-left:1px solid var(--dsw-alias-border-l1);color:var(--dsw-alias-label-secondary)}',
       '.pbx-paletteBackdrop{position:fixed;inset:0;z-index:1000;background:rgba(8,10,14,.20);backdrop-filter:blur(15px) saturate(1.35);-webkit-backdrop-filter:blur(15px) saturate(1.35);display:flex;justify-content:center;align-items:flex-start;padding-top:12vh;pointer-events:auto;animation:pbxBackdropIn .2s ease-out both}',
       '.pbx-palette{width:min(700px,92vw);max-height:72vh;display:flex;flex-direction:column;background:linear-gradient(180deg,color-mix(in srgb,var(--dsw-alias-bg-overlay) 74%,transparent),color-mix(in srgb,var(--dsw-alias-bg-overlay) 56%,transparent));backdrop-filter:blur(26px) saturate(1.55);-webkit-backdrop-filter:blur(26px) saturate(1.55);border:1px solid color-mix(in srgb,var(--dsw-alias-border-l2) 62%,rgba(255,255,255,.26));border-radius:16px;box-shadow:0 28px 90px rgba(0,0,0,.5),inset 0 1px 0 rgba(255,255,255,.09);overflow:hidden;animation:pbxPaletteIn .22s cubic-bezier(.2,.8,.2,1) both}',
@@ -3840,7 +3840,7 @@ window.__ModuleLoader__.load({
       '.pbx-hud.collapsed{display:inline-flex;align-items:center;gap:7px;width:auto;padding:6px 12px;border-radius:999px;background:color-mix(in srgb,var(--dsw-alias-bg-overlay) 88%,transparent);backdrop-filter:blur(24px) saturate(1.35);-webkit-backdrop-filter:blur(24px) saturate(1.35);border:1px solid var(--dsw-alias-border-l1);cursor:pointer;font:inherit;color:var(--dsw-alias-label-primary);transition:transform .18s ease,box-shadow .18s ease;animation:pbxHudPillIn .2s ease both}',
       '.pbx-hudPillIcon{width:19px;height:19px;border-radius:6px;display:inline-flex;align-items:center;justify-content:center;flex:none;background:color-mix(in srgb,var(--dsw-alias-label-secondary) 13%,transparent);color:var(--dsw-alias-label-secondary);transition:background .18s ease,color .18s ease,box-shadow .18s ease}',
       '.pbx-hudPillIcon.live{background:rgba(47,111,237,.16);color:#2f6fed;box-shadow:0 0 0 0 rgba(47,111,237,.45);animation:pbxPillIconPulse 2.2s ease-out infinite}',
-      '.pbx-hudPillIcon.attention{background:color-mix(in srgb,var(--dsw-alias-state-error-primary) 16%,transparent);color:var(--dsw-alias-state-error-primary)}',
+      '.pbx-hudPillIcon.attention{background:color-mix(in srgb,#f59e0b 18%,transparent);color:#f59e0b}',
       '.pbx-hud.collapsed:hover .pbx-hudPillIcon{background:color-mix(in srgb,var(--dsw-alias-label-secondary) 20%,transparent)}',
       '.pbx-hud.collapsed:hover .pbx-hudPillIcon.live{background:rgba(47,111,237,.24)}',
       '@keyframes pbxPillIconPulse{0%{box-shadow:0 0 0 0 rgba(47,111,237,.42)}70%{box-shadow:0 0 0 5px rgba(47,111,237,0)}100%{box-shadow:0 0 0 0 rgba(47,111,237,0)}}',
