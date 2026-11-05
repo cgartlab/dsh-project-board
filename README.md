@@ -35,6 +35,7 @@ reading, and desktop-class task notifications.
   text and every option.
 - **Conflict-aware shortcuts** — recording a combination already used by this plugin or by
   a built-in DSH command is rejected inline, and saved conflicts are reported at startup.
+- **Logs & diagnostics** — optional local logs (error / warn / info / debug) with a bounded ring buffer, copy and clear actions in settings, startup checks for shortcut collisions with built-in commands, and captured window errors and rejected promises.
 
 ## Keyboard shortcuts
 
@@ -112,3 +113,4 @@ Licensed under [Creative Commons Attribution-NonCommercial-ShareAlike 4.0 Intern
 the same license as [cgartlab.com](https://cgartlab.com).
 
 Copyright (c) 2025-2026 CGArtLab.
+

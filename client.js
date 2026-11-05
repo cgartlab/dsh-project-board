@@ -10,6 +10,7 @@ window.__ModuleLoader__.load({
     const BOARD_ID = '@local/dsh-project-board/tab';
     const BOARD_KIND = 'projectBoard';
     const SETTINGS_KEY = 'dsh.project-board.settings.v1';
+    const LOG_KEY = 'pbx.logs.v1';
     const SHORTCUT_LABEL_KEYS = {
       palette: 'settings.shortcut.palette',
       prev: 'settings.shortcut.prev',
@@ -41,6 +42,7 @@ window.__ModuleLoader__.load({
       },
       hud: { enabled: true, includeDone: true, defaultCollapsed: false, defaultPosition: 'top-right', recentEnabled: true, recentCount: 5, recentExcludeAuto: true, maxSessions: 6 },
       notify: { enabled: true, sound: true },
+      log: { enabled: true, level: 'info', max: 200 },
       board: { enabled: true, wideThreshold: 520, defaultView: 'sessions' }
     };
     function cloneJson(value) { try { return JSON.parse(JSON.stringify(value)); } catch (error) { return value; } }
@@ -152,6 +154,45 @@ window.__ModuleLoader__.load({
       const leftCodes = [left.code, left.secondCode].filter(Boolean);
       const rightCodes = [right.code, right.secondCode].filter(Boolean);
       return leftCodes.some((code) => rightCodes.indexOf(code) >= 0);
+    }
+
+    /* --------------------------------------------------------------- logging */
+    const LOG_LEVELS = { error: 0, warn: 1, info: 2, debug: 3 };
+    const LOG_LIMIT_FALLBACK = 200;
+    let logConfigGetter = null;
+    let logSink = null;
+    function setLogConfigGetter(fn) { logConfigGetter = typeof fn === 'function' ? fn : null; }
+    function setLogSink(fn) { logSink = typeof fn === 'function' ? fn : null; }
+    function logConfigNow() {
+      let config = null;
+      try { config = logConfigGetter ? logConfigGetter() : null; } catch (error) { config = null; }
+      return Object.assign({ enabled: true, level: 'info', max: LOG_LIMIT_FALLBACK }, config || {});
+    }
+    function cleanLogData(data) {
+      if (data === undefined) return undefined;
+      try {
+        return JSON.parse(JSON.stringify(data, (key, value) => {
+          if (typeof value === 'string') return value.length > 300 ? value.slice(0, 300) + '…' : value;
+          if (typeof value === 'function') return '[fn]';
+          return value;
+        }));
+      } catch (error) { return String(data).slice(0, 300); }
+    }
+    /** One scoped log line: filtered by the configured level, kept in memory and (throttled) in storage. */
+    function logEvent(level, scope, message, data) {
+      try {
+        const config = logConfigNow();
+        if (config.enabled === false) return;
+        const name = Object.prototype.hasOwnProperty.call(LOG_LEVELS, level) ? level : 'info';
+        const limit = LOG_LEVELS[config.level] === undefined ? LOG_LEVELS.info : LOG_LEVELS[config.level];
+        if (LOG_LEVELS[name] > limit) return;
+        const entry = { at: Date.now(), level: name, scope: String(scope || 'app').slice(0, 40), message: String(message === undefined ? '' : message).slice(0, 400) };
+        const payload = cleanLogData(data);
+        if (payload !== undefined) entry.data = payload;
+        if (logSink) { try { logSink(entry); } catch (error) { /* ignore */ } }
+        const writer = name === 'error' ? console.error : name === 'warn' ? console.warn : console.log;
+        try { writer('[project-board][' + entry.scope + '] ' + entry.message, payload === undefined ? '' : payload); } catch (error) { /* ignore */ }
+      } catch (error) { /* never break a feature because logging failed */ }
     }
     function hasOpenDialog() {
       try {
@@ -603,6 +644,7 @@ window.__ModuleLoader__.load({
     }
 
     function beginHoldScroll(direction, code) {
+      logEvent('debug', 'scroll', 'hold start', { dir: direction });
       stopHoldScroll(false);
       const state = { dir: direction, code: code || '', mode: 'pending', timer: 0, raf: 0, speed: 0, last: 0, scroller: null, restore: null };
       holdScrollState = state;
@@ -840,6 +882,20 @@ window.__ModuleLoader__.load({
       'settings.boardThreshold': '完整看板宽度阈值（px）',
       'settings.boardView': '完整看板默认视图',
       'settings.blur': '搜索面板模糊强度（px）',
+      'settings.logging': '日志与排查',
+      'settings.logEnabled': '记录日志',
+      'settings.logEnabledDesc': '把插件运行情况记在本机，出问题时方便查看',
+      'settings.logLevel': '记录级别',
+      'settings.logLevelError': '只记错误',
+      'settings.logLevelWarn': '错误和警告',
+      'settings.logLevelInfo': '常规信息（推荐）',
+      'settings.logLevelDebug': '全部细节（排查时用）',
+      'settings.logMax': '最多保留条数',
+      'settings.logHint': '当前 {count} 条。日志只存在本机浏览器里，不会上传。',
+      'settings.logCopy': '复制日志',
+      'settings.logClear': '清空日志',
+      'settings.logCopied': '日志已复制到剪贴板',
+      'settings.logCopyFailed': '复制失败，请检查剪贴板权限',
       'settings.data': '数据',
       'settings.reset': '恢复默认设置',
       'settings.resetAppearance': '清除项目外观（颜色/图标）',
@@ -947,6 +1003,20 @@ window.__ModuleLoader__.load({
       'settings.boardThreshold': 'Full-board width threshold (px)',
       'settings.boardView': 'Default full-board view',
       'settings.blur': 'Search panel blur strength (px)',
+      'settings.logging': 'Logs & diagnostics',
+      'settings.logEnabled': 'Record logs',
+      'settings.logEnabledDesc': 'Keep a local record of plugin activity for troubleshooting',
+      'settings.logLevel': 'Level',
+      'settings.logLevelError': 'Errors only',
+      'settings.logLevelWarn': 'Errors and warnings',
+      'settings.logLevelInfo': 'Normal (recommended)',
+      'settings.logLevelDebug': 'Everything (for debugging)',
+      'settings.logMax': 'Keep at most',
+      'settings.logHint': '{count} entries now. Logs stay in this browser and are never uploaded.',
+      'settings.logCopy': 'Copy logs',
+      'settings.logClear': 'Clear logs',
+      'settings.logCopied': 'Logs copied to the clipboard',
+      'settings.logCopyFailed': 'Copy failed; check clipboard permission',
       'settings.data': 'Data',
       'settings.reset': 'Restore defaults',
       'settings.resetAppearance': 'Clear project appearance (color/icon)',
@@ -1961,6 +2031,7 @@ window.__ModuleLoader__.load({
             return;
           }
           attempts += 1;
+          if (attempts === 1) logEvent('debug', 'board', 'restore after switch', want);
           live.setBoardState(want);
           if (attempts < 10) window.setTimeout(enforce, 140);
         };
@@ -2241,6 +2312,7 @@ window.__ModuleLoader__.load({
       const close = () => { if (palette) palette.set({ open: false }); };
       const choose = (row) => {
         if (!row) return;
+        logEvent('debug', 'palette', 'choose', { id: String(row.id || '').slice(-12) });
         close();
         if (focusRef.current) focusRef.current.set({ id: row.id, at: Date.now() });
         if (typeof openSession === 'function') openSession(row.id);
@@ -2518,6 +2590,7 @@ window.__ModuleLoader__.load({
           /* Dropped on an edge or corner: fold the list into its small pill so it stays
              out of the way while still marking its corner. */
           if (snapped && !collapsedRef.current) {
+            logEvent('debug', 'hud', 'snap drop -> collapse', posRef.current || {});
             try { window.localStorage.setItem(HUD_COLLAPSE_KEY, '1'); } catch (error) { /* ignore */ }
             setCollapsed(true);
           }
@@ -2732,6 +2805,7 @@ window.__ModuleLoader__.load({
             h('button', {
               type: 'button', className: 'pbx-hudCollapse', title: t('hud.collapse'), 'aria-label': t('hud.collapse'),
               onClick: () => {
+                logEvent('debug', 'hud', 'collapse', { dir: collapseDir });
                 setCollapsed(true);
                 try { window.localStorage.setItem(HUD_COLLAPSE_KEY, '1'); } catch (error) { /* ignore */ }
               }
@@ -2983,6 +3057,9 @@ window.__ModuleLoader__.load({
       const useSettings = typeof props.useSettings === 'function' ? props.useSettings : NO_SCHEDULE_HOOK;
       const config = useSettings((snapshot) => snapshot) || DEFAULT_SETTINGS;
       const saveSettings = typeof props.saveSettings === 'function' ? props.saveSettings : function () {};
+      const useLogs = typeof props.useLogs === 'function' ? props.useLogs : NO_SCHEDULE_HOOK;
+      const logsSnap = useLogs((value) => value) || { entries: [] };
+      const logEntries = Array.isArray(logsSnap.entries) ? logsSnap.entries : [];
       const [recording, setRecording] = useState(null);
       const [recordError, setRecordError] = useState('');
       const [builtinWarnings, setBuiltinWarnings] = useState([]);
@@ -3063,6 +3140,20 @@ window.__ModuleLoader__.load({
       const resetAppearance = () => {
         try { window.localStorage.removeItem(STORE_KEY); } catch (error) { /* ignore */ }
         try { window.dispatchEvent(new Event('pbx-appearance-reset')); } catch (error) { /* ignore */ }
+      };
+      const copyLogs = async () => {
+        const text = JSON.stringify(logEntries, null, 1);
+        try {
+          await navigator.clipboard.writeText(text);
+          if (typeof props.notify === 'function') props.notify({ tone: 'success', title: t('settings.logging'), message: t('settings.logCopied'), ttl: 5000 });
+        } catch (error) {
+          if (typeof props.notify === 'function') props.notify({ tone: 'warn', title: t('settings.logging'), message: t('settings.logCopyFailed'), ttl: 6000 });
+        }
+      };
+      const clearLogs = () => {
+        try { if (props.logs && typeof props.logs.set === 'function') props.logs.set({ entries: [] }); } catch (error) { /* ignore */ }
+        try { window.localStorage.removeItem(LOG_KEY); } catch (error) { /* ignore */ }
+        logEvent('info', 'settings', 'logs cleared');
       };
 
       const row = (key, labelKey, descKey, control) => h('div', { className: 'pbx-setRow', key: key },
@@ -3216,6 +3307,23 @@ window.__ModuleLoader__.load({
           toggleRow('notify', 'enabled', 'settings.notifyEnabled', 'settings.notifyEnabledDesc'),
           toggleRow('notify', 'sound', 'settings.notifySound', 'settings.notifySoundDesc'),
           rangeRow('palette', 'blur', 'settings.blur', 6, 32, 1)
+        ),
+
+        h('section', { className: 'pbx-setSection' },
+          h('h3', { className: 'pbx-setSectionTitle' }, t('settings.logging')),
+          toggleRow('log', 'enabled', 'settings.logEnabled', 'settings.logEnabledDesc'),
+          selectRow('log', 'level', 'settings.logLevel', [
+            { value: 'error', labelKey: 'settings.logLevelError' },
+            { value: 'warn', labelKey: 'settings.logLevelWarn' },
+            { value: 'info', labelKey: 'settings.logLevelInfo' },
+            { value: 'debug', labelKey: 'settings.logLevelDebug' }
+          ]),
+          numberRow('log', 'max', 'settings.logMax', 20, 500, 10),
+          h('div', { className: 'pbx-setHint' }, t('settings.logHint', { count: String(logEntries.length) })),
+          h('div', { className: 'pbx-setActions' },
+            h('button', { type: 'button', className: 'pbx-setBtn', onClick: copyLogs }, t('settings.logCopy')),
+            h('button', { type: 'button', className: 'pbx-setBtn danger', onClick: clearLogs }, t('settings.logClear'))
+          )
         ),
 
         h('section', { className: 'pbx-setSection' },
@@ -3609,7 +3717,26 @@ window.__ModuleLoader__.load({
 
       const uiWorkspace = ctx.get('uiWorkspace');
       const shortcutsService = ctx.get('shortcuts');
-      const openSession = (sessionId) => { try { if (uiWorkspace) uiWorkspace.openSession(sessionId); } catch (error) { console.warn('project-board: open session failed', error); } };
+      const openSession = (sessionId) => { logEvent('debug', 'session', 'open', { id: String(sessionId || '').slice(-12) }); try { if (uiWorkspace) uiWorkspace.openSession(sessionId); } catch (error) { logEvent('warn', 'session', 'open failed', { reason: String(error && error.message || error) }); } };
+
+      /* Diagnostics: what the plugin sees at startup, plus any collision with a built-in shortcut. */
+      window.setTimeout(() => {
+        try {
+          const snapshot = settingsStore.getSnapshot();
+          logEvent('info', 'init', 'plugin ready', { shortcuts: Object.keys(snapshot.shortcuts || {}).length, hud: Boolean(snapshot.hud && snapshot.hud.enabled), board: Boolean(snapshot.board && snapshot.board.enabled) });
+          for (const key of Object.keys(snapshot.shortcuts || {})) {
+            const conflict = findBuiltinConflict(snapshot.shortcuts[key]);
+            if (conflict) logEvent('warn', 'shortcuts', 'also used by a built-in command', { key: key, combo: snapshot.shortcuts[key], builtin: conflict.label });
+          }
+        } catch (error) { logEvent('warn', 'init', 'diagnostics failed', { reason: String(error && error.message || error) }); }
+      }, 1500);
+      ctx.effect(() => {
+        const onError = (event) => logEvent('error', 'window', String(event && event.message || 'script error'), { source: String(event && event.filename || '').slice(-120), line: event && event.lineno, column: event && event.colno });
+        const onRejection = (event) => { const reason = event && event.reason; logEvent('error', 'promise', String(reason && (reason.message || reason.code) || reason || 'unhandled rejection').slice(0, 300)); };
+        window.addEventListener('error', onError);
+        window.addEventListener('unhandledrejection', onRejection);
+        return () => { window.removeEventListener('error', onError); window.removeEventListener('unhandledrejection', onRejection); };
+      }, 'project-board: error hooks');
       const paletteStore = createUiStore({ open: false, move: { dir: 0, at: 0 } });
       const focusStore = createUiStore({ id: null, at: 0 });
       const hudOrderStore = createUiStore({ ids: [] });
@@ -3630,6 +3757,7 @@ window.__ModuleLoader__.load({
       const dismissNotif = (id) => { notifStore.set({ items: notifStore.getSnapshot().items.filter((item) => item.id !== id) }); };
       const pushNotif = (input) => {
         const source = input || {};
+        logEvent('info', 'notify', 'queued', { tone: source.tone || 'success' });
         notifSeq += 1;
         const item = { id: notifSeq, tone: source.tone || 'success', title: source.title || '', body: source.body || '', sessionId: source.sessionId || null };
         notifStore.set({ seq: notifSeq, items: notifStore.getSnapshot().items.concat([item]).slice(-3) });
@@ -3653,7 +3781,23 @@ window.__ModuleLoader__.load({
         return null;
       };
       const settingsStore = createUiStore(loadSettings());
-      const writeSettings = (next) => { const merged = mergeSettings(DEFAULT_SETTINGS, next); merged.headerButtonsVersion = 3; merged.hintsVersion = 1; merged.shortcutsVersion = 1; persistSettings(merged); settingsStore.set(merged); };
+      const logStore = createUiStore(loadJson(LOG_KEY, { entries: [] }));
+      setLogConfigGetter(() => (settingsStore.getSnapshot().log || DEFAULT_SETTINGS.log));
+      let logPersistTimer = 0;
+      setLogSink((entry) => {
+        try {
+          const config = logConfigNow();
+          const max = Math.max(20, Number(config.max) || LOG_LIMIT_FALLBACK);
+          const entries = (logStore.getSnapshot().entries || []).concat([entry]).slice(-max);
+          logStore.set({ entries: entries });
+          if (logPersistTimer) return;
+          logPersistTimer = window.setTimeout(() => {
+            logPersistTimer = 0;
+            try { saveJson(LOG_KEY, { entries: logStore.getSnapshot().entries.slice(-120) }); } catch (error) { /* ignore */ }
+          }, 800);
+        } catch (error) { /* ignore */ }
+      });
+      const writeSettings = (next) => { const merged = mergeSettings(DEFAULT_SETTINGS, next); merged.headerButtonsVersion = 3; merged.hintsVersion = 1; merged.shortcutsVersion = 1; persistSettings(merged); settingsStore.set(merged); logEvent('info', 'settings', 'saved'); };
       const toggleHud = () => {
         try {
           window.dispatchEvent(new CustomEvent('pbx-hud-toggle'));
@@ -3791,6 +3935,7 @@ window.__ModuleLoader__.load({
         return false;
       };
       const toggleNativeBoard = (mode) => {
+        logEvent('info', 'board', 'toggle', { mode: mode });
         lastBoardIntentAt = Date.now();
         try {
           const sidebarRight = ctx.sidebarRight;
@@ -3992,7 +4137,7 @@ window.__ModuleLoader__.load({
       ctx.slots.inject('settings.section', () => ctx.slots.register({
         name: 'settings.section', id: 'project-board-settings', order: 60, locale: NS,
         label: () => { try { return ctx.locale.bind(NS)('settings.title'); } catch (error) { return '项目看板设置'; } },
-        inject: () => ({ settings: settingsStore, saveSettings: writeSettings, notify: pushToast, findBuiltinConflict: findBuiltinConflict, hooks: Object.assign({ settings: settingsStore }, shortcutsService && shortcutsService.catalog ? { shortcutsCatalog: shortcutsService.catalog } : {}) })
+        inject: () => ({ settings: settingsStore, saveSettings: writeSettings, notify: pushToast, findBuiltinConflict: findBuiltinConflict, logs: logStore, hooks: Object.assign({ settings: settingsStore, logs: logStore }, shortcutsService && shortcutsService.catalog ? { shortcutsCatalog: shortcutsService.catalog } : {}) })
       }, SettingsPage));
     }
 
