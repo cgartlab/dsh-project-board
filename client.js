@@ -2035,6 +2035,7 @@ window.__ModuleLoader__.load({
           return diff !== 0 ? diff : b.updatedAt - a.updatedAt;
         });
 
+
       useEffect(() => {
         if (!mounted || !state.open || !inputRef.current) return;
         inputRef.current.focus({ preventScroll: true });
@@ -2212,6 +2213,7 @@ window.__ModuleLoader__.load({
         if (focusRef.current) focusRef.current.set({ id: row.id, at: Date.now() });
         if (typeof openSession === 'function') openSession(row.id);
       };
+
       const onKeyDown = (event) => {
         if (isComposingEvent(event)) return;
         if (event.key === 'ArrowDown') { event.preventDefault(); setIndex((value) => Math.min(value + 1, Math.max(0, visible.length - 1))); }
@@ -2278,6 +2280,7 @@ window.__ModuleLoader__.load({
       try { const raw = window.localStorage.getItem(key); if (!raw) return fallback; const value = JSON.parse(raw); return value && typeof value === 'object' ? value : fallback; } catch (error) { return fallback; }
     }
     function saveJson(key, value) { try { window.localStorage.setItem(key, JSON.stringify(value)); } catch (error) { /* ignore */ } }
+
     function fmtElapsed(milliseconds) {
       const total = Math.max(0, Math.floor(milliseconds / 1000));
       const hours = Math.floor(total / 3600);
@@ -2539,6 +2542,7 @@ window.__ModuleLoader__.load({
         prevCurrentRef.current = currentId;
         if (previous !== undefined && previous !== currentId) setLocalSpot({ id: currentId, at: Date.now() });
       }, [currentId]);
+
 
       const localSpotAt = localSpot.at || 0;
       const focusSpotAt = (focusSnap && focusSnap.at) || 0;
@@ -3837,6 +3841,7 @@ window.__ModuleLoader__.load({
         name: 'shell.overlay', id: 'project-board-session-guard', order: 34, locale: NS,
         inject: () => ({ boardStateNow: boardStateNow, setBoardState: setBoardState, intentRecent: boardIntentRecent })
       }, BoardSessionGuard));
+
 
       ctx.slots.inject('settings.section', () => ctx.slots.register({
         name: 'settings.section', id: 'project-board-settings', order: 60, locale: NS,
