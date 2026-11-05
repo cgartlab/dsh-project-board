@@ -1862,6 +1862,65 @@ window.__ModuleLoader__.load({
       );
     }
 
+    /** Keeps the board pane's open/closed state across session switches.
+        The native right sidebar stores that state per session; here a switch only changes
+        the conversation and the pane stays exactly as the user left it. */
+    function BoardSessionGuard(props) {
+      const useSessions = typeof props.useSessions === 'function' ? props.useSessions : NO_SCHEDULE_HOOK;
+      const snapshot = useSessions((value) => value);
+      const byId = (snapshot && snapshot.byId) || {};
+      const currentId = useMemo(() => {
+        for (const id of Object.keys(byId)) {
+          const row = byId[id];
+          if (row && row.retainedBy && (row.retainedBy.mainView || 0) > 0) return id;
+        }
+        return null;
+      }, [byId]);
+      const stateRef = useRef({ id: null, open: false, settleUntil: 0 });
+      const propsRef = useRef(props);
+      propsRef.current = props;
+
+      useEffect(() => {
+        if (!currentId) return;
+        const api = propsRef.current;
+        const previous = stateRef.current;
+        if (previous.id === currentId) return;
+        const want = previous.id === null ? Boolean(api.boardOpenNow()) : previous.open;
+        stateRef.current = { id: currentId, open: want, settleUntil: Date.now() + 1600 };
+        if (previous.id === null) return;
+        let attempts = 0;
+        const enforce = () => {
+          const live = propsRef.current;
+          if (typeof live.intentRecent === 'function' && live.intentRecent()) {
+            stateRef.current = { id: currentId, open: Boolean(live.boardOpenNow()), settleUntil: Date.now() + 500 };
+            return;
+          }
+          if (live.boardOpenNow() === want) {
+            stateRef.current = { id: currentId, open: want, settleUntil: Date.now() + 500 };
+            return;
+          }
+          attempts += 1;
+          live.setBoardOpen(want);
+          if (attempts < 8) window.setTimeout(enforce, 120);
+        };
+        const timer = window.setTimeout(enforce, 50);
+        return () => window.clearTimeout(timer);
+      }, [currentId]);
+
+      /* Refresh the remembered state from real user toggles while the session is stable. */
+      useEffect(() => {
+        const timer = window.setInterval(() => {
+          const current = stateRef.current;
+          if (Date.now() < current.settleUntil) return;
+          const live = propsRef.current;
+          if (!live || typeof live.boardOpenNow !== 'function') return;
+          stateRef.current = { id: current.id, open: Boolean(live.boardOpenNow()), settleUntil: current.settleUntil };
+        }, 450);
+        return () => window.clearInterval(timer);
+      }, []);
+      return null;
+    }
+
     /* ---------------------------------------------------------- command palette */
     function Palette(props) {
       const { useSessions, useSessionStatus, useWorkspaces, t, openSession } = props;
@@ -3441,6 +3500,30 @@ window.__ModuleLoader__.load({
           if (target && typeof sidebarRight.toggleFullscreen === 'function') sidebarRight.toggleFullscreen(target);
         } catch (error) { /* ignore */ }
       };
+      let lastBoardIntentAt = 0;
+      const boardIntentRecent = () => Date.now() - lastBoardIntentAt < 900;
+      /** Whether the board pane is currently visible, regardless of the active session. */
+      const boardOpenNow = () => {
+        try {
+          const sidebarRight = ctx.sidebarRight;
+          if (!sidebarRight) return false;
+          const expanded = typeof sidebarRight.isExpanded === 'function' ? sidebarRight.isExpanded() : false;
+          return Boolean(expanded && rightBoardActive());
+        } catch (error) { return false; }
+      };
+      /** Open or close the board pane without touching its width or presentation. */
+      const setBoardOpen = (want) => {
+        try {
+          const sidebarRight = ctx.sidebarRight;
+          if (!sidebarRight) return;
+          if (want) {
+            if (!rightBoardActive()) sidebarRight.openTab(BOARD_KIND);
+            if (!sidebarRight.isExpanded()) sidebarRight.toggleExpanded();
+            return;
+          }
+          if (sidebarRight.isExpanded()) sidebarRight.toggleExpanded();
+        } catch (error) { /* ignore */ }
+      };
       const showNativeBoard = (mode) => {
         try {
           const sidebarRight = ctx.sidebarRight;
@@ -3463,6 +3546,7 @@ window.__ModuleLoader__.load({
         } catch (error) { console.warn('project-board: native board failed', error); }
       };
       const toggleNativeBoard = (mode) => {
+        lastBoardIntentAt = Date.now();
         try {
           const sidebarRight = ctx.sidebarRight;
           if (!sidebarRight) return;
@@ -3653,6 +3737,11 @@ window.__ModuleLoader__.load({
         name: 'shell.overlay', id: 'project-board-notification-dock', order: 44, locale: NS,
         inject: () => ({ dismissNotif: dismissNotif, openSession: openSession, hooks: { notifications: notifStore } })
       }, NotificationDock));
+
+      ctx.slots.inject('shell.overlay', () => ctx.slots.register({
+        name: 'shell.overlay', id: 'project-board-session-guard', order: 34, locale: NS,
+        inject: () => ({ boardOpenNow: boardOpenNow, setBoardOpen: setBoardOpen, intentRecent: boardIntentRecent })
+      }, BoardSessionGuard));
 
       ctx.slots.inject('settings.section', () => ctx.slots.register({
         name: 'settings.section', id: 'project-board-settings', order: 60, locale: NS,

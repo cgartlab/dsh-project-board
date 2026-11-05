@@ -4,6 +4,16 @@ All notable changes to this project are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the project uses
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.0.2] - 2026-11-05
+
+### Changed
+
+- The board pane's open/closed state is global again instead of per conversation: the
+  native right sidebar remembers that state per session, so a small guard now restores the
+  pane after a session switch. Switching sessions only switches the conversation; the board
+  stays exactly as the user left it, and an explicit board toggle right after a switch is
+  never overridden.
+
 ## [1.0.1] - 2026-11-05
 
 ### Fixed

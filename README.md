@@ -15,6 +15,8 @@ reading, and desktop-class task notifications.
 - **Project board** — session and project database views with search, status/type/project
   filters, grouping, multi-column sorting, archive-aware rows, and per-project color and
   icon. Opens at narrow (380 px), medium (50 vw) or native fullscreen; the same key closes it.
+  The pane's open/closed state belongs to the workspace, not to each conversation: switching
+  sessions only switches the conversation and never re-opens or closes the board.
 - **Floating session HUD** — live active/recent sessions with timers, attention badges,
   automation markers, drag-to-move, and an animated pill ⇄ list collapse.
 - **Search palette** — fuzzy session search, project scoping, keyboard navigation and

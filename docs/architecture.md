@@ -45,6 +45,14 @@ dictionaries, styles and slot registrations.
 No session IDs are created or mutated. The plugin never writes to the session store; it
 only reads status and toggles native sidebar presentation.
 
+## Board pane state
+
+DSH's right sidebar stores its open/closed state per session. The board is meant to be a
+workspace-level tool, so `BoardSessionGuard` (a `shell.overlay` watcher) remembers the pane
+state before a switch and restores it after the new session's state lands. An explicit
+board shortcut within a second of the switch marks intent, and the guard then leaves the
+pane alone.
+
 ## Keyboard handling
 
 A single capture-phase `keydown` listener on `document` resolves the configured combo for
