@@ -1,6 +1,6 @@
 {
   "name": "@local/dsh-project-board",
-  "version": "1.0.6",
+  "version": "1.0.7",
   "private": true,
   "description": "DeepSeek Harness plugin: project/session task board, floating session HUD, keyboard-first navigation, and task notifications.",
   "license": "CC-BY-NC-SA-4.0",
@@ -54,6 +54,7 @@
     }
   }
 }
+
 
 
 

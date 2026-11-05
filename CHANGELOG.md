@@ -4,6 +4,14 @@ All notable changes to this project are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the project uses
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.0.7] - 2026-11-05
+
+### Changed
+
+- Switching sessions now keeps the board pane exactly as it was — open or closed, and at
+  the same size (narrow, half width or fullscreen). The session guard captures and restores
+  the pane presentation, not only its visibility.
+
 ## [1.0.6] - 2026-11-05
 
 ### Changed

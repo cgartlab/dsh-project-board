@@ -1908,34 +1908,39 @@ window.__ModuleLoader__.load({
         }
         return null;
       }, [byId]);
-      const stateRef = useRef({ id: null, open: false, settleUntil: 0 });
+      const stateRef = useRef({ id: null, state: { open: false, mode: null }, settleUntil: 0 });
       const propsRef = useRef(props);
       propsRef.current = props;
+      const sameState = (left, right) => {
+        const a = left || { open: false, mode: null };
+        const b = right || { open: false, mode: null };
+        return Boolean(a.open) === Boolean(b.open) && (!a.open || a.mode === b.mode);
+      };
 
       useEffect(() => {
         if (!currentId) return;
         const api = propsRef.current;
         const previous = stateRef.current;
         if (previous.id === currentId) return;
-        const want = previous.id === null ? Boolean(api.boardOpenNow()) : previous.open;
-        stateRef.current = { id: currentId, open: want, settleUntil: Date.now() + 1600 };
+        const want = previous.id === null ? api.boardStateNow() : previous.state;
+        stateRef.current = { id: currentId, state: want, settleUntil: Date.now() + 1600 };
         if (previous.id === null) return;
         let attempts = 0;
         const enforce = () => {
           const live = propsRef.current;
           if (typeof live.intentRecent === 'function' && live.intentRecent()) {
-            stateRef.current = { id: currentId, open: Boolean(live.boardOpenNow()), settleUntil: Date.now() + 500 };
+            stateRef.current = { id: currentId, state: live.boardStateNow(), settleUntil: Date.now() + 500 };
             return;
           }
-          if (live.boardOpenNow() === want) {
-            stateRef.current = { id: currentId, open: want, settleUntil: Date.now() + 500 };
+          if (sameState(live.boardStateNow(), want)) {
+            stateRef.current = { id: currentId, state: want, settleUntil: Date.now() + 500 };
             return;
           }
           attempts += 1;
-          live.setBoardOpen(want);
-          if (attempts < 8) window.setTimeout(enforce, 120);
+          live.setBoardState(want);
+          if (attempts < 10) window.setTimeout(enforce, 140);
         };
-        const timer = window.setTimeout(enforce, 50);
+        const timer = window.setTimeout(enforce, 60);
         return () => window.clearTimeout(timer);
       }, [currentId]);
 
@@ -1945,8 +1950,8 @@ window.__ModuleLoader__.load({
           const current = stateRef.current;
           if (Date.now() < current.settleUntil) return;
           const live = propsRef.current;
-          if (!live || typeof live.boardOpenNow !== 'function') return;
-          stateRef.current = { id: current.id, open: Boolean(live.boardOpenNow()), settleUntil: current.settleUntil };
+          if (!live || typeof live.boardStateNow !== 'function') return;
+          stateRef.current = { id: current.id, state: live.boardStateNow(), settleUntil: current.settleUntil };
         }, 450);
         return () => window.clearInterval(timer);
       }, []);
@@ -3588,6 +3593,37 @@ window.__ModuleLoader__.load({
           if (sidebarRight.isExpanded()) sidebarRight.toggleExpanded();
         } catch (error) { /* ignore */ }
       };
+      /** Current board pane state: { open, mode: 'narrow' | 'half' | 'full' | null }. */
+      const boardStateNow = () => {
+        try {
+          if (!boardOpenNow()) return { open: false, mode: null };
+          if (rightbarFullscreen()) return { open: true, mode: 'full' };
+          const width = rightbarWidthNow();
+          const viewport = window.innerWidth || 1200;
+          if (width >= viewport * 0.72) return { open: true, mode: 'full' };
+          return { open: true, mode: width <= 460 ? 'narrow' : 'half' };
+        } catch (error) { return { open: false, mode: null }; }
+      };
+      /** Restore an exact board pane state: open/closed plus narrow, half or full size. */
+      const setBoardState = (state) => {
+        try {
+          const want = state || { open: false, mode: null };
+          const sidebarRight = ctx.sidebarRight;
+          if (!sidebarRight) return;
+          if (!want.open) { setBoardOpen(false); return; }
+          if (!rightBoardActive()) sidebarRight.openTab(BOARD_KIND);
+          if (!sidebarRight.isExpanded()) sidebarRight.toggleExpanded();
+          const mode = want.mode === 'narrow' || want.mode === 'full' ? want.mode : 'half';
+          if (mode === 'full') {
+            if (!rightbarFullscreen()) toggleRightbarFullscreen();
+            return;
+          }
+          if (rightbarFullscreen()) toggleRightbarFullscreen();
+          const viewport = window.innerWidth || 1200;
+          const width = mode === 'narrow' ? 380 : Math.round(viewport * 0.5);
+          if (Math.abs(rightbarWidthNow() - width) > 24) setRightbarWidth(width);
+        } catch (error) { /* ignore */ }
+      };
       const showNativeBoard = (mode) => {
         try {
           const sidebarRight = ctx.sidebarRight;
@@ -3804,7 +3840,7 @@ window.__ModuleLoader__.load({
 
       ctx.slots.inject('shell.overlay', () => ctx.slots.register({
         name: 'shell.overlay', id: 'project-board-session-guard', order: 34, locale: NS,
-        inject: () => ({ boardOpenNow: boardOpenNow, setBoardOpen: setBoardOpen, intentRecent: boardIntentRecent })
+        inject: () => ({ boardStateNow: boardStateNow, setBoardState: setBoardState, intentRecent: boardIntentRecent })
       }, BoardSessionGuard));
 
       ctx.slots.inject('settings.section', () => ctx.slots.register({

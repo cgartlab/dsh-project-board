@@ -49,9 +49,10 @@ only reads status and toggles native sidebar presentation.
 
 DSH's right sidebar stores its open/closed state per session. The board is meant to be a
 workspace-level tool, so `BoardSessionGuard` (a `shell.overlay` watcher) remembers the pane
-state before a switch and restores it after the new session's state lands. An explicit
-board shortcut within a second of the switch marks intent, and the guard then leaves the
-pane alone.
+state before a switch and restores it after the new session's state lands. The remembered
+state includes the presentation — narrow, half width or fullscreen — not just visibility.
+An explicit board shortcut within a second of the switch marks intent, and the guard then
+leaves the pane alone.
 
 ## Keyboard handling
 
