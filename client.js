@@ -2350,6 +2350,8 @@ window.__ModuleLoader__.load({
       const [localSpot, setLocalSpot] = useState({ id: null, at: 0 });
       const dragRef = useRef(null);
       const posRef = useRef(pos);
+      const collapsedRef = useRef(collapsed);
+      collapsedRef.current = collapsed;
       const startsRef = useRef(null);
       if (startsRef.current === null) {
         const stored = loadJson(HUD_STARTS_KEY, {});
@@ -2461,6 +2463,7 @@ window.__ModuleLoader__.load({
       });
       useEffect(() => {
         if (!dragging) return undefined;
+        const SNAP = 28;
         const move = (event) => {
           const drag = dragRef.current || {};
           if (Math.abs(event.clientX - (drag.startX || 0)) + Math.abs(event.clientY - (drag.startY || 0)) <= 4) return;
@@ -2468,14 +2471,27 @@ window.__ModuleLoader__.load({
           const box = hudRef.current;
           const width = box ? box.offsetWidth : 280;
           const height = box ? box.offsetHeight : 160;
-          const next = {
-            x: Math.min(Math.max(4, event.clientX - (drag.dx || 0)), Math.max(4, window.innerWidth - width - 4)),
-            y: Math.min(Math.max(4, event.clientY - (drag.dy || 0)), Math.max(4, window.innerHeight - height - 4))
-          };
+          const gap = 4;
+          const rawX = event.clientX - (drag.dx || 0);
+          const rawY = event.clientY - (drag.dy || 0);
+          const maxX = Math.max(gap, window.innerWidth - width - gap);
+          const maxY = Math.max(gap, window.innerHeight - height - gap);
+          let x = Math.min(Math.max(gap, rawX), maxX);
+          let y = Math.min(Math.max(gap, rawY), maxY);
+          let snappedX = false;
+          let snappedY = false;
+          /* Glue to the nearest edge / corner while dragging. */
+          if (rawX <= SNAP) { x = gap; snappedX = true; }
+          else if (rawX + width >= window.innerWidth - SNAP) { x = maxX; snappedX = true; }
+          if (rawY <= SNAP) { y = gap; snappedY = true; }
+          else if (rawY + height >= window.innerHeight - SNAP) { y = maxY; snappedY = true; }
+          dragRef.current = Object.assign({}, drag, { snapped: snappedX || snappedY });
+          const next = { x: x, y: y };
           posRef.current = next;
           setPos(next);
         };
         const up = () => {
+          const snapped = Boolean(dragRef.current && dragRef.current.snapped);
           setDragging(false);
           if (!hudDragMovedRef.current) return;
           setHasDragged(true);
@@ -2484,6 +2500,12 @@ window.__ModuleLoader__.load({
             const next = cloneJson(config);
             next.hud = Object.assign({}, next.hud, { defaultPosition: 'last' });
             saveSettings(next);
+          }
+          /* Dropped on an edge or corner: fold the list into its small pill so it stays
+             out of the way while still marking its corner. */
+          if (snapped && !collapsedRef.current) {
+            try { window.localStorage.setItem(HUD_COLLAPSE_KEY, '1'); } catch (error) { /* ignore */ }
+            setCollapsed(true);
           }
         };
         window.addEventListener('pointermove', move);

@@ -5,6 +5,13 @@
 版本号从 `0.1.0` 开始：小步走，每次改动都单独发一个版本，方便你对照着升级。
 日期按发布时间倒序排列，最新的在最上面。
 
+## [0.1.13] - 2026-11-05
+
+### 新增
+
+- 悬浮列表拖动时自带边缘吸附：拖到离屏幕边缘 28px 以内松手，会自动贴到最近的那条边；靠近角落就贴角。
+- 贴边或贴角松手后，列表会自动收成小胶囊，不再占地方；胶囊仍停在你刚才贴的位置，点它或按 Alt+E 就能展开。
+
 ## [0.1.12] - 2026-11-05
 
 ### 修了
@@ -128,4 +135,5 @@
 [0.1.9]: https://github.com/cgartlab/dsh-project-board/releases/tag/v0.1.9
 [0.1.10]: https://github.com/cgartlab/dsh-project-board/releases/tag/v0.1.10
 [0.1.11]: https://github.com/cgartlab/dsh-project-board/releases/tag/v0.1.11
+
 
