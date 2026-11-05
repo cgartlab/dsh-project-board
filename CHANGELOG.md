@@ -20,6 +20,10 @@ All notable changes to this project are documented here. The format follows
 
 - Bindings stay platform-neutral: `alt` is the physical Option key's `altKey` on macOS, so
   saved shortcuts and DSH built-in conflict checks need no migration.
+- Compatibility verified against a copy of the full desktop profile stack (8 bundles,
+  including the experimental agent-team / auto-review / session-search / ralph /
+  plugin-market bundles): the plugin layer composes cleanly, no startup shortcut-conflict
+  warning appears, the board renders with 16 sessions, and the browser reports no errors.
 
 ### Added
 

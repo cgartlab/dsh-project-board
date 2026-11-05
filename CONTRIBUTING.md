@@ -20,6 +20,24 @@ plugin; keep changes focused and verify them against a running harness.
 
    All of them also run in CI on every push and pull request.
 
+## Compatibility smoke against the full desktop profile
+
+The `pbtest` profile only loads `dsh-base` + `dsh-web-app`. To check the plugin against a
+real desktop configuration without touching the running app, copy the desktop profile under
+a new name and boot it on a separate port:
+
+```bash
+cp -R ~/.dsh/profiles/desktop ~/.dsh/profiles/pbdesk
+# edit ~/.dsh/profiles/pbdesk/package.json: "name" -> "dsh-profile-pbdesk"
+dsh plugin --profile pbdesk add "$(pwd)"   # run from this repository
+dsh pbdesk --no-open --host 127.0.0.1 --port 52889
+```
+
+Open the printed URL and confirm: the board tab and capsule render, no startup
+shortcut-conflict toast appears, the board lists sessions, and the browser console is clean.
+Remove the copy afterwards (`rm -rf ~/.dsh/profiles/pbdesk`). Never edit the app-managed
+`desktop` profile directly — booting or changing it can interrupt the running session.
+
 ## Rules of thumb
 
 - Every user-visible string needs a `zh` and an `en` entry in `client.js`; the i18n check
