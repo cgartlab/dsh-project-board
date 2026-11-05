@@ -887,6 +887,8 @@ window.__ModuleLoader__.load({
       'notif.pendingPrefix': '会话「{title}」',
       'notif.approvalBody': '会话「{title}」请求使用「{tool}」权限',
       'notif.approvalChoices': '请在应用内选择：允许 / 拒绝',
+      'notif.pendingSimple': '「{title}」有问题需要你回答，点击打开即可',
+      'notif.approvalSimple': '「{title}」有权限请求需要你确认，点击打开即可',
       'notif.multiSelect': '（可多选）',
       'notif.openHint': '点击打开会话',
       'notif.dismiss': '关闭通知',
@@ -1029,6 +1031,8 @@ window.__ModuleLoader__.load({
       'notif.pendingPrefix': 'Session "{title}"',
       'notif.approvalBody': 'Session "{title}" requests permission for "{tool}"',
       'notif.approvalChoices': 'Choose Allow or Deny in the app',
+      'notif.pendingSimple': '"{title}" has a question for you — click to open',
+      'notif.approvalSimple': '"{title}" needs your permission — click to open',
       'notif.multiSelect': '(multiple selection allowed)',
       'notif.openHint': 'Click to open the session',
       'notif.dismiss': 'Dismiss notification',
@@ -2193,12 +2197,17 @@ window.__ModuleLoader__.load({
         if (settings.notify && settings.notify.enabled === false) return;
         const byId = (sessionsSnap && sessionsSnap.byId) || {};
         const focused = notificationChannelFocused();
+        const typing = (function () {
+          const el = document.activeElement;
+          if (!el) return false;
+          return el.tagName === 'TEXTAREA' || el.tagName === 'INPUT' || el.isContentEditable === true;
+        })();
         const sound = !(settings.notify && settings.notify.sound === false);
         const openSession = typeof props.openSession === 'function' ? props.openSession : null;
         const emit = typeof props.notify === 'function' ? props.notify : null;
         const send = (sessionId, tone, title, body, ttl) => {
           if (!body || !emit) return;
-          if (!focused && typeof props.system === 'function') {
+          if (!focused && !typing && typeof props.system === 'function') {
             const delivered = props.system(title, body, sessionId, openSession ? () => openSession(sessionId) : null);
             if (delivered) return;
           }
@@ -2213,8 +2222,10 @@ window.__ModuleLoader__.load({
           const prevPending = prev.pending;
           const curPending = cur.pending;
           if (curPending && (!prevPending || prevPending.key !== curPending.key)) {
-            const head = curPending.kind === 'approval' ? t('notif.approvalTitle') : t('notif.questionTitle');
-            send(sessionId, 'warn', head, formatPendingNotification(curPending, title, t), 20000);
+            const isApproval = curPending.kind === 'approval';
+            const head = isApproval ? t('notif.approvalTitle') : t('notif.questionTitle');
+            const body = isApproval ? t('notif.approvalSimple', { title: title }) : t('notif.pendingSimple', { title: title });
+            send(sessionId, 'warn', head, body, 20000);
             return;
           }
           if (prev.status && prev.status.running === true && cur.status && cur.status.running !== true && !curPending) {
@@ -2236,7 +2247,12 @@ window.__ModuleLoader__.load({
           const scroller = findChatScroller();
           const rect = scroller ? scroller.getBoundingClientRect() : null;
           const right = rect && rect.width > 4 ? Math.max(12, window.innerWidth - rect.right + 12) : 16;
-          setBounds((previous) => (Math.abs(previous.right - right) < 1 ? previous : { right: right, bottom: 16 }));
+          const composer = document.querySelector('[data-composer-card]');
+          const composerRect = composer ? composer.getBoundingClientRect() : null;
+          const bottom = composerRect && composerRect.height > 0
+            ? Math.max(14, Math.round(window.innerHeight - composerRect.top + 8))
+            : 16;
+          setBounds((previous) => (Math.abs(previous.right - right) < 1 && Math.abs(previous.bottom - bottom) < 1 ? previous : { right: right, bottom: bottom }));
         };
         update();
         window.addEventListener('resize', update);
