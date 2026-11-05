@@ -18,7 +18,10 @@ reading, and desktop-class task notifications.
   The pane's open/closed state belongs to the workspace, not to each conversation: switching
   sessions only switches the conversation and never re-opens or closes the board.
 - **Floating session HUD** — live active/recent sessions with timers, attention badges,
-  automation markers, drag-to-move, and an animated pill ⇄ list collapse.
+  automation markers, drag-to-move, and an animated pill ⇄ list collapse. One stable order:
+  active sessions first, most recent activity first within a group; switching sessions
+  highlights the new row without reshuffling the list, and `Alt+I` / `Alt+,` cycle in
+  exactly that order.
 - **Search palette** — fuzzy session search, project scoping, keyboard navigation and
   jump-to-session.
 - **Hold-to-scroll reading** — the conversation scrolls smoothly while the key is held,

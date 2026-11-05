@@ -2490,21 +2490,26 @@ window.__ModuleLoader__.load({
       const chosen = nonIdle.concat(recent);
       const chosenIds = new Set(chosen.map((row) => row.id));
       const rowById = new Map(allRows.map((row) => [row.id, row]));
-      const ensure = (id) => { if (!id || chosenIds.has(id) || !rowById.has(id)) return; chosen.push(Object.assign({}, rowById.get(id))); chosenIds.add(id); };
-      ensure(currentId);
-      if (spotlightActive) ensure(spotlightId);
+      /* The current session and the just-opened one are always listed, but at their natural
+         position — appending them at the end made the list jump while switching sessions. */
+      for (const id of [currentId, spotlightActive ? spotlightId : null]) {
+        if (id && !chosenIds.has(id) && rowById.has(id)) {
+          chosen.push(Object.assign({}, rowById.get(id)));
+          chosenIds.add(id);
+        }
+      }
       const rows = chosen.map((row) => {
         const decorated = Object.assign({}, row);
         if (row.id === currentId) decorated.current = true;
         if (spotlightActive && row.id === spotlightId) decorated.spotlight = true;
         return decorated;
       });
+      /* One rule: active states first, then most recent activity. Timers never reorder rows. */
       const order = { running: 0, attention: 1, done: 2, idle: 3 };
       rows.sort((a, b) => {
         const rank = order[a.tone] - order[b.tone];
         if (rank !== 0) return rank;
-        if (a.tone === 'running' || a.tone === 'attention') return (a.start || 0) - (b.start || 0);
-        return b.updatedAt - a.updatedAt;
+        return (b.updatedAt || 0) - (a.updatedAt || 0);
       });
       const fullOrderIds = rows.map((row) => row.id);
       if (rows.length > hudMaxSessions) {

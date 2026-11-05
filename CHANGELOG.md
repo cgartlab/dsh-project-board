@@ -4,6 +4,19 @@ All notable changes to this project are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the project uses
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.0.3] - 2026-11-05
+
+### Changed
+
+- The floating list uses one simple, stable order: active sessions (running, then waiting
+  for an answer, then finished) first, and within each group the most recent activity first.
+  Row positions no longer depend on internal timers, so a running session does not move
+  while it runs.
+- The current session and a just-opened session are listed at their natural position
+  instead of being appended to the end, so switching sessions highlights the new row
+  without reshuffling the list.
+- `Alt+I` / `Alt+,` cycle sessions in exactly the order shown in the floating list.
+
 ## [1.0.2] - 2026-11-05
 
 ### Changed
