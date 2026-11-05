@@ -3196,48 +3196,56 @@ window.__ModuleLoader__.load({
         if (rank !== 0) return rank;
         return (b.updatedAt || 0) - (a.updatedAt || 0);
       });
-      /* When the floating list would cover the conversation, nudge only the chat scroller and the
-         composer aside (never the header/title bar). No transition: animating padding during live
-         window resizes is what caused the smearing, so this is applied instantly and throttled. */
+      /* Reserve a gutter for the floating list inside the conversation only: pad the chat scroller
+         (never the header/title bar) and narrow the native content variable so the column always
+         starts after the list. Recomputed on window resize AND panel/column resize, applied without
+         any transition to avoid smearing, and skipped when less than 560px would remain. */
       useLayoutEffectSafe(() => {
         const gap = 14;
-        const apply = () => {
+        const html = document.documentElement;
+        const clear = () => {
+          html.style.removeProperty('--dsh-chat-user-width');
           const scroller = findChatScroller();
-          const card = document.querySelector('[data-composer-card]');
-          const box = hudRef.current;
           if (scroller) { scroller.style.paddingLeft = ''; scroller.style.paddingRight = ''; }
-          if (card) { card.style.marginLeft = ''; card.style.marginRight = ''; }
+
+        };
+        const apply = () => {
+          clear();
+          const scroller = findChatScroller();
+          const box = hudRef.current;
           if (collapsed || !box || !scroller) return;
           const rect = box.getBoundingClientRect();
           const srect = scroller.getBoundingClientRect();
           if (!srect.width) return;
-          const cap = Math.round(window.innerWidth * 0.35);
           const leftSide = rect.left + rect.width / 2 <= window.innerWidth / 2;
-          const left = leftSide ? Math.max(0, Math.min(cap, Math.round(rect.right + gap - srect.left))) : 0;
-          const right = leftSide ? 0 : Math.max(0, Math.min(cap, Math.round(srect.right - (rect.left - gap))));
-          /* Keep at least ~520px of usable conversation width; below that, do not squeeze it away. */
-          if (window.innerWidth - left - right < 520) return;
-          if (left) scroller.style.paddingLeft = left + 'px';
-          if (right) scroller.style.paddingRight = right + 'px';
-          if (card) {
-            if (left) card.style.marginLeft = left + 'px';
-            if (right) card.style.marginRight = right + 'px';
-          }
+          const reserve = leftSide
+            ? Math.round(rect.right + gap - srect.left)
+            : Math.round(srect.right - (rect.left - gap));
+          if (reserve <= 0) return;
+          const avail = srect.width - reserve;
+          if (avail < 360) return;
+          if (leftSide) scroller.style.paddingLeft = reserve + 'px';
+          else scroller.style.paddingRight = reserve + 'px';
+          if (avail - 64 < 920) html.style.setProperty('--dsh-chat-user-width', Math.max(320, avail - 64) + 'px');
         };
         apply();
         let frame = 0;
-        const onResize = () => {
-          if (frame) cancelAnimationFrame(frame);
+        const schedule = () => {
+          if (frame) return;
           frame = requestAnimationFrame(() => { frame = 0; apply(); });
         };
-        window.addEventListener('resize', onResize);
+        window.addEventListener('resize', schedule);
+        let observer = null;
+        const scroller = findChatScroller();
+        if (scroller && typeof ResizeObserver !== 'undefined') {
+          observer = new ResizeObserver(schedule);
+          observer.observe(scroller);
+        }
         return () => {
-          window.removeEventListener('resize', onResize);
+          window.removeEventListener('resize', schedule);
+          if (observer) observer.disconnect();
           if (frame) cancelAnimationFrame(frame);
-          const scroller = findChatScroller();
-          const card = document.querySelector('[data-composer-card]');
-          if (scroller) { scroller.style.paddingLeft = ''; scroller.style.paddingRight = ''; }
-          if (card) { card.style.marginLeft = ''; card.style.marginRight = ''; }
+          clear();
         };
       }, [collapsed, hudWidth, pos && pos.x, pos && pos.y]);
       /* Fit the panel to the longest session title (bounded), so short lists do not waste width. */
