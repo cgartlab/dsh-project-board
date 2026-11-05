@@ -29,7 +29,7 @@ window.__ModuleLoader__.load({
     };
     const DEFAULT_SETTINGS = {
       shortcuts: { palette: 'alt+KeyK', prev: 'alt+KeyI', next: 'alt+Comma', userPrev: 'alt+KeyU', userNext: 'alt+KeyM', scrollBottom: 'alt+KeyS', sidebarBoard: 'alt+KeyN', leftSidebar: 'alt+KeyW', panelHalf: 'alt+KeyB', panelFull: 'alt+KeyV', rename: 'alt+KeyR', interject: 'alt+Enter', hud: 'alt+KeyE', sessionMenu: 'alt+KeyD' },
-      palette: { enabled: true, blur: 15 },
+      palette: { enabled: true, blur: 15, includeArchived: true },
       header: { capsule: true, placement: 'header' },
       hints: { shortcuts: true },
       hintsVersion: 1,
@@ -808,6 +808,10 @@ window.__ModuleLoader__.load({
       'palette.placeholder': '搜索会话或项目…', 'palette.allProjects': '全部项目', 'palette.empty': '没有匹配的会话', 'palette.hint': '↑↓ / Alt+I / Alt+, 选择 · Enter 打开 · Alt+K/Esc 关闭',
       'hud.title': '活跃与最近会话', 'hud.collapsed': '活跃', 'hud.running': '进行中', 'hud.expand': '展开', 'hud.collapse': '收起', 'hud.empty': '当前没有非空闲会话', 'hud.prev': '上一个', 'hud.next': '下一个', 'hud.recent': '最近',
       'hud.groupSession': '会话', 'hud.groupMessage': '指令', 'hud.prevInstruction': '上一条', 'hud.nextInstruction': '下一条', 'hud.toBottom': '到底部', 'hud.auto': '自动化',
+      'hud.archive': '归档会话',
+      'palette.archived': '已归档',
+      'settings.paletteArchived': '搜索时包含已归档会话',
+      'settings.paletteArchivedDesc': '默认包含；关掉后搜索列表只显示未归档会话',
       'settings.title': '项目看板设置',
       'settings.intro': '自定义项目看板的快捷键、悬浮窗与视图行为。',
       'settings.shortcuts': '快捷键',
@@ -833,6 +837,7 @@ window.__ModuleLoader__.load({
       'toast.conflictExistingMany': '有 {n} 个快捷键与内置命令冲突，请到设置中改键。',
       'toast.dismiss': '关闭通知',
       'toast.interjectNone': '当前没有可插话的排队消息（仅运行中可用）。',
+      'toast.archived': '会话已归档',
       'menu.title': '管理当前会话',
       'menu.archive': '归档',
       'menu.delete': '删除',
@@ -929,6 +934,10 @@ window.__ModuleLoader__.load({
       'palette.placeholder': 'Search sessions or projects…', 'palette.allProjects': 'All projects', 'palette.empty': 'No matching sessions', 'palette.hint': '↑↓ or Alt+I / Alt+, select · Enter open · Alt+K/Esc close',
       'hud.title': 'Active & recent', 'hud.collapsed': 'Active', 'hud.running': 'running', 'hud.expand': 'Expand', 'hud.collapse': 'Collapse', 'hud.empty': 'No active sessions', 'hud.prev': 'Previous', 'hud.next': 'Next', 'hud.recent': 'Recent',
       'hud.groupSession': 'Session', 'hud.groupMessage': 'Instruction', 'hud.prevInstruction': 'Previous', 'hud.nextInstruction': 'Next', 'hud.toBottom': 'Bottom', 'hud.auto': 'Auto',
+      'hud.archive': 'Archive session',
+      'palette.archived': 'Archived',
+      'settings.paletteArchived': 'Include archived sessions in search',
+      'settings.paletteArchivedDesc': 'On by default; turn it off to search only sessions that are not archived',
       'settings.title': 'Project Board settings',
       'settings.intro': 'Customize shortcuts, floating status, and board behavior.',
       'settings.shortcuts': 'Shortcuts',
@@ -954,6 +963,7 @@ window.__ModuleLoader__.load({
       'toast.conflictExistingMany': '{n} shortcuts conflict with built-in commands. Rebind them in Settings.',
       'toast.dismiss': 'Dismiss notification',
       'toast.interjectNone': 'No queued message can be steered right now (available only while running).',
+      'toast.archived': 'Session archived',
       'menu.title': 'Manage session',
       'menu.archive': 'Archive',
       'menu.delete': 'Delete',
@@ -1091,7 +1101,8 @@ window.__ModuleLoader__.load({
       up: ['M6 15l6-6 6 6'],
       down: ['M6 9l6 6 6-6'],
       bottom: ['M12 4v12', 'M7 11l5 5 5-5', 'M5 20h14'],
-      left: ['M19 12H5', 'M11 6l-6 6 6 6']
+      left: ['M19 12H5', 'M11 6l-6 6 6 6'],
+      archive: ['M3 7h18', 'M5 7v12a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1V7', 'M9 7V4h6v3', 'M10 11h4']
     };
     function Icon(props) {
       const name = props.name || 'folder'; const size = props.size || 16; const strokeWidth = props.strokeWidth || 1.7;
@@ -2101,18 +2112,21 @@ window.__ModuleLoader__.load({
       });
 
       const rows = [];
+      const includeArchived = !config.palette || config.palette.includeArchived !== false;
       for (const id of ids) {
         const row = byId[id];
-        if (!row || row.blank || row.origin === 'subagent' || archived.has(id)) continue;
+        if (!row || row.blank || row.origin === 'subagent') continue;
+        const isArchived = archived.has(id);
+        if (isArchived && !includeArchived) continue;
         const workspace = wsBySession.get(id);
         const spec = workspace ? projectSpec(workspace.workspaceId) : { color: paletteFor(''), icon: 'folder' };
         const info = statusInfo(statuses ? statuses.get(id) : undefined, row);
-        rows.push({ id: id, title: sessionTitleOf(row, t), project: workspace ? workspaceLabel(workspace.title, t) : '', projectId: workspace ? workspace.workspaceId : '', projectColor: spec.color, projectIcon: spec.icon, info: info, updatedAt: row.updatedAt || 0 });
+        rows.push({ id: id, title: sessionTitleOf(row, t), project: workspace ? workspaceLabel(workspace.title, t) : '', projectId: workspace ? workspace.workspaceId : '', projectColor: spec.color, projectIcon: spec.icon, info: info, updatedAt: row.updatedAt || 0, archived: isArchived });
       }
       let currentId;
       for (const id of ids) { const row = byId[id]; if (row && row.retainedBy && (row.retainedBy.mainView || 0) > 0) { currentId = id; break; } }
       renameRef.current = currentId ? { id: currentId, title: (byId[currentId] && (byId[currentId].displayTitle || byId[currentId].title)) || '' } : null;
-      const cycleRows = rows.slice().sort((a, b) => {
+      const cycleRows = rows.filter((row) => !row.archived).sort((a, b) => {
         const rank = (row) => row.info.tone === 'running' ? 0 : row.info.tone === 'attention' ? 1 : 2;
         const diff = rank(a) - rank(b);
         return diff !== 0 ? diff : b.updatedAt - a.updatedAt;
@@ -2358,12 +2372,13 @@ window.__ModuleLoader__.load({
               ? h('div', { className: 'pbx-paletteEmpty' }, t('palette.empty'))
               : visible.map((row, i) => h('button', {
                   key: row.id, type: 'button',
-                  className: 'pbx-prow' + (i === index ? ' active' : ''),
+                  className: 'pbx-prow' + (i === index ? ' active' : '') + (row.archived ? ' archived' : ''),
                   onMouseEnter: () => setIndex(i),
                   onClick: () => choose(row)
                 },
                   h('span', { className: 'pbx-rdot', 'data-tone': row.info.tone }),
                   h('span', { className: 'pbx-prowTitle' }, row.title),
+                  row.archived ? h('span', { className: 'pbx-prowArchived' }, t('palette.archived')) : null,
                   h('span', { className: 'pbx-prowMeta' },
                     h('span', { className: 'pbx-prowWsIcon', style: { color: row.projectColor, background: hexToRgba(row.projectColor, 0.16) } }, h(Icon, { name: row.projectIcon, size: 10 })),
                     row.project
@@ -2780,6 +2795,18 @@ window.__ModuleLoader__.load({
       const style = useSavedPosition ? { left: pos.x + 'px', top: pos.y + 'px' } : null;
       const className = 'pbx-hud' + (useSavedPosition ? ' moved' : ' default' + (positionMode === 'bottom-right' ? ' bottom' : '')) + (dragging ? ' dragging' : '') + (closing ? ' closing' : '');
       const runningCount = rows.filter((row) => row.tone === 'running').length;
+      const archiveRow = async (row) => {
+        if (!row || typeof props.archiveSession !== 'function') return;
+        logEvent('info', 'hud', 'archive', { id: String(row.id || '').slice(-12) });
+        let result = null;
+        try { result = await props.archiveSession(row.id); } catch (error) { result = { ok: false, error: { message: String(error && error.message || error) } }; }
+        const ok = !result || result.ok !== false;
+        if (typeof props.notify === 'function') {
+          props.notify(ok
+            ? { tone: 'success', title: t('hud.title'), message: t('toast.archived'), ttl: 3200 }
+            : { tone: 'warn', title: t('hud.title'), message: t('menu.failed', { message: (result && result.error && result.error.message) || 'archive failed' }), ttl: 5000 });
+        }
+      };
       if (collapsed) {
         const pillTone = runningCount > 0 ? ' live' : '';
         return h('button', {
@@ -2813,9 +2840,15 @@ window.__ModuleLoader__.load({
           ),
           h('div', { className: 'pbx-hudList', style: Object.assign({ maxHeight: hudListMaxHeight + 'px' }, listHeight > 0 ? { height: listHeight + 'px' } : {}) },
             h('div', { ref: listContentRef, className: 'pbx-hudListInner' },
-              rows.map((row) => h('button', {
-              key: row.id, type: 'button', 'data-hud-id': row.id, className: 'pbx-hudRow' + (row.auto ? ' auto' : '') + (row.tone === 'running' ? ' live' : '') + (row.current ? ' current' : '') + (row.spotlight ? ' spotlight' : ''),
-              title: t('card.open'), onClick: () => { if (typeof openSession === 'function') openSession(row.id); }
+              rows.map((row) => h('div', {
+              key: row.id, role: 'button', tabIndex: 0, 'data-hud-id': row.id, className: 'pbx-hudRow' + (row.auto ? ' auto' : '') + (row.tone === 'running' ? ' live' : '') + (row.current ? ' current' : '') + (row.spotlight ? ' spotlight' : ''),
+              title: t('card.open'),
+              onClick: () => { if (typeof openSession === 'function') openSession(row.id); },
+              onKeyDown: (event) => {
+                if (event.key !== 'Enter' && event.key !== ' ') return;
+                event.preventDefault();
+                if (typeof openSession === 'function') openSession(row.id);
+              }
             },
               h('span', { className: 'pbx-rdot', 'data-tone': row.tone }),
               row.auto ? h('span', { className: 'pbx-hudAuto', title: t('kind.auto') }, h(Icon, { name: 'clock', size: 11 })) : null,
@@ -2823,7 +2856,12 @@ window.__ModuleLoader__.load({
                 h('span', { className: 'pbx-hudRowTitle' }, row.title),
                 h('span', { className: 'pbx-hudRowMeta' }, t(row.labelKey) + (row.auto ? ' · ' + t('hud.auto') : '') + (row.project ? ' · ' + row.project : '') + (row.current ? ' · ' + t('card.current') : row.recent ? ' · ' + t('hud.recent') : ''))
               ),
-              h('span', { className: 'pbx-hudTimer' }, row.timed ? fmtElapsed(now - row.start) : relTime(row.updatedAt, t))
+              h('span', { className: 'pbx-hudTimer' }, row.timed ? fmtElapsed(now - row.start) : relTime(row.updatedAt, t)),
+              h('span', {
+                className: 'pbx-hudArchive', role: 'button', tabIndex: -1, title: t('hud.archive'), 'aria-label': t('hud.archive'),
+                onClick: (event) => { event.stopPropagation(); archiveRow(row); },
+                onKeyDown: (event) => { event.stopPropagation(); }
+              }, h(Icon, { name: 'archive', size: 12, strokeWidth: 1.8 }))
             ))
           ))
         )
@@ -3285,6 +3323,7 @@ window.__ModuleLoader__.load({
         h('section', { className: 'pbx-setSection' },
           h('h3', { className: 'pbx-setSectionTitle' }, t('settings.behavior')),
           toggleRow('palette', 'enabled', 'settings.paletteEnabled', 'settings.paletteEnabledDesc'),
+          toggleRow('palette', 'includeArchived', 'settings.paletteArchived', 'settings.paletteArchivedDesc'),
           toggleRow('hints', 'shortcuts', 'settings.shortcutHints', 'settings.shortcutHintsDesc'),
           toggleRow('hud', 'enabled', 'settings.hudEnabled', 'settings.hudEnabledDesc'),
           toggleRow('hud', 'includeDone', 'settings.hudDone', 'settings.hudDoneDesc'),
@@ -3534,7 +3573,14 @@ window.__ModuleLoader__.load({
       '.pbx-hudRowMain{display:flex;flex-direction:column;min-width:0;flex:1;gap:1px}',
       '.pbx-hudRowTitle{font-size:13px;font-weight:500;line-height:18px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}',
       '.pbx-hudRowMeta{font-size:11px;line-height:15px;color:var(--dsw-alias-label-secondary);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}',
-      '.pbx-hudTimer{font-size:11.5px;color:var(--dsw-alias-label-secondary);font-variant-numeric:tabular-nums;flex:none}',
+      '.pbx-hudTimer{font-size:11.5px;color:var(--dsw-alias-label-secondary);font-variant-numeric:tabular-nums;flex:none;transition:opacity .12s ease}',
+      '.pbx-hudArchive{position:absolute;right:7px;top:50%;transform:translateY(-50%);width:21px;height:21px;display:inline-flex;align-items:center;justify-content:center;padding:0;border:none;border-radius:6px;background:transparent;color:var(--dsw-alias-label-secondary);cursor:pointer;opacity:0;pointer-events:none;transition:opacity .12s ease,background .12s ease,color .12s ease}',
+      '.pbx-hudRow:hover .pbx-hudTimer,.pbx-hudRow:focus-within .pbx-hudTimer{opacity:0}',
+      '.pbx-hudRow:hover .pbx-hudArchive,.pbx-hudRow:focus-within .pbx-hudArchive{opacity:1;pointer-events:auto}',
+      '.pbx-hudArchive:hover{background:color-mix(in srgb,var(--dsw-alias-label-secondary) 16%,transparent);color:var(--dsw-alias-label-primary)}',
+      '.pbx-hudArchive:active{transform:translateY(-50%) scale(.92)}',
+      '.pbx-prowArchived{font-size:10.5px;line-height:16px;padding:0 6px;border-radius:999px;background:color-mix(in srgb,var(--dsw-alias-label-secondary) 14%,transparent);color:var(--dsw-alias-label-secondary);flex:none;white-space:nowrap}',
+      '.pbx-prow.archived .pbx-prowTitle{color:var(--dsw-alias-label-secondary)}',
       '.pbx-hudFoot{display:flex;flex-direction:column;gap:5px;padding:8px 11px 9px;border-top:1px solid var(--dsw-alias-border-l1)}',
       '.pbx-hudFootGroup{display:flex;align-items:center;gap:6px;min-width:0;flex-wrap:wrap}',
       '.pbx-hudFootTitle{font-size:10px;font-weight:600;letter-spacing:.03em;color:var(--dsw-alias-label-tertiary);flex:none;min-width:22px}',
@@ -4110,7 +4156,7 @@ window.__ModuleLoader__.load({
 
       ctx.slots.inject('shell.overlay', () => ctx.slots.register({
         name: 'shell.overlay', id: 'project-board-hud', order: 35, locale: NS,
-        inject: () => ({ openSession: openSession, hudOrder: hudOrderStore, saveSettings: writeSettings, hooks: Object.assign({ settings: settingsStore, focus: focusStore }, scheduleSource ? { scheduleCatalog: scheduleSource } : {}) })
+        inject: () => ({ openSession: openSession, archiveSession: archiveSession, notify: pushToast, hudOrder: hudOrderStore, saveSettings: writeSettings, hooks: Object.assign({ settings: settingsStore, focus: focusStore }, scheduleSource ? { scheduleCatalog: scheduleSource } : {}) })
       }, FloatingStatus));
 
       ctx.slots.inject('shell.overlay', () => ctx.slots.register({
