@@ -1101,13 +1101,30 @@ window.__ModuleLoader__.load({
       up: ['M6 15l6-6 6 6'],
       down: ['M6 9l6 6 6-6'],
       bottom: ['M12 4v12', 'M7 11l5 5 5-5', 'M5 20h14'],
-      left: ['M19 12H5', 'M11 6l-6 6 6 6'],
-      archive: ['M12 4.5v7.5', 'M8.4 9L12 12.6 15.6 9', 'M4.5 13v4.5A2 2 0 0 0 6.5 19.5h11a2 2 0 0 0 2-2V13']
+      left: ['M19 12H5', 'M11 6l-6 6 6 6']
+    };
+    /* Icons lifted verbatim from the DSH client's own icon set (16px grid, 1px stroke) so the
+       plugin speaks the product's visual language instead of inventing its own shapes. */
+    const NATIVE_ICONS = {
+      archive: {
+        viewBox: '0 0 16 16',
+        strokeWidth: 1,
+        paths: [
+          'M13.5 2.5H2.5C1.94772 2.5 1.5 2.94772 1.5 3.5V4.5C1.5 5.05228 1.94772 5.5 2.5 5.5H13.5C14.0523 5.5 14.5 5.05228 14.5 4.5V3.5C14.5 2.94772 14.0523 2.5 13.5 2.5Z',
+          'M2.5 5.5V13.5C2.5 13.7652 2.60536 14.0196 2.79289 14.2071C2.98043 14.3946 3.23478 14.5 3.5 14.5H12.5C12.7652 14.5 13.0196 14.3946 13.2071 14.2071C13.3946 14.0196 13.5 13.7652 13.5 13.5V5.5',
+          'M6.5 9.5H9.5'
+        ]
+      }
     };
     function Icon(props) {
-      const name = props.name || 'folder'; const size = props.size || 16; const strokeWidth = props.strokeWidth || 1.7;
-      const paths = PATHS[name] || PATHS.folder;
-      return h('svg', { width: size, height: size, viewBox: '0 0 24 24', fill: 'none', stroke: 'currentColor', strokeWidth: strokeWidth, strokeLinecap: 'round', strokeLinejoin: 'round', 'aria-hidden': 'true', focusable: 'false' }, paths.map((d, i) => h('path', { key: i, d: d })));
+      const name = props.name || 'folder';
+      const native = NATIVE_ICONS[name];
+      const size = props.size || 16;
+      const strokeWidth = props.strokeWidth || (native ? native.strokeWidth : 1.7);
+      const paths = native ? native.paths : (PATHS[name] || PATHS.folder);
+      const cap = native ? 'butt' : 'round';
+      const join = native ? 'miter' : 'round';
+      return h('svg', { width: size, height: size, viewBox: native ? native.viewBox : '0 0 24 24', fill: 'none', stroke: 'currentColor', strokeWidth: strokeWidth, strokeLinecap: cap, strokeLinejoin: join, 'aria-hidden': 'true', focusable: 'false' }, paths.map((d, i) => h('path', { key: i, d: d })));
     }
 
     /* --------------------------------------------------------------- helpers */
@@ -2976,7 +2993,7 @@ window.__ModuleLoader__.load({
                 className: 'pbx-hudArchive', role: 'button', tabIndex: -1, title: t('hud.archive'), 'aria-label': t('hud.archive'),
                 onClick: (event) => { event.stopPropagation(); archiveRow(row); },
                 onKeyDown: (event) => { event.stopPropagation(); }
-              }, h(Icon, { name: 'archive', size: 14, strokeWidth: 1.6 }))
+              }, h(Icon, { name: 'archive', size: 16 }))
             ))
           ))
         )
