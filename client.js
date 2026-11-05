@@ -805,6 +805,8 @@ window.__ModuleLoader__.load({
       'col.attention': '待处理', 'col.done': '已完成', 'col.idle': '空闲', 'col.empty': '暂无会话',
       'col.preset': '模式', 'col.updated': '最后活动', 'col.appearance': '外观', 'col.total': '会话',
       'col.presets': '模式数',
+      'compact.allProjects': '全部项目',
+      'status.archived': '已归档',
       'col.kind': '类型', 'kind.auto': '自动化任务', 'kind.normal': '普通会话', 'filter.kind': '类型', 'stat.auto': '自动化',
       'nav.switch': '切换会话', 'nav.switchLabel': '会话', 'nav.noSession': '未选择会话', 'nav.board': '看板', 'nav.openBoard': '打开项目看板', 'nav.cycle': 'Alt+I 上一个 · Alt+, 下一个', 'nav.more': '更多操作',
       'rightTab.title': '项目看板', 'compact.full': '全屏打开',
@@ -935,6 +937,8 @@ window.__ModuleLoader__.load({
       'col.attention': 'Attention', 'col.done': 'Completed', 'col.idle': 'Idle', 'col.empty': 'No sessions',
       'col.preset': 'Mode', 'col.updated': 'Last activity', 'col.appearance': 'Appearance', 'col.total': 'Sessions',
       'col.presets': 'Presets',
+      'compact.allProjects': 'All projects',
+      'status.archived': 'Archived',
       'col.kind': 'Type', 'kind.auto': 'Automation', 'kind.normal': 'Session', 'filter.kind': 'Type', 'stat.auto': 'Automation',
       'nav.switch': 'Switch session', 'nav.switchLabel': 'Sessions', 'nav.noSession': 'No session', 'nav.board': 'Board', 'nav.openBoard': 'Open project board', 'nav.more': 'More controls', 'nav.cycle': 'Alt+I previous · Alt+, next',
       'rightTab.title': 'Project Board', 'compact.full': 'Open full screen',
@@ -1139,6 +1143,11 @@ window.__ModuleLoader__.load({
     /* Icons copied verbatim from the DSH client’s own icon set (16px grid, 1px stroke) so the
        plugin speaks the product’s visual language instead of inventing its own shapes. */
     const NATIVE_ICONS = {
+      sliders: {
+        viewBox: '0 0 16 16',
+        strokeWidth: 1.2,
+        paths: ['M2.3 5h5.85M12.05 5h1.65', 'M2.3 11h1.65M7.85 11h5.85']
+      },
       archive: {
         viewBox: '0 0 16 16',
         strokeWidth: 1,
@@ -1393,6 +1402,7 @@ window.__ModuleLoader__.load({
       const [query, setQuery] = useState('');
       const [grouped, setGrouped] = useState(false);
       const [collapsed, setCollapsed] = useState({});
+      const [compactProjectId, setCompactProjectId] = useState(null);
 
       useEffect(() => {
         if (editingProject === null) return undefined;
@@ -1462,6 +1472,24 @@ window.__ModuleLoader__.load({
           return { workspaceId: workspace.workspaceId, name: workspaceLabel(workspace.title, t), path: workspace.path || '', counts: counts, presets: presets, hasCurrent: hasCurrent, lastUpdated: last };
         });
       }, [workspaces, allSessions, t]);
+
+      const compactStatusRank = (row) => row.archived ? 9 : row.info.tone === 'running' ? 0 : row.info.tone === 'attention' ? 1 : row.info.tone === 'done' ? 2 : 3;
+      const compactSessionsOf = (workspaceId) => {
+        const workspace = workspaces.find((item) => item.workspaceId === workspaceId);
+        if (!workspace) return [];
+        const rows = [];
+        for (const sessionId of workspace.sessionIds || []) {
+          const summary = byId[sessionId];
+          if (!summary || summary.origin === 'subagent' || summary.blank) continue;
+          const isArchived = archived.has(sessionId);
+          const info = isArchived
+            ? { tone: 'idle', labelKey: 'status.archived', rank: 9 }
+            : statusInfo(statuses ? statuses.get(sessionId) : undefined, summary);
+          rows.push({ id: sessionId, title: sessionTitleOf(summary, t), info: info, archived: isArchived, auto: autoSet.has(sessionId), updatedAt: summary.updatedAt || 0 });
+        }
+        rows.sort((a, b) => compactStatusRank(a) - compactStatusRank(b) || b.updatedAt - a.updatedAt);
+        return rows;
+      };
 
       const totals = useMemo(() => {
         const acc = { workspaces: workspaces.length, sessions: allSessions.length, attention: 0, running: 0 };
@@ -1747,35 +1775,57 @@ window.__ModuleLoader__.load({
 
       if (compact) {
         const statChip = (label, value, color) => value > 0 ? h('span', { className: 'pbx-pcardStat', style: { color: color } }, String(value) + ' ' + label) : null;
+        const activeProject = compactProjectId ? projectModels.find((item) => item.workspaceId === compactProjectId) : null;
+        const activeRows = activeProject ? compactSessionsOf(activeProject.workspaceId) : [];
         return h('div', { className: 'pbx-root pbx-compact' }, h('div', { className: 'pbx-compactWrap' },
           h('div', { className: 'pbx-compactHead' },
-            h('div', { className: 'pbx-compactTitle' }, h(Icon, { name: 'board', size: 16 }), h('span', null, t('title'))),
-            h('div', { className: 'pbx-compactMeta' }, String(projectModels.length) + ' ' + t('stat.workspaces') + ' · ' + String(totals.running) + ' ' + t('stat.running')),
+            activeProject ? h('button', {
+              type: 'button', className: 'pbx-compactBack', title: t('compact.allProjects'), 'aria-label': t('compact.allProjects'),
+              onClick: () => setCompactProjectId(null)
+            }, h(Icon, { name: 'left', size: 14 })) : null,
+            h('div', { className: 'pbx-compactTitle' }, h(Icon, { name: 'board', size: 16 }), h('span', null, activeProject ? activeProject.name : t('title'))),
+            h('div', { className: 'pbx-compactMeta' }, activeProject
+              ? String(activeRows.length) + ' ' + t('stat.sessions')
+              : String(projectModels.length) + ' ' + t('stat.workspaces') + ' · ' + String(totals.running) + ' ' + t('stat.running')),
             (typeof openFullBoard === 'function' ? h('button', { type: 'button', className: 'pbx-compactFull', title: t('compact.full'), onClick: () => openFullBoard() }, h(Icon, { name: 'expand', size: 14 })) : null)
           ),
-          filteredProjects.length === 0
-            ? h('div', { className: 'pbx-cgroupEmpty' }, t('empty.filtered'))
-            : filteredProjects.map((project) => {
-                const spec = specOf(project.workspaceId);
-                return h('button', {
-                  key: project.workspaceId, type: 'button', className: 'pbx-pcard',
-                  title: t('card.open'),
-                  onClick: () => { setProjectFilter(project.workspaceId); setView('sessions'); setStatusFilter('all'); if (typeof openFullBoard === 'function') openFullBoard(); }
-                },
-                  h('span', { className: 'pbx-pcardTop' },
-                    h('span', { className: 'pbx-chipIcon', style: { color: spec.color, background: hexToRgba(spec.color, 0.16) } }, h(Icon, { name: spec.icon, size: 13 })),
-                    h('span', { className: 'pbx-pcardName' }, project.name),
-                    h('span', { className: 'pbx-pcardTotal' }, String(project.counts.total))
-                  ),
-                  project.path ? h('span', { className: 'pbx-pcardPath' }, project.path) : null,
-                  h('span', { className: 'pbx-pcardStats' },
-                    statChip(t('stat.running'), project.counts.running, 'var(--dsw-alias-brand-primary)'),
-                    statChip(t('stat.attention'), project.counts.attention, '#f59e0b'),
-                    statChip(t('status.done'), project.counts.done, 'var(--dsw-alias-state-success-primary)'),
-                    statChip(t('stat.auto'), project.counts.auto, 'var(--dsw-alias-state-warn-primary)')
-                  )
-                );
-              })
+          activeProject
+            ? (activeRows.length === 0
+                ? h('div', { className: 'pbx-cgroupEmpty' }, t('col.empty'))
+                : activeRows.map((row) => h('button', {
+                    key: row.id, type: 'button',
+                    className: 'pbx-crow' + (row.auto ? ' auto' : '') + (row.archived ? ' archived' : '') + (row.info.tone === 'running' ? ' live' : ''),
+                    title: t('card.open'), onClick: () => open(row.id)
+                  },
+                    h('span', { className: 'pbx-rdot', 'data-tone': row.info.tone }),
+                    row.auto ? h('span', { className: 'pbx-autoGlyph' }, h(Icon, { name: 'clock', size: 12 })) : null,
+                    h('span', { className: 'pbx-ctitle' }, row.title),
+                    row.archived ? h('span', { className: 'pbx-prowArchived' }, t('palette.archived')) : null,
+                    h('span', { className: 'pbx-ctime' }, relTime(row.updatedAt, t))
+                  )))
+            : (filteredProjects.length === 0
+                ? h('div', { className: 'pbx-cgroupEmpty' }, t('empty.filtered'))
+                : filteredProjects.map((project) => {
+                    const spec = specOf(project.workspaceId);
+                    return h('button', {
+                      key: project.workspaceId, type: 'button', className: 'pbx-pcard',
+                      title: t('card.open'),
+                      onClick: () => { setCompactProjectId(project.workspaceId); setProjectFilter(project.workspaceId); setStatusFilter('all'); }
+                    },
+                      h('span', { className: 'pbx-pcardTop' },
+                        h('span', { className: 'pbx-chipIcon', style: { color: spec.color, background: hexToRgba(spec.color, 0.16) } }, h(Icon, { name: spec.icon, size: 13 })),
+                        h('span', { className: 'pbx-pcardName' }, project.name),
+                        h('span', { className: 'pbx-pcardTotal' }, String(project.counts.total))
+                      ),
+                      project.path ? h('span', { className: 'pbx-pcardPath' }, project.path) : null,
+                      h('span', { className: 'pbx-pcardStats' },
+                        statChip(t('stat.running'), project.counts.running, 'var(--dsw-alias-brand-primary)'),
+                        statChip(t('stat.attention'), project.counts.attention, '#f59e0b'),
+                        statChip(t('status.done'), project.counts.done, 'var(--dsw-alias-state-success-primary)'),
+                        statChip(t('stat.auto'), project.counts.auto, 'var(--dsw-alias-state-warn-primary)')
+                      )
+                    );
+                  }))
         ));
       }
 
@@ -1815,17 +1865,25 @@ window.__ModuleLoader__.load({
       const open = Boolean(paletteSnap && paletteSnap.open);
       /* When a right-side panel is open the chat header is narrow, so fold the plugin controls
          into a single "more" menu instead of letting them overlap the native panel chrome. */
-      const [panelOpen, setPanelOpen] = useState(false);
+      const [navSpace, setNavSpace] = useState(0);
       const [moreOpen, setMoreOpen] = useState(false);
+      const navWrapRef = useRef(null);
       useEffect(() => {
-        const read = () => {
-          const panel = document.querySelector('[class*="_panel"][data-sidebar-right-open]');
-          setPanelOpen(Boolean(panel));
+        const measure = () => {
+          const el = navWrapRef.current;
+          const host = el && el.parentElement ? el.parentElement : el;
+          const width = host ? host.clientWidth : 0;
+          setNavSpace((previous) => Math.abs(previous - width) > 2 ? width : previous);
         };
-        read();
-        const timer = window.setInterval(read, 400);
-        window.addEventListener('resize', read);
-        return () => { window.clearInterval(timer); window.removeEventListener('resize', read); };
+        measure();
+        let observer = null;
+        const host = navWrapRef.current && navWrapRef.current.parentElement;
+        if (host && typeof ResizeObserver !== 'undefined') {
+          observer = new ResizeObserver(measure);
+          observer.observe(host);
+        }
+        window.addEventListener('resize', measure);
+        return () => { if (observer) observer.disconnect(); window.removeEventListener('resize', measure); };
       }, []);
       useEffect(() => {
         if (!moreOpen) return undefined;
@@ -1904,17 +1962,18 @@ window.__ModuleLoader__.load({
         }
         return null;
       }
-      if (props.side === 'right' && panelOpen && placement !== 'composer') {
+      const foldNav = props.side === 'right' && placement !== 'composer' && navSpace > 0 && navSpace < 430;
+      if (foldNav) {
         const menuIds = Object.keys(DEFAULT_SETTINGS.headerButtons)
           .filter((id) => buttons[id] && buttons[id].hidden !== true && Boolean(nodes[id]))
           .sort((a, b) => ((buttons[a].order || 0) - (buttons[b].order || 0)));
         if (menuIds.length === 0) return null;
-        return h('div', { className: 'pbx-navMoreWrap' },
+        return h('div', { className: 'pbx-navMoreWrap', ref: navWrapRef },
           h('button', {
             type: 'button', className: 'pbx-navMore' + (moreOpen ? ' open' : ''), title: t('nav.more'), 'aria-label': t('nav.more'),
             'aria-expanded': moreOpen ? 'true' : 'false',
             onClick: () => setMoreOpen((value) => !value)
-          }, h('span', { className: 'pbx-navMoreDots', 'aria-hidden': 'true' }, '⋯')),
+          }, h(Icon, { name: 'sliders', size: 16 })),
           moreOpen ? h('div', { className: 'pbx-navMenu' },
             menuIds.map((id) => h('div', { key: id, className: 'pbx-navMenuItem', onClickCapture: () => setMoreOpen(false) }, nodes[id]))
           ) : null
@@ -1943,6 +2002,7 @@ window.__ModuleLoader__.load({
         }));
       }
       return h('div', {
+        ref: navWrapRef,
         className: 'pbx-nav' + (props.side === 'right' ? ' pbx-navRight' : '') + (children.length === 0 ? ' pbx-navEmpty' : '')
       }, children);
     }
@@ -3861,7 +3921,6 @@ window.__ModuleLoader__.load({
       '.pbx-navMoreWrap{position:relative;display:inline-flex}',
       '.pbx-navMore{display:inline-flex;align-items:center;justify-content:center;width:30px;height:28px;padding:0;border:1px solid var(--dsw-alias-border-l1);background:var(--dsw-alias-bg-layer-1);border-radius:8px;color:var(--dsw-alias-label-secondary);font:inherit;cursor:pointer;transition:background .15s ease,color .15s ease}',
       '.pbx-navMore:hover,.pbx-navMore.open{background:var(--dsw-alias-interactive-bg-hover);color:var(--dsw-alias-label-primary)}',
-      '.pbx-navMoreDots{font-size:16px;line-height:1;letter-spacing:.5px;margin-top:-3px}',
       '.pbx-navMenu{position:absolute;top:calc(100% + 6px);right:0;z-index:70;display:flex;flex-direction:column;gap:2px;min-width:200px;padding:6px;background:var(--dsw-alias-bg-overlay);border:1px solid var(--dsw-alias-border-l2);border-radius:10px;box-shadow:0 10px 26px rgba(0,0,0,.18)}',
       '.pbx-navMenuItem{display:flex;align-items:center;width:100%}',
       '.pbx-navMenuItem>*{width:100%}',
@@ -4050,6 +4109,9 @@ window.__ModuleLoader__.load({
       '.pbx-pcardTotal{font-size:11px;color:var(--dsw-alias-label-secondary);background:var(--dsw-alias-bg-layer-2);border:1px solid var(--dsw-alias-border-l1);border-radius:999px;padding:0 6px;line-height:16px;flex:none}',
       '.pbx-pcardPath{font-size:10.5px;color:var(--dsw-alias-label-tertiary);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}',
       '.pbx-pcardStats{display:flex;align-items:center;gap:8px;flex-wrap:wrap;font-size:10.5px;color:var(--dsw-alias-label-secondary)}',
+      '.pbx-compactBack{display:inline-flex;align-items:center;justify-content:center;width:22px;height:22px;padding:0;border:none;background:transparent;color:var(--dsw-alias-label-secondary);border-radius:6px;cursor:pointer;flex:none}',
+      '.pbx-compactBack:hover{background:var(--dsw-alias-interactive-bg-hover);color:var(--dsw-alias-label-primary)}',
+      '.pbx-crow.archived{opacity:.72}',
       '.pbx-setSubTitle{font-size:11.5px;font-weight:600;color:var(--dsw-alias-label-secondary);margin:10px 0 2px;padding-top:8px;border-top:1px dashed color-mix(in srgb,var(--dsw-alias-border-l1) 70%,transparent)}',
       '.pbx-crow:hover{background:var(--dsw-alias-interactive-bg-hover)}',
       '.pbx-crow.auto{background:color-mix(in srgb,var(--dsw-alias-state-warn-primary) 5%,transparent)}',
