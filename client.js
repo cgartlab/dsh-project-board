@@ -1098,6 +1098,16 @@ window.__ModuleLoader__.load({
 
     const PALETTE = ['#e5484d', '#f76b15', '#f5b301', '#30a46c', '#0ea5e9', '#3e63dd', '#8e4ec6', '#e93d82', '#6e7781'];
     const ICONS = ['folder', 'code', 'briefcase', 'pen', 'flask', 'star', 'bolt', 'book', 'globe', 'grid'];
+
+    /* Spinning ring used everywhere a session is shown as running. */
+    function RunRing(props) {
+      const size = props.size || 9;
+      return h('span', {
+        className: 'pbx-runRing' + (props.className ? ' ' + props.className : ''),
+        style: { width: size + 'px', height: size + 'px' },
+        'aria-hidden': 'true'
+      });
+    }
     /* Project attributes that can be shown as columns in the board's project table. */
     const PROJECT_COLUMNS = [
       { key: 'total', labelKey: 'settings.pc.total', type: '#' },
@@ -1613,7 +1623,7 @@ window.__ModuleLoader__.load({
       };
 
       const statusPill = (info) => h('span', { className: 'pbx-statusPill', 'data-tone': info.tone },
-        h('span', { className: 'pbx-kdot', 'data-tone': info.tone }), t(info.labelKey));
+        info.tone === 'running' ? h(RunRing, { size: 8 }) : h('span', { className: 'pbx-kdot', 'data-tone': info.tone }), t(info.labelKey));
 
       const th = (key, label, type, options) => {
         const opts = options || {};
@@ -1639,7 +1649,7 @@ window.__ModuleLoader__.load({
         h('td', null, projectChip(row.workspaceId, row.workspaceLabel)),
         h('td', null, h('div', { className: 'pbx-titleCell' },
           row.auto ? h('span', { className: 'pbx-autoGlyph', title: t('kind.auto') }, h(Icon, { name: 'clock', size: 13 })) : null,
-          h('span', { className: 'pbx-rdot', 'data-tone': row.info.tone }),
+          row.info.tone === 'running' ? h(RunRing, { size: 9 }) : h('span', { className: 'pbx-rdot', 'data-tone': row.info.tone }),
           h('span', { className: 'pbx-titleText' }, row.title),
           row.current ? h('span', { className: 'pbx-curTag' }, t('card.current')) : null
         )),
@@ -1822,7 +1832,7 @@ window.__ModuleLoader__.load({
                       className: 'pbx-crow' + (row.auto ? ' auto' : '') + (row.archived ? ' archived' : '') + (row.info.tone === 'running' ? ' live' : ''),
                       title: t('card.open'), onClick: () => open(row.id)
                     },
-                      h('span', { className: 'pbx-rdot', 'data-tone': row.info.tone }),
+                      row.info.tone === 'running' ? h(RunRing, { size: 9 }) : h('span', { className: 'pbx-rdot', 'data-tone': row.info.tone }),
                       row.auto ? h('span', { className: 'pbx-autoGlyph' }, h(Icon, { name: 'clock', size: 12 })) : null,
                       h('span', { className: 'pbx-ctitle' }, row.title),
                       row.archived ? h('span', { className: 'pbx-prowArchived' }, t('palette.archived')) : null,
@@ -1963,7 +1973,7 @@ window.__ModuleLoader__.load({
           title: t('nav.openBoard') + ' · ' + comboDisplay(config.shortcuts.prev) + ' / ' + comboDisplay(config.shortcuts.next),
           onClick: () => { if (showBoard) openBoard(); }
         },
-          showStats ? h('span', { className: 'pbx-capStat' + (running > 0 ? ' live' : '') }, h('span', { className: 'pbx-liveDot' }), String(running)) : null,
+          showStats ? h('span', { className: 'pbx-capStat' + (running > 0 ? ' live' : '') }, running > 0 ? h(RunRing, { size: 8 }) : h('span', { className: 'pbx-liveDot' }), String(running)) : null,
           showStats && attention > 0 ? h('span', { className: 'pbx-capStat attn' }, h('span', { className: 'pbx-capDot' }), String(attention)) : null,
           showBoard ? h('span', { className: 'pbx-capBoard' }, h(Icon, { name: 'board', size: 14 }), t('nav.board')) : null
         ) : null
@@ -2663,7 +2673,7 @@ window.__ModuleLoader__.load({
                   onMouseEnter: () => setIndex(i),
                   onClick: () => choose(row)
                 },
-                  h('span', { className: 'pbx-rdot', 'data-tone': row.info.tone }),
+                  row.info.tone === 'running' ? h(RunRing, { size: 9 }) : h('span', { className: 'pbx-rdot', 'data-tone': row.info.tone }),
                   h('span', { className: 'pbx-prowTitle' }, row.title),
                   row.archived ? h('span', { className: 'pbx-prowArchived' }, t('palette.archived')) : null,
                   h('span', { className: 'pbx-prowMeta' },
@@ -3332,7 +3342,7 @@ window.__ModuleLoader__.load({
                 if (typeof openSession === 'function') openSession(row.id);
               }
             },
-              h('span', { className: 'pbx-rdot', 'data-tone': row.tone }),
+              row.tone === 'running' ? h(RunRing, { size: 9 }) : h('span', { className: 'pbx-rdot', 'data-tone': row.tone }),
               row.auto ? h('span', { className: 'pbx-hudAuto', title: t('kind.auto') }, h(Icon, { name: 'clock', size: 11 })) : null,
               h('span', { className: 'pbx-hudRowMain' },
                 h('span', { className: 'pbx-hudRowTitle' }, row.title),
@@ -3944,6 +3954,9 @@ window.__ModuleLoader__.load({
       '.pbx-subText{font-size:11.5px;color:var(--dsw-alias-label-secondary);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:360px}',
       '.pbx-twoLine{display:flex;flex-direction:column;min-width:0;gap:1px}',
       '.pbx-rdot{width:8px;height:8px;border-radius:50%;flex:none}',
+      '.pbx-runRing{display:inline-block;position:relative;flex:none;border-radius:50%;box-sizing:border-box;border:1.6px solid color-mix(in srgb,var(--dsw-alias-brand-primary) 22%,transparent)}',
+      '.pbx-runRing::after{content:"";position:absolute;inset:-1.6px;border-radius:50%;border:1.6px solid transparent;border-top-color:var(--dsw-alias-brand-primary);animation:pbxRunSpin .85s linear infinite}',
+      '@keyframes pbxRunSpin{to{transform:rotate(360deg)}}',
       '.pbx-kdot{width:7px;height:7px;border-radius:50%;flex:none}',
       '.pbx-rdot[data-tone=running],.pbx-kdot[data-tone=running]{background:#2f6fed;box-shadow:0 0 0 0 rgba(47,111,237,.55);animation:pbxRunningDotPulse 1.6s ease-out infinite}',
       '.pbx-rdot[data-tone=attention],.pbx-kdot[data-tone=attention]{background:#f59e0b}',
@@ -4282,7 +4295,7 @@ window.__ModuleLoader__.load({
       '@keyframes pbxPaletteOut{from{opacity:1;transform:none}to{opacity:0;transform:translateY(-6px) scale(.99)}}',
       '@keyframes pbxBackdropIn{from{opacity:0}to{opacity:1}}',
       '@keyframes pbxPaletteIn{from{opacity:0;transform:translateY(-10px) scale(.985)}to{opacity:1;transform:translateY(0) scale(1)}}',
-      '@media (prefers-reduced-motion: reduce){.pbx-kdot,.pbx-rdot,.pbx-statusPill,.pbx-liveDot,.pbx-palette,.pbx-paletteBackdrop,.pbx-renameBackdrop,.pbx-renameCard,.pbx-toast,.pbx-notifCard,.pbx-hud,.pbx-hudInner,.pbx-hudRow,.pbx-prow,.pbx-user-jump-highlight{animation:none!important}}'
+      '@media (prefers-reduced-motion: reduce){.pbx-runRing::after,.pbx-kdot,.pbx-rdot,.pbx-statusPill,.pbx-liveDot,.pbx-palette,.pbx-paletteBackdrop,.pbx-renameBackdrop,.pbx-renameCard,.pbx-toast,.pbx-notifCard,.pbx-hud,.pbx-hudInner,.pbx-hudRow,.pbx-prow,.pbx-user-jump-highlight{animation:none!important}}'
     ].join('\n');
 
     /* ----------------------------------------------------------------- apply */
