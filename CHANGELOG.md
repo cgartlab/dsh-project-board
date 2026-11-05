@@ -4,6 +4,26 @@ All notable changes to this project are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the project uses
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.0.3] - 2026-11-05
+
+### Changed
+
+- On macOS every user-visible shortcut label now uses the host symbols `⌥` (Option), `⌃`,
+  `⇧` and `⌘` instead of `Alt` / `Ctrl` / `Shift` / `Meta`; Windows/Linux labels are
+  unchanged.
+- Settings help text and both READMEs name the Option and Command keys explicitly (with
+  their Windows equivalents), and the shortcut tables use macOS notation.
+
+### Notes
+
+- Bindings stay platform-neutral: `alt` is the physical Option key's `altKey` on macOS, so
+  saved shortcuts and DSH built-in conflict checks need no migration.
+
+### Added
+
+- Load tests cover macOS vs Windows shortcut labels and assert the stored bindings did not
+  change.
+
 ## [1.0.2] - 2026-11-05
 
 ### Fixed

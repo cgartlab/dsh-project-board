@@ -31,19 +31,21 @@ reading, and desktop-class task notifications.
 
 ## Keyboard shortcuts
 
-Every shortcut is configurable in **Settings → 项目看板设置**. Defaults:
+Every shortcut is configurable in **Settings → 项目看板设置**. Defaults below use macOS
+notation: `⌥` is the **Option** key (the plugin's `alt` modifier) and `⌘` is Command. On
+Windows/Linux the same bindings are shown as `Alt+…` / `Meta+…` and use those physical keys.
 
 | Shortcut | Action |
 | --- | --- |
-| `Alt+K` | Search sessions |
-| `Alt+I` / `Alt+,` | Previous / next session |
-| `Alt+U` / `Alt+M` | Previous / next user instruction (tap to jump, hold to scroll) |
-| `Alt+S` | Scroll to bottom and focus the composer |
-| `Alt+D` | Session actions dialog (archive, cancel a running turn, delete where supported) |
-| `Alt+N` / `Alt+B` / `Alt+V` | Board at narrow / medium / fullscreen; same key closes |
-| `Alt+R` | Rename the current session |
-| `Alt+E` | Collapse / expand the floating session list |
-| `Alt+Enter` | Steer the earliest queued message into the running turn |
+| `⌥+K` | Search sessions |
+| `⌥+I` / `⌥+,` | Previous / next session |
+| `⌥+U` / `⌥+M` | Previous / next user instruction (tap to jump, hold to scroll) |
+| `⌥+S` | Scroll to bottom and focus the composer |
+| `⌥+D` | Session actions dialog (archive, cancel a running turn, delete where supported) |
+| `⌥+N` / `⌥+B` / `⌥+V` | Board at narrow / medium / fullscreen; same key closes |
+| `⌥+R` | Rename the current session |
+| `⌥+E` | Collapse / expand the floating session list |
+| `⌥+Enter` | Steer the earliest queued message into the running turn |
 
 ## Requirements
 

@@ -10,6 +10,21 @@ window.__ModuleLoader__.load({
     const BOARD_ID = '@local/dsh-project-board/tab';
     const BOARD_KIND = 'projectBoard';
     const SETTINGS_KEY = 'dsh.project-board.settings.v1';
+    /** There is no Alt key on macOS: the physical Option (⌥) key reports as `altKey`, and
+        Command (⌘) reports as `metaKey`. Bindings stay platform-neutral; only the label
+        shown to the user follows the host platform. */
+    const IS_MAC = (() => {
+      try {
+        const nav = window.navigator || {};
+        const platform = (nav.userAgentData && nav.userAgentData.platform) || nav.platform || '';
+        if (platform) return /mac/i.test(String(platform)) && !/iphone|ipad|ipod/i.test(String(platform));
+        const ua = nav.userAgent || '';
+        return /mac/i.test(ua) && !/iphone|ipad|ipod/i.test(ua);
+      } catch (error) { return false; }
+    })();
+    const MODIFIER_LABELS = IS_MAC
+      ? { ctrl: '⌃', meta: '⌘', alt: '⌥', shift: '⇧' }
+      : { ctrl: 'Ctrl', meta: 'Meta', alt: 'Alt', shift: 'Shift' };
     const SHORTCUT_LABEL_KEYS = {
       palette: 'settings.shortcut.palette',
       prev: 'settings.shortcut.prev',
@@ -67,7 +82,7 @@ window.__ModuleLoader__.load({
       return out;
     }
     /** Older builds shipped overlapping defaults (scroll-to-bottom and the session menu both
-        on Alt+D); repaired saved settings keep one owner per combination. */
+        on Option+D); repaired saved settings keep one owner per combination. */
     function healShortcutConflicts(shortcuts) {
       const defaults = DEFAULT_SETTINGS.shortcuts;
       const owners = new Map();
@@ -113,6 +128,7 @@ window.__ModuleLoader__.load({
       if (event.shiftKey) parts.push('shift');
       const code = typeof event.code === 'string' ? event.code : '';
       if (!code) return '';
+      /* Physical modifier codes: macOS Option keys are still reported as AltLeft/AltRight. */
       if (/^(Control|Alt|Shift|Meta)(Left|Right)$/.test(code)) return '';
       return parts.concat(code).join('+');
     }
@@ -128,7 +144,7 @@ window.__ModuleLoader__.load({
       else if (code === 'Space') label = 'Space';
       else if (code === 'ArrowUp') label = '↑';
       else if (code === 'ArrowDown') label = '↓';
-      const mods = parts.map((part) => part === 'ctrl' ? 'Ctrl' : part === 'meta' ? 'Meta' : part === 'alt' ? 'Alt' : 'Shift');
+      const mods = parts.map((part) => MODIFIER_LABELS[part] || part);
       return mods.concat(label).join('+');
     }
     function comboHasModifier(combo) {
@@ -951,13 +967,13 @@ window.__ModuleLoader__.load({
       'menu.deleteUnavailable': '当前 DSH 客户端未开放会话删除接口，请使用归档。',
       'menu.failed': '操作失败：{message}',
       'menu.busy': '处理中…',
-      'settings.shortcut.hint': '点击键帽后按下新的组合键；必须包含 Ctrl / Alt / Meta，Esc 取消。与 DSH 内置命令冲突时会拒绝录制并弹出提示。',
-      'settings.shortcutNeedModifier': '快捷键必须包含 Ctrl、Alt 或 Meta，不能使用裸键。',
+      'settings.shortcut.hint': '点击键帽后按下新的组合键；必须包含 Ctrl / Option（⌥，Windows 为 Alt）/ Command（⌘，Windows 为 Meta），Esc 取消。与 DSH 内置命令冲突时会拒绝录制并弹出提示。',
+      'settings.shortcutNeedModifier': '快捷键必须包含 Ctrl、Option（Windows 为 Alt）或 Command（Windows 为 Meta），不能使用裸键。',
       'settings.shortcutConflict': '该组合键已被其他功能占用，请换一个。',
       'settings.shortcutResetHint': '点击录制，双击恢复默认',
       'settings.recording': '按下按键…',
       'settings.behavior': '界面与行为',
-      'settings.paletteEnabled': '启用命令面板', 'settings.paletteEnabledDesc': 'Alt+K 等快捷键与搜索面板',
+      'settings.paletteEnabled': '启用命令面板', 'settings.paletteEnabledDesc': '搜索面板与快捷键',
       'settings.capsuleEnabled': '启用顶部状态胶囊', 'settings.capsuleEnabledDesc': '标题栏显示运行中/待处理数量',
       'settings.headerButtons': '顶部功能按钮',
       'settings.headerPlacement': '按钮显示位置', 'settings.placement.header': '顶部标题栏', 'settings.placement.composer': '输入框下方状态信息下方',
@@ -1062,8 +1078,8 @@ window.__ModuleLoader__.load({
       'menu.deleteUnavailable': 'This DSH client does not expose session deletion yet. Use archive instead.',
       'menu.failed': 'Failed: {message}',
       'menu.busy': 'Working…',
-      'settings.shortcut.hint': 'Click a keycap, then press the new combination; Ctrl / Alt / Meta is required; Esc cancels. Combinations that clash with built-in DSH commands are rejected with a notice.',
-      'settings.shortcutNeedModifier': 'A shortcut must include Ctrl, Alt, or Meta; bare keys are not allowed.',
+      'settings.shortcut.hint': 'Click a keycap, then press the new combination; Ctrl / Option (⌥; Alt on Windows) / Command (⌘) is required; Esc cancels. Combinations that clash with built-in DSH commands are rejected with a notice.',
+      'settings.shortcutNeedModifier': 'A shortcut must include Ctrl, Option (Alt on Windows), or Command (Meta on Windows); bare keys are not allowed.',
       'settings.shortcutConflict': 'That combination is already used by another action.',
       'settings.shortcutResetHint': 'Click to record, double-click to reset',
       'settings.recording': 'Press keys…',
@@ -1769,12 +1785,12 @@ window.__ModuleLoader__.load({
       const nodes = {
         switch: showSwitch ? h('button', {
           type: 'button', className: 'pbx-navSwitch' + (open ? ' active' : ''),
-          title: t('nav.switch') + ' (' + (comboDisplay(config.shortcuts.palette) || 'Alt+K') + ')' + (title ? ' · ' + title : ''),
+          title: t('nav.switch') + ' (' + comboDisplay(config.shortcuts.palette || DEFAULT_SETTINGS.shortcuts.palette) + ')' + (title ? ' · ' + title : ''),
           onClick: () => { if (palette) palette.set({ open: true }); }
         },
           h(Icon, { name: 'search', size: 14 }),
           h('span', { className: 'pbx-navTitle' }, t('nav.switchLabel')),
-          h('kbd', { className: 'pbx-kbd' }, comboDisplay(config.shortcuts.palette) || 'Alt+K')
+          h('kbd', { className: 'pbx-kbd' }, comboDisplay(config.shortcuts.palette || DEFAULT_SETTINGS.shortcuts.palette))
         ) : null,
         historyNav: h('div', { className: 'pbx-navHistory' },
           h('button', { type: 'button', className: 'pbx-navSeg', title: t('settings.shortcut.userPrev') + ' (' + comboDisplay(config.shortcuts.userPrev) + ')', 'aria-label': t('settings.shortcut.userPrev'), onClick: () => jumpUserMessage(-1) }, h(Icon, { name: 'up', size: 14 })),
@@ -2555,7 +2571,7 @@ window.__ModuleLoader__.load({
         return undefined;
       }, [config.hud.enabled]);
 
-      /* Alt+E swaps the pill and the list with a short crossfade. */
+      /* Option+E (Alt+E on Windows) swaps the pill and the list with a short crossfade. */
       const configRef = useRef(config);
       configRef.current = config;
       useEffect(() => {

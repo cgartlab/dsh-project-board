@@ -64,7 +64,7 @@ function createReactStub() {
   };
 }
 
-function loadModule() {
+function loadModule(platform = 'test') {
   let captured = null;
   const localStorage = createLocalStorage();
   const document = createDocumentStub();
@@ -74,7 +74,7 @@ function loadModule() {
     innerWidth: 1440,
     innerHeight: 900,
     devicePixelRatio: 1,
-    navigator: { platform: 'test' },
+    navigator: { platform: platform },
     matchMedia: () => ({ matches: false, addEventListener() {}, removeEventListener() {} }),
     addEventListener() {},
     removeEventListener() {},
@@ -167,4 +167,45 @@ test('zh and en dictionaries expose the same keys', () => {
   const zh = Object.keys(translations.projectBoard.zh).sort();
   const en = Object.keys(translations.projectBoard.en).sort();
   assert.deepEqual(zh, en);
+});
+
+/** Render the header slot and return the serialized element tree for label assertions. */
+function headerLabels(platform) {
+  const { module, window, document } = loadModule(platform);
+  const { ctx, translations, registrations } = createContext(window, document);
+  module.apply(ctx);
+  const noop = () => {};
+  // DSH store hooks return the selected snapshot, not a React [value, setter] tuple.
+  const hook = (selector) => (selector ? selector(undefined) : undefined);
+  const entry = registrations.find((item) => item.spec.name === 'conversation.header.leading');
+  assert.ok(entry, 'header slot registered');
+  const wrapped = entry.component({
+    t: ctx.locale.bind('projectBoard'),
+    useSettings: hook, useSessions: hook, useSessionStatus: hook,
+    useWorkspaces: hook, usePalette: hook, useHeaderDrag: hook,
+    palette: { set: noop }, openBoard: noop, saveSettings: noop, headerDrag: {}
+  });
+  // HeaderLeading is a thin wrapper around HeaderButtons; render one level deeper.
+  const tree = typeof wrapped.type === 'function' ? wrapped.type(wrapped.props) : wrapped;
+  return { text: JSON.stringify(tree), translations };
+}
+
+test('macOS shows Option (⌥) shortcut labels; other platforms keep Alt', () => {
+  const mac = headerLabels('MacIntel');
+  assert.match(mac.text, /⌥\+K/, 'macOS keycap uses ⌥');
+  assert.doesNotMatch(mac.text, /Alt\+K/, 'macOS keycap does not say Alt');
+  assert.match(mac.translations.projectBoard.zh['settings.shortcut.hint'], /Option/);
+  assert.match(mac.translations.projectBoard.en['settings.shortcut.hint'], /Option/);
+
+  const win = headerLabels('Win32');
+  assert.match(win.text, /Alt\+K/, 'Windows keycap uses Alt');
+  assert.doesNotMatch(win.text, /⌥/, 'Windows keycap does not use macOS symbols');
+});
+
+test('bindings stay platform-neutral so saved shortcuts keep working', () => {
+  const fs = require('node:fs');
+  const source = fs.readFileSync(path.join(root, 'client.js'), 'utf8');
+  assert.match(source, /shortcuts:\s*\{\s*palette:\s*'alt\+KeyK'/);
+  assert.match(source, /if \(event\.altKey\) parts\.push\('alt'\)/);
+  assert.match(source, /part === 'ctrl' \? 'control' : part/);
 });

@@ -54,9 +54,11 @@ each action (see `DEFAULT_SETTINGS.shortcuts`). It is registered on mount and ga
 - an open dialog (`aria-modal="true"` present);
 - an open command palette.
 
-Hold-to-scroll (`Alt+U` / `Alt+M`) starts a `requestAnimationFrame` loop that resolves the
-live chat scroller each frame, prefetches older history when approaching the top, and
-falls back to anchor scrolling when a position write is reverted by the chat view.
+Hold-to-scroll (`⌥+U` / `⌥+M`, i.e. Option+U / Option+M on macOS; `Alt+U` / `Alt+M` on
+Windows/Linux) starts a `requestAnimationFrame` loop that resolves the live chat scroller
+each frame, prefetches older history when approaching the top, and falls back to anchor
+scrolling when a position write is reverted by the chat view. The stored bindings use the
+platform-neutral `alt` modifier, which macOS reports as the Option key.
 
 ## Notifications
 
