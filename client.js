@@ -1101,7 +1101,8 @@ window.__ModuleLoader__.load({
       up: ['M6 15l6-6 6 6'],
       down: ['M6 9l6 6 6-6'],
       bottom: ['M12 4v12', 'M7 11l5 5 5-5', 'M5 20h14'],
-      left: ['M19 12H5', 'M11 6l-6 6 6 6']
+      left: ['M19 12H5', 'M11 6l-6 6 6 6'],
+      archive: ['M12 4.5v7.5', 'M8.4 9L12 12.6 15.6 9', 'M4.5 13v4.5A2 2 0 0 0 6.5 19.5h11a2 2 0 0 0 2-2V13']
     };
     /* Icons copied verbatim from the DSH client’s own icon set (16px grid, 1px stroke) so the
        plugin speaks the product’s visual language instead of inventing its own shapes. */
@@ -1797,8 +1798,7 @@ window.__ModuleLoader__.load({
         ) : null,
         historyNav: h('div', { className: 'pbx-navHistory' },
           h('button', { type: 'button', className: 'pbx-navSeg', title: t('settings.shortcut.userPrev') + ' (' + comboDisplay(config.shortcuts.userPrev) + ')', 'aria-label': t('settings.shortcut.userPrev'), onClick: () => jumpUserMessage(-1) }, h(Icon, { name: 'up', size: 14 })),
-          h('button', { type: 'button', className: 'pbx-navSeg', title: t('settings.shortcut.userNext') + ' (' + comboDisplay(config.shortcuts.userNext) + ')', 'aria-label': t('settings.shortcut.userNext'), onClick: () => jumpUserMessage(1) }, h(Icon, { name: 'down', size: 14 })),
-          h('button', { type: 'button', className: 'pbx-navSeg', title: t('settings.shortcut.scrollBottom') + ' (' + comboDisplay(config.shortcuts.scrollBottom) + ')', 'aria-label': t('settings.shortcut.scrollBottom'), onClick: () => scrollToComposerAndFocus() }, h(Icon, { name: 'bottom', size: 14 }))
+          h('button', { type: 'button', className: 'pbx-navSeg', title: t('settings.shortcut.userNext') + ' (' + comboDisplay(config.shortcuts.userNext) + ')', 'aria-label': t('settings.shortcut.userNext'), onClick: () => jumpUserMessage(1) }, h(Icon, { name: 'down', size: 14 }))
         ),
         capsule: (showStats || showBoard) ? h('button', {
           type: 'button', className: 'pbx-capsule',
@@ -3075,7 +3075,7 @@ window.__ModuleLoader__.load({
                 className: 'pbx-hudArchive', role: 'button', tabIndex: -1, title: t('hud.archive'), 'aria-label': t('hud.archive'),
                 onClick: (event) => { event.stopPropagation(); archiveRow(row); },
                 onKeyDown: (event) => { event.stopPropagation(); }
-              }, h(Icon, { name: 'archive', size: 16 }))
+              }, h(Icon, { name: 'archive', size: 14, strokeWidth: 1.6 }))
             ))
           ))
         )
