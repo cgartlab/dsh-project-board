@@ -20,6 +20,7 @@
 - 悬浮列表不再遮挡顶部的会话标题栏：位置被限制在主内容区顶部以下，拖动和记忆位置都遵守。
 - 贴边吸附改为"只吸附、不自动收起"（覆盖 0.1.13 的旧行为）：松手后列表保持展开，想收起还是点标题栏的收起按钮或按 `Alt+E`。
 - 悬停出现的归档图标重画成"向下箭头 + 托盘"，不再像删除用的垃圾桶。
+- 列表顺序变化时（切换会话、会话状态变了、有新会话加入）会平滑地滑到新位置：被让位的会话轻轻挪开，不再"唰"地跳一下；拖动悬浮列表时不做这个动画，避免跟手打架。
 
 ## [0.1.13] - 2026-11-05
 
@@ -151,6 +152,7 @@
 [0.1.9]: https://github.com/cgartlab/dsh-project-board/releases/tag/v0.1.9
 [0.1.10]: https://github.com/cgartlab/dsh-project-board/releases/tag/v0.1.10
 [0.1.11]: https://github.com/cgartlab/dsh-project-board/releases/tag/v0.1.11
+
 
 
 

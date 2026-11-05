@@ -2464,6 +2464,7 @@ window.__ModuleLoader__.load({
       const prevDefaultCollapsedRef = useRef(config.hud.defaultCollapsed);
       const hudRef = useRef(null);
       const listContentRef = useRef(null);
+      const rowRectsRef = useRef(null);
       const [listHeight, setListHeight] = useState(0);
       const [listOverflow, setListOverflow] = useState(false);
       const [present, setPresent] = useState(false);
@@ -2582,6 +2583,35 @@ window.__ModuleLoader__.load({
         const next = Math.min(element.scrollHeight, hudListMaxHeight);
         setListHeight((previous) => Math.abs(previous - next) > 0.5 ? next : previous);
         setListOverflow((previous) => { const overflows = element.scrollHeight > hudListMaxHeight + 1; return previous === overflows ? previous : overflows; });
+      });
+      /* FLIP: when the rows reorder (e.g. after switching sessions) glide each row from its old
+         spot to the new one, so the others visibly make way instead of jumping. */
+      useLayoutEffectSafe(() => {
+        const container = listContentRef.current;
+        if (!container) return;
+        const nodes = container.querySelectorAll('[data-hud-id]');
+        const previous = rowRectsRef.current || new Map();
+        const next = new Map();
+        const reduce = typeof window.matchMedia === 'function' && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+        nodes.forEach((node) => {
+          const id = node.getAttribute('data-hud-id');
+          if (!id) return;
+          const top = node.offsetTop;
+          const left = node.offsetLeft;
+          next.set(id, { top: top, left: left });
+          const before = previous.get(id);
+          if (!before || reduce || dragging || typeof node.animate !== 'function') return;
+          const dy = before.top - top;
+          const dx = before.left - left;
+          if (Math.abs(dx) < 0.5 && Math.abs(dy) < 0.5) return;
+          try {
+            node.animate(
+              [{ transform: 'translate(' + dx + 'px,' + dy + 'px)' }, { transform: 'translate(0,0)' }],
+              { duration: 240, easing: 'cubic-bezier(.22,.82,.3,1)' }
+            );
+          } catch (error) { /* ignore */ }
+        });
+        rowRectsRef.current = next;
       });
       useEffect(() => {
         if (!dragging) return undefined;
