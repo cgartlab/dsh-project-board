@@ -2822,14 +2822,20 @@ window.__ModuleLoader__.load({
           if (!rect || rect.width < 60) return null;
           return rect.right;
         };
-        const dockPos = () => {
+        /* Keep the pill's original vertical spot and just slide it to the sidebar's right edge, so the
+           docked position corresponds to where it used to be instead of jumping to the corner. */
+        const dockPos = (anchor) => {
           const box = hudRef.current;
           const width = box ? box.offsetWidth : 120;
           const height = box ? box.offsetHeight : 34;
           const edge = sidebarRightEdge();
-          const fallback = Math.max(6, window.innerWidth - width - 12);
-          const x = edge == null ? fallback : Math.min(fallback, Math.max(6, edge + 6));
-          return { x: x, y: Math.max(6, window.innerHeight - height - 12) };
+          const fallbackX = Math.max(6, window.innerWidth - width - 12);
+          const x = edge == null ? fallbackX : Math.min(fallbackX, Math.max(6, edge + 8));
+          const minTop = hudContentTop() + 4;
+          const rect = box ? box.getBoundingClientRect() : null;
+          const anchorY = anchor && typeof anchor.y === 'number' ? anchor.y : (rect ? rect.top : minTop);
+          const y = Math.min(Math.max(minTop, anchorY), Math.max(minTop, window.innerHeight - height - 8));
+          return { x: x, y: y };
         };
         const dock = () => {
           if (autoDockRef.current) return;
@@ -2837,7 +2843,8 @@ window.__ModuleLoader__.load({
           sidebarSavedRef.current = { pos: posRef.current ? Object.assign({}, posRef.current) : null, collapsed: collapsedStateRef.current };
           setCollapsed(true);
           window.setTimeout(() => {
-            const next = dockPos();
+            const saved = sidebarSavedRef.current;
+            const next = dockPos(saved && saved.pos);
             posRef.current = next;
             setPos(next);
           }, 80);
@@ -2862,7 +2869,8 @@ window.__ModuleLoader__.load({
         };
         const onResize = () => {
           if (!autoDockRef.current) return;
-          const next = dockPos();
+          const saved = sidebarSavedRef.current;
+          const next = dockPos(saved && saved.pos);
           posRef.current = next;
           setPos(next);
         };
