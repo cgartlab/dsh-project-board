@@ -1,143 +1,124 @@
-# Changelog
+# 更新日志
 
-All notable changes to this project are documented here. The format follows
-[Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the project uses
-[Semantic Versioning](https://semver.org/spec/v2.0.0.html).
+这份日志用大白话记录每个版本"用起来有什么变化"，不写内部实现。
 
-## [1.0.11] - 2026-11-05
+版本号从 `0.1.0` 开始：小步走，每次改动都单独发一个版本，方便你对照着升级。
+日期按发布时间倒序排列，最新的在最上面。
 
-### Changed
+## [0.1.11] - 2026-11-05
 
-- The floating list marks running sessions with a fixed blue indicator dot (blue glow pulse and
-  blue timer) instead of the theme brand color, which rendered black or white in some themes.
+### 改了
 
-## [1.0.10] - 2026-11-05
+- 悬浮列表里"进行中"的会话，前面那个小圆点改成固定蓝色，还会轻轻发光。以前它跟着主题色走，
+  有些主题下是黑色或白色，看不出"正在跑"的感觉。
 
-### Added
+## [0.1.10] - 2026-11-05
 
-- Focusing the reply box moves the caret to the end when it already contains text, so typing
-  continues the existing draft instead of landing in the middle of it.
+### 新增
 
-## [1.0.9] - 2026-11-05
+- 切到输入框时，如果里面已经打了字，光标会自动落到文字最后。接着打字就是往下续写，
+  不会再插到句子中间。
 
-### Changed
+## [0.1.9] - 2026-11-05
 
-- Reverted the conversation-content search experiment. The search panel matches session and
-  project names only, as before.
+### 改了
 
-## [1.0.8] - 2026-11-05
+- 撤掉了"搜索会话内容"的尝试。搜索框只按会话名称和项目名匹配，干净直接，和之前一样。
 
-### Changed
+## [0.1.8] - 2026-11-05
 
-- `Alt+K` toggles the session search again: it opens the panel and closes it. Inside the
-  panel, `Alt+I` / `Alt+,` / `↑` / `↓` move the selection and `Enter` opens it.
+### 改了
 
-## [1.0.7] - 2026-11-05
+- `Alt+K` 就是搜索框的开关键：按一下打开，再按一下关掉。
+- 搜索框里用 `Alt+I`（上一个）、`Alt+,`（下一个）或上下方向键挑会话，`Enter` 打开，
+  `Esc` 关闭。
 
-### Changed
+## [0.1.7] - 2026-11-05
 
-- Switching sessions now keeps the board pane exactly as it was — open or closed, and at
-  the same size (narrow, half width or fullscreen). The session guard captures and restores
-  the pane presentation, not only its visibility.
+### 改了
 
-## [1.0.6] - 2026-11-05
+- 切换会话时，右侧项目面板保持原样：开着就还开着，关着就还关着，窄栏、半屏、全屏的宽度
+  也不变。以前每个会话会各记一份状态，切过去面板会突然变了样子。
 
-### Changed
+## [0.1.6] - 2026-11-05
 
-- In the session search, `Alt+,` (the next-session key) now moves the selection down,
-  matching `Alt+I` (up) and the arrow keys. The panel footer lists the keys.
+### 改了
 
-## [1.0.5] - 2026-11-05
+- 搜索框里，`Alt+,` 也能往下选会话了，和 `Alt+I`（往上）、上下方向键是一套操作。
 
-### Changed
+## [0.1.5] - 2026-11-05
 
-- In the session search panel, `Alt+I` and `Alt+K` move the selection up and down just like
-  the arrow keys, and `Enter` opens the highlighted session. A second `Alt+K` no longer
-  closes the panel, and session-switching shortcuts are ignored while it is open.
+### 改了
 
-## [1.0.4] - 2026-11-05
+- 搜索框打开时，`Alt+I` 往上、`Alt+K` 往下挑会话，`Enter` 打开，不用再摸方向键。
+  搜索框开着的时候，切换会话的快捷键会先让位，避免"想选结果却换了会话"。
 
-### Fixed
+## [0.1.4] - 2026-11-05
 
-- Hold-to-scroll (`Alt+U` / `Alt+M`) now works from any position: when the chat view is
-  holding a preserved scroll anchor, a wheel signal marks the reader gesture so held
-  scrolling can take over instead of being pulled back every frame.
-- The visible conversation is detected by its rendered turns, because a conversation flow
-  host can be `display: contents` with no box of its own; previously a hidden retained view
-  could win and the hold engine would scroll the wrong element.
+### 修复
 
-### Changed
+- 按住 `Alt+U` / `Alt+M` 滚动时，不会再被对话视图一把拉回原位；从任何位置按住都能滚。
+- 识别"当前对话"更准了：以前偶尔会滚到隐藏着的旧会话上，现在不会。
+- 按住 `Alt+M` 滚到最底部后，会自动把光标放进输入框，松手就能直接打字回复。
 
-- Holding `Alt+M` down to the end of the conversation now activates the composer: the input
-  is focused with the caret at the end, ready to type a reply.
+## [0.1.3] - 2026-11-05
 
-## [1.0.3] - 2026-11-05
+### 改了
 
-### Changed
+- 悬浮列表只有一条排序规则：进行中的排最前，然后依次是等待回答、已完成、空闲；同一组里
+  最近有动静的靠前。列表不再因为计时器变化而自己挪位置。
+- 当前会话和刚点开的会话，就在它本来的位置高亮，不会再被塞到列表末尾——切换时列表不跳。
+- `Alt+I` / `Alt+,` 循环切换会话的顺序，和悬浮列表看到的顺序完全一致。
 
-- The floating list uses one simple, stable order: active sessions (running, then waiting
-  for an answer, then finished) first, and within each group the most recent activity first.
-  Row positions no longer depend on internal timers, so a running session does not move
-  while it runs.
-- The current session and a just-opened session are listed at their natural position
-  instead of being appended to the end, so switching sessions highlights the new row
-  without reshuffling the list.
-- `Alt+I` / `Alt+,` cycle sessions in exactly the order shown in the floating list.
+## [0.1.2] - 2026-11-05
 
-## [1.0.2] - 2026-11-05
+### 改了
 
-### Changed
+- 项目面板的开关状态变回"全局一份"：切换会话只换对话，面板不会被顺带打开或关掉。
+  切换后一秒内你主动按开关键，也以你的操作为准。
 
-- The board pane's open/closed state is global again instead of per conversation: the
-  native right sidebar remembers that state per session, so a small guard now restores the
-  pane after a session switch. Switching sessions only switches the conversation; the board
-  stays exactly as the user left it, and an explicit board toggle right after a switch is
-  never overridden.
+## [0.1.1] - 2026-11-05
 
-## [1.0.1] - 2026-11-05
+### 修复
 
-### Fixed
+- `Alt+S` 能稳定回到对话底部了。之前它靠一次平滑滚动，容易被对话视图撤销；现在改成按对话
+  自带的"回到底部"按钮，再把位置固定住。
+- 修了老用户的历史设置问题：早期版本里"回到底部"和"会话操作"都绑在 `Alt+D` 上，导致
+  `Alt+S` 没反应。现在启动时会自动理顺，一个快捷键只归一个功能。
+- 回到底部时，不再把自己插件里的按钮当成对话自带的按钮误点。
 
-- `Alt+S` now returns to the bottom of the conversation reliably: it presses the chat
-  view's own "back to bottom" control and then pins the bottom position across animation
-  frames, instead of a single smooth `scrollTo` that the chat view reverted.
-- Saved settings that still carried the old overlapping defaults (scroll-to-bottom and the
-  session actions dialog both on `Alt+D`) are repaired once on load: each shortcut keeps a
-  single owner and falls back to its current default when it was the duplicate.
-- The scroll-to-bottom helper no longer mistakes the plugin's own composer button for the
-  chat view's native control.
+## [0.1.0] - 2026-11-05
 
-## [1.0.0] - 2026-11-05
+### 新增（第一个公开版本）
 
-### Added
+- **项目看板**：在 DSH 右侧栏里看所有会话和项目，支持搜索、按状态/类型/项目筛选、分组、
+  多列排序，每个项目还能挑颜色和图标。
+- **三种看板尺寸**：窄栏（380px）、半屏（50vw）、全屏，各有一个快捷键，按同一个键关掉。
+- **悬浮会话列表**：实时显示进行中的会话和计时，标出等待回答和自动化任务，可以拖动位置，
+  也能收起成一个小胶囊。
+- **搜索框**：键盘上下选择、按项目过滤、回车直达会话。
+- **键盘优先的会话操作**：上一个/下一个会话、重命名、会话操作弹窗（归档、取消正在跑的回合）、
+  给排队消息插话、跳到上一条/下一条用户指令，按住可连续滚动。
+- **按住滚动**：快滚到顶时自动加载更早的历史，加载期间不卡顿；位置被对话视图撤回时，
+  会按消息锚点一步步往上走。
+- **任务通知**：对话右下角弹卡片并响提示音，应用在后台时走系统通知；模型提问和权限请求
+  会把完整问题和选项都带出来。
+- **快捷键冲突检查**：启动时对照 DSH 内置命令，发现重复会提示，设置页里也能看到。
+- **设置页**：快捷键、看板、悬浮列表、顶部按钮、通知都能调。
 
-- Global project/session board rendered in DSH's native right sidebar, with session and
-  project database views, search, status/type/project filters, grouping, multi-column
-  sorting, and per-project color and icon.
-- Board presentations: narrow (380 px), medium (50 vw) and native fullscreen, opened and
-  closed from a single shortcut per width.
-- Floating session HUD with live timers, attention/automation markers, recent-session
-  rows, drag-to-move, and an animated pill/list collapse.
-- Search palette with keyboard navigation, project scoping and jump-to-session.
-- Keyboard-first session workflow: previous/next session, rename, session actions dialog
-  (archive, cancel a running turn), steer the earliest queued message, and
-  previous/next user-instruction jumps with hold-to-scroll.
-- Smooth hold-to-scroll conversation engine that prefetches older history one screen
-  before the boundary, keeps scrolling while history loads, re-resolves the live scroll
-  container, and falls back to anchor stepping when position writes are reverted.
-- Task notifications: in-app cards at the bottom-right of the conversation with a chime,
-  system notifications when the app is in the background, and full question/option text
-  for model questions and permission requests.
-- Shortcut conflict detection against the built-in DSH command catalog, with startup scan
-  and settings feedback.
-- Settings page covering shortcuts, board, HUD, header buttons and notifications.
+### 安全说明
 
-### Security
+- 仓库里不存任何账号密码或令牌；插件设置只放在 DSH 配置和浏览器本地存储里。
 
-- No credentials or secrets are stored in this repository; client-side settings live in
-  the DSH profile and localStorage only.
-
-[1.0.0]: https://github.com/cgartlab/dsh-project-board/releases/tag/v1.0.0
-
-
-
+[0.1.0]: https://github.com/cgartlab/dsh-project-board/releases/tag/v0.1.0
+[0.1.1]: https://github.com/cgartlab/dsh-project-board/releases/tag/v0.1.1
+[0.1.2]: https://github.com/cgartlab/dsh-project-board/releases/tag/v0.1.2
+[0.1.3]: https://github.com/cgartlab/dsh-project-board/releases/tag/v0.1.3
+[0.1.4]: https://github.com/cgartlab/dsh-project-board/releases/tag/v0.1.4
+[0.1.5]: https://github.com/cgartlab/dsh-project-board/releases/tag/v0.1.5
+[0.1.6]: https://github.com/cgartlab/dsh-project-board/releases/tag/v0.1.6
+[0.1.7]: https://github.com/cgartlab/dsh-project-board/releases/tag/v0.1.7
+[0.1.8]: https://github.com/cgartlab/dsh-project-board/releases/tag/v0.1.8
+[0.1.9]: https://github.com/cgartlab/dsh-project-board/releases/tag/v0.1.9
+[0.1.10]: https://github.com/cgartlab/dsh-project-board/releases/tag/v0.1.10
+[0.1.11]: https://github.com/cgartlab/dsh-project-board/releases/tag/v0.1.11
