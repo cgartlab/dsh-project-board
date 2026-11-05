@@ -875,7 +875,7 @@ window.__ModuleLoader__.load({
       'notif.multiSelect': '（可多选）',
       'notif.openHint': '点击打开会话',
       'notif.dismiss': '关闭通知',
-      'settings.shortcutHints': '显示快捷键提示', 'settings.shortcutHintsDesc': '在输入框下方状态信息中显示快捷键提示，可随时关闭',
+      'settings.shortcutHints': '显示快捷键提示', 'settings.shortcutHintsDesc': '在悬浮列表下方显示快捷键提示，鼠标悬停时点关闭即可收起',
       'hints.dismiss': '不再显示快捷键提示',
       'settings.hudDone': '悬浮窗包含已完成未读', 'settings.hudDoneDesc': '关闭后悬浮窗只显示运行中和待处理',
       'settings.hudRecent': '悬浮窗显示最近普通会话', 'settings.hudRecentDesc': '额外列出最近活跃的普通会话（可包含空闲）',
@@ -1001,7 +1001,7 @@ window.__ModuleLoader__.load({
       'notif.multiSelect': '(multiple selection allowed)',
       'notif.openHint': 'Click to open the session',
       'notif.dismiss': 'Dismiss notification',
-      'settings.shortcutHints': 'Show shortcut hints', 'settings.shortcutHintsDesc': 'Show shortcut hints with the composer status row; dismissible anytime',
+      'settings.shortcutHints': 'Show shortcut hints', 'settings.shortcutHintsDesc': 'Show shortcut hints under the floating list; hover and click the close button to hide them',
       'hints.dismiss': 'Never show shortcut hints',
       'settings.hudDone': 'Include completed-unread in floating status', 'settings.hudDoneDesc': 'When off, only running and attention appear',
       'settings.hudRecent': 'Show recent normal sessions', 'settings.hudRecentDesc': 'Also list recently active normal sessions (may be idle)',
@@ -3009,6 +3009,7 @@ window.__ModuleLoader__.load({
       const style = useSavedPosition ? { left: pos.x + 'px', top: pos.y + 'px' } : null;
       const className = 'pbx-hud' + (useSavedPosition ? ' moved' : ' default' + (positionMode === 'bottom-right' ? ' bottom' : '')) + (dragging ? ' dragging' : '') + (closing ? ' closing' : '');
       const runningCount = rows.filter((row) => row.tone === 'running').length;
+      const [hintsHidden, setHintsHidden] = useState(false);
       const archiveRow = async (row) => {
         if (!row || typeof props.archiveSession !== 'function') return;
         logEvent('info', 'hud', 'archive', { id: String(row.id || '').slice(-12) });
@@ -3077,7 +3078,24 @@ window.__ModuleLoader__.load({
                 onKeyDown: (event) => { event.stopPropagation(); }
               }, h(Icon, { name: 'archive', size: 14, strokeWidth: 1.6 }))
             ))
-          ))
+          )),
+          (!hintsHidden && config.hints && config.hints.shortcuts !== false) ? h('div', { className: 'pbx-hudFoot' },
+            h('div', { className: 'pbx-hudFootRow' },
+              h('span', { className: 'pbx-hudFootTitle' }, t('hud.groupSession')),
+              h('span', { className: 'pbx-hudFootItem' }, h('kbd', { className: 'pbx-hudKey' }, comboDisplay(config.shortcuts.prev)), h('span', { className: 'pbx-hudFootLabel' }, t('hud.prev'))),
+              h('span', { className: 'pbx-hudFootItem' }, h('kbd', { className: 'pbx-hudKey' }, comboDisplay(config.shortcuts.next)), h('span', { className: 'pbx-hudFootLabel' }, t('hud.next')))
+            ),
+            h('div', { className: 'pbx-hudFootRow' },
+              h('span', { className: 'pbx-hudFootTitle' }, t('hud.groupMessage')),
+              h('span', { className: 'pbx-hudFootItem' }, h('kbd', { className: 'pbx-hudKey' }, comboDisplay(config.shortcuts.userPrev)), h('span', { className: 'pbx-hudFootLabel' }, t('hud.prevInstruction'))),
+              h('span', { className: 'pbx-hudFootItem' }, h('kbd', { className: 'pbx-hudKey' }, comboDisplay(config.shortcuts.userNext)), h('span', { className: 'pbx-hudFootLabel' }, t('hud.nextInstruction'))),
+              h('span', { className: 'pbx-hudFootItem' }, h('kbd', { className: 'pbx-hudKey' }, comboDisplay(config.shortcuts.scrollBottom)), h('span', { className: 'pbx-hudFootLabel' }, t('hud.toBottom')))
+            ),
+            h('button', {
+              type: 'button', className: 'pbx-hudFootClose', title: t('hints.dismiss'), 'aria-label': t('hints.dismiss'),
+              onClick: (event) => { event.stopPropagation(); logEvent('debug', 'hud', 'hints hidden'); setHintsHidden(true); }
+            }, '×')
+          ) : null
         )
       );
     }
@@ -3800,12 +3818,16 @@ window.__ModuleLoader__.load({
       '.pbx-hudArchive:active{transform:translateY(-50%) scale(.92)}',
       '.pbx-prowArchived{font-size:10.5px;line-height:16px;padding:0 6px;border-radius:999px;background:color-mix(in srgb,var(--dsw-alias-label-secondary) 14%,transparent);color:var(--dsw-alias-label-secondary);flex:none;white-space:nowrap}',
       '.pbx-prow.archived .pbx-prowTitle{color:var(--dsw-alias-label-secondary)}',
-      '.pbx-hudFoot{display:flex;flex-direction:column;gap:5px;padding:8px 11px 9px;border-top:1px solid var(--dsw-alias-border-l1)}',
-      '.pbx-hudFootGroup{display:flex;align-items:center;gap:6px;min-width:0;flex-wrap:wrap}',
-      '.pbx-hudFootTitle{font-size:10px;font-weight:600;letter-spacing:.03em;color:var(--dsw-alias-label-tertiary);flex:none;min-width:22px}',
+      '.pbx-hudFoot{position:relative;display:flex;flex-direction:column;gap:4px;padding:7px 10px 8px;border-top:1px solid color-mix(in srgb,var(--dsw-alias-border-l1) 65%,transparent);opacity:.62;transition:opacity .16s ease}',
+      '.pbx-hudFoot:hover{opacity:1}',
+      '.pbx-hudFootRow{display:flex;align-items:center;gap:6px;flex-wrap:wrap;padding-right:16px;min-width:0}',
+      '.pbx-hudFootTitle{font-size:9.5px;font-weight:600;letter-spacing:.02em;color:var(--dsw-alias-label-tertiary);flex:none;min-width:26px}',
       '.pbx-hudFootItem{display:inline-flex;align-items:center;gap:3px;flex:none}',
-      '.pbx-hudKey{font-family:inherit;font-size:9.5px;line-height:13px;padding:1px 4px;border-radius:4px;border:1px solid var(--dsw-alias-border-l1);background:var(--dsw-alias-bg-layer-2);color:var(--dsw-alias-label-secondary)}',
-      '.pbx-hudFootLabel{font-size:10.5px;color:var(--dsw-alias-label-secondary)}',
+      '.pbx-hudKey{font-family:inherit;font-size:9px;line-height:12px;padding:0 3px;border-radius:var(--dsw-radius-xs);border:1px solid var(--dsw-alias-border-l1);background:var(--dsw-alias-bg-layer-2);color:var(--dsw-alias-label-secondary)}',
+      '.pbx-hudFootLabel{font-size:10px;color:var(--dsw-alias-label-secondary);white-space:nowrap}',
+      '.pbx-hudFootClose{position:absolute;right:5px;top:6px;width:16px;height:16px;display:inline-flex;align-items:center;justify-content:center;padding:0;border:none;border-radius:var(--dsw-radius-xs);background:transparent;color:var(--dsw-alias-label-tertiary);font:inherit;font-size:12px;line-height:1;cursor:pointer;opacity:0;pointer-events:none;transition:opacity .12s ease,background .12s ease,color .12s ease}',
+      '.pbx-hudFoot:hover .pbx-hudFootClose,.pbx-hudFootClose:focus-visible{opacity:1;pointer-events:auto}',
+      '.pbx-hudFootClose:hover{background:var(--dsw-alias-interactive-bg-hover);color:var(--dsw-alias-label-primary)}',
       '.pbx-hud.collapsed{display:inline-flex;align-items:center;gap:7px;width:auto;padding:6px 12px;border-radius:999px;background:color-mix(in srgb,var(--dsw-alias-bg-overlay) 88%,transparent);backdrop-filter:blur(24px) saturate(1.35);-webkit-backdrop-filter:blur(24px) saturate(1.35);border:1px solid var(--dsw-alias-border-l1);cursor:pointer;font:inherit;color:var(--dsw-alias-label-primary);transition:transform .18s ease,box-shadow .18s ease;animation:pbxHudPillIn .2s ease both}',
       '.pbx-hudPillIcon{width:19px;height:19px;border-radius:6px;display:inline-flex;align-items:center;justify-content:center;flex:none;background:color-mix(in srgb,var(--dsw-alias-label-secondary) 13%,transparent);color:var(--dsw-alias-label-secondary);transition:background .18s ease,color .18s ease,box-shadow .18s ease}',
       '.pbx-hudPillIcon.live{background:rgba(47,111,237,.16);color:#2f6fed;box-shadow:0 0 0 0 rgba(47,111,237,.45);animation:pbxPillIconPulse 2.2s ease-out infinite}',
@@ -4350,11 +4372,6 @@ window.__ModuleLoader__.load({
         name: 'conversation.session.header.utilities', id: 'project-board-header-right', order: 40, locale: NS,
         inject: () => ({ openSession: openSession, openBoard: openBoard, palette: paletteStore, saveSettings: writeSettings, headerDrag: headerDragStore, hooks: { palette: paletteStore, settings: settingsStore, headerDrag: headerDragStore } })
       }, HeaderUtilities));
-
-      ctx.slots.inject('conversation.composer.dock', () => ctx.slots.register({
-        name: 'conversation.composer.dock', id: 'project-board-shortcut-hints', order: 90, locale: NS,
-        inject: () => ({ saveSettings: writeSettings, hooks: { settings: settingsStore } })
-      }, ShortcutHints));
 
       ctx.slots.inject('conversation.composer.dock', () => ctx.slots.register({
         name: 'conversation.composer.dock', id: 'project-board-buttons', order: 100, locale: NS,
