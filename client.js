@@ -2808,16 +2808,28 @@ window.__ModuleLoader__.load({
       useEffect(() => {
         if (config.hud.enabled === false) return undefined;
         let last = null;
+        const frameNow = () => document.querySelector('[class*="_frame"][style*="grid-template-columns"]') || document.querySelector('[data-sidebar-collapsed]');
         const readExpanded = () => {
-          const frame = document.querySelector('[class*="_frame"][style*="grid-template-columns"]') || document.querySelector('[data-sidebar-collapsed]');
+          const frame = frameNow();
           if (!frame) return null;
           return !frame.hasAttribute('data-sidebar-collapsed');
+        };
+        /* Right edge of the native session list, so the pill hugs that column instead of the window. */
+        const sidebarRightEdge = () => {
+          const frame = frameNow();
+          const column = document.querySelector('[class*="_sidebarCol"]') || (frame && frame.firstElementChild);
+          const rect = column ? column.getBoundingClientRect() : null;
+          if (!rect || rect.width < 60) return null;
+          return rect.right;
         };
         const dockPos = () => {
           const box = hudRef.current;
           const width = box ? box.offsetWidth : 120;
           const height = box ? box.offsetHeight : 34;
-          return { x: Math.max(6, window.innerWidth - width - 12), y: Math.max(6, window.innerHeight - height - 12) };
+          const edge = sidebarRightEdge();
+          const fallback = Math.max(6, window.innerWidth - width - 12);
+          const x = edge == null ? fallback : Math.min(fallback, Math.max(6, edge + 6));
+          return { x: x, y: Math.max(6, window.innerHeight - height - 12) };
         };
         const dock = () => {
           if (autoDockRef.current) return;
