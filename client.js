@@ -764,7 +764,7 @@ window.__ModuleLoader__.load({
       'nav.switch': '切换会话', 'nav.switchLabel': '会话', 'nav.noSession': '未选择会话', 'nav.board': '看板', 'nav.openBoard': '打开项目看板', 'nav.cycle': 'Alt+I 上一个 · Alt+, 下一个',
       'rightTab.title': '项目看板', 'compact.full': '全屏打开',
       'palette.placeholder': '搜索会话或项目…', 'palette.allProjects': '全部项目', 'palette.empty': '没有匹配的会话', 'palette.hint': '↑↓ / Alt+I / Alt+, 选择 · Enter 打开 · Alt+K/Esc 关闭',
-      'hud.title': '活跃与最近会话', 'hud.collapsed': '活跃', 'hud.expand': '展开', 'hud.collapse': '收起', 'hud.empty': '当前没有非空闲会话', 'hud.prev': '上一个', 'hud.next': '下一个', 'hud.recent': '最近',
+      'hud.title': '活跃与最近会话', 'hud.collapsed': '活跃', 'hud.running': '进行中', 'hud.expand': '展开', 'hud.collapse': '收起', 'hud.empty': '当前没有非空闲会话', 'hud.prev': '上一个', 'hud.next': '下一个', 'hud.recent': '最近',
       'hud.groupSession': '会话', 'hud.groupMessage': '指令', 'hud.prevInstruction': '上一条', 'hud.nextInstruction': '下一条', 'hud.toBottom': '到底部', 'hud.auto': '自动化',
       'settings.title': '项目看板设置',
       'settings.intro': '自定义项目看板的快捷键、悬浮窗与视图行为。',
@@ -871,7 +871,7 @@ window.__ModuleLoader__.load({
       'nav.switch': 'Switch session', 'nav.switchLabel': 'Sessions', 'nav.noSession': 'No session', 'nav.board': 'Board', 'nav.openBoard': 'Open project board', 'nav.cycle': 'Alt+I previous · Alt+, next',
       'rightTab.title': 'Project Board', 'compact.full': 'Open full screen',
       'palette.placeholder': 'Search sessions or projects…', 'palette.allProjects': 'All projects', 'palette.empty': 'No matching sessions', 'palette.hint': '↑↓ or Alt+I / Alt+, select · Enter open · Alt+K/Esc close',
-      'hud.title': 'Active & recent', 'hud.collapsed': 'Active', 'hud.expand': 'Expand', 'hud.collapse': 'Collapse', 'hud.empty': 'No active sessions', 'hud.prev': 'Previous', 'hud.next': 'Next', 'hud.recent': 'Recent',
+      'hud.title': 'Active & recent', 'hud.collapsed': 'Active', 'hud.running': 'running', 'hud.expand': 'Expand', 'hud.collapse': 'Collapse', 'hud.empty': 'No active sessions', 'hud.prev': 'Previous', 'hud.next': 'Next', 'hud.recent': 'Recent',
       'hud.groupSession': 'Session', 'hud.groupMessage': 'Instruction', 'hud.prevInstruction': 'Previous', 'hud.nextInstruction': 'Next', 'hud.toBottom': 'Bottom', 'hud.auto': 'Auto',
       'settings.title': 'Project Board settings',
       'settings.intro': 'Customize shortcuts, floating status, and board behavior.',
@@ -2707,9 +2707,8 @@ window.__ModuleLoader__.load({
       const style = useSavedPosition ? { left: pos.x + 'px', top: pos.y + 'px' } : null;
       const className = 'pbx-hud' + (useSavedPosition ? ' moved' : ' default' + (positionMode === 'bottom-right' ? ' bottom' : '')) + (dragging ? ' dragging' : '') + (closing ? ' closing' : '');
       const runningCount = rows.filter((row) => row.tone === 'running').length;
-      const attentionCount = rows.filter((row) => row.tone === 'attention').length;
       if (collapsed) {
-        const pillTone = attentionCount > 0 ? ' attention' : (runningCount > 0 ? ' live' : '');
+        const pillTone = runningCount > 0 ? ' live' : '';
         return h('button', {
           ref: hudRef, type: 'button', className: className + ' collapsed', style: style, title: t('hud.expand'),
           onPointerDown: onDragStart,
@@ -2720,8 +2719,8 @@ window.__ModuleLoader__.load({
           }
         },
           h('span', { className: 'pbx-hudPillIcon' + pillTone }, h(Icon, { name: 'grid', size: 12, strokeWidth: 1.9 })),
-          h('span', { className: 'pbx-hudPillText' }, String(rows.length)),
-          h('span', { className: 'pbx-hudPillLabel' }, t('hud.collapsed'))
+          h('span', { className: 'pbx-hudPillText' }, String(runningCount)),
+          h('span', { className: 'pbx-hudPillLabel' }, t('hud.running'))
         );
       }
       return h('div', { ref: hudRef, className: className, style: style },
