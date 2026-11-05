@@ -2685,7 +2685,10 @@ window.__ModuleLoader__.load({
       const useSavedPosition = Boolean(pos) && (positionMode === 'last' || dragging || hasDragged);
       const style = useSavedPosition ? { left: pos.x + 'px', top: pos.y + 'px' } : null;
       const className = 'pbx-hud' + (useSavedPosition ? ' moved' : ' default' + (positionMode === 'bottom-right' ? ' bottom' : '')) + (dragging ? ' dragging' : '') + (closing ? ' closing' : '');
+      const runningCount = rows.filter((row) => row.tone === 'running').length;
+      const attentionCount = rows.filter((row) => row.tone === 'attention').length;
       if (collapsed) {
+        const pillTone = attentionCount > 0 ? ' attention' : (runningCount > 0 ? ' live' : '');
         return h('button', {
           ref: hudRef, type: 'button', className: className + ' collapsed', style: style, title: t('hud.expand'),
           onPointerDown: onDragStart,
@@ -2695,7 +2698,7 @@ window.__ModuleLoader__.load({
             try { window.localStorage.setItem(HUD_COLLAPSE_KEY, '0'); } catch (error) { /* ignore */ }
           }
         },
-          h('span', { className: 'pbx-liveDot on' }),
+          h('span', { className: 'pbx-hudPillIcon' + pillTone }, h(Icon, { name: 'grid', size: 12, strokeWidth: 1.9 })),
           h('span', { className: 'pbx-hudPillText' }, String(rows.length)),
           h('span', { className: 'pbx-hudPillLabel' }, t('hud.collapsed'))
         );
@@ -3402,7 +3405,12 @@ window.__ModuleLoader__.load({
       '.pbx-hudKey{font-family:inherit;font-size:9.5px;line-height:13px;padding:1px 4px;border-radius:4px;border:1px solid var(--dsw-alias-border-l1);background:var(--dsw-alias-bg-layer-2);color:var(--dsw-alias-label-secondary)}',
       '.pbx-hudFootLabel{font-size:10.5px;color:var(--dsw-alias-label-secondary)}',
       '.pbx-hud.collapsed{display:inline-flex;align-items:center;gap:6px;width:auto;padding:7px 11px;border-radius:999px;background:color-mix(in srgb,var(--dsw-alias-bg-overlay) 84%,transparent);backdrop-filter:blur(24px) saturate(1.35);-webkit-backdrop-filter:blur(24px) saturate(1.35);border:1px solid var(--dsw-alias-border-l1);cursor:pointer;font:inherit;color:var(--dsw-alias-label-primary);animation:pbxHudPillIn .2s ease both}',
-      '.pbx-hudPillText{font-size:12px;font-weight:600;font-variant-numeric:tabular-nums}',
+      '.pbx-hudPillIcon{width:20px;height:20px;border-radius:7px;display:inline-flex;align-items:center;justify-content:center;flex:none;background:color-mix(in srgb,var(--dsw-alias-label-secondary) 13%,transparent);color:var(--dsw-alias-label-secondary);transition:background .18s ease,color .18s ease,box-shadow .18s ease}',
+      '.pbx-hudPillIcon.live{background:rgba(47,111,237,.16);color:#2f6fed;box-shadow:0 0 0 0 rgba(47,111,237,.45);animation:pbxPillIconPulse 2.2s ease-out infinite}',
+      '.pbx-hudPillIcon.attention{background:color-mix(in srgb,var(--dsw-alias-state-error-primary) 16%,transparent);color:var(--dsw-alias-state-error-primary)}',
+      '.pbx-hud.collapsed:hover .pbx-hudPillIcon{background:color-mix(in srgb,var(--dsw-alias-label-secondary) 20%,transparent)}',
+      '.pbx-hud.collapsed:hover .pbx-hudPillIcon.live{background:rgba(47,111,237,.24)}',
+      '@keyframes pbxPillIconPulse{0%{box-shadow:0 0 0 0 rgba(47,111,237,.42)}70%{box-shadow:0 0 0 5px rgba(47,111,237,0)}100%{box-shadow:0 0 0 0 rgba(47,111,237,0)}}',
       '.pbx-hudPillLabel{font-size:11.5px;color:var(--dsw-alias-label-secondary)}',
       '.pbx-responsive{height:100%;min-height:0;display:flex;flex-direction:column}',
       '.pbx-responsive>.pbx-root{flex:1;min-height:0}',

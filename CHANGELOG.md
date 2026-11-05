@@ -5,6 +5,10 @@
 版本号从 `0.1.0` 开始：小步走，每次改动都单独发一个版本，方便你对照着升级。
 日期按发布时间倒序排列，最新的在最上面。
 
+## [未发布]
+
+- 悬浮列表收起后的小胶囊加了图标徽标：有会话在跑时是蓝色并带轻微呼吸光，等待回答时变红色；整体更精致、也更好认。
+
 ## [0.1.13] - 2026-11-05
 
 ### 新增
@@ -135,5 +139,6 @@
 [0.1.9]: https://github.com/cgartlab/dsh-project-board/releases/tag/v0.1.9
 [0.1.10]: https://github.com/cgartlab/dsh-project-board/releases/tag/v0.1.10
 [0.1.11]: https://github.com/cgartlab/dsh-project-board/releases/tag/v0.1.11
+
 
 
