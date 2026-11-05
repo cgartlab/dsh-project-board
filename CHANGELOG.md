@@ -4,6 +4,13 @@ All notable changes to this project are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the project uses
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.0.10] - 2026-11-05
+
+### Added
+
+- Focusing the reply box moves the caret to the end when it already contains text, so typing
+  continues the existing draft instead of landing in the middle of it.
+
 ## [1.0.9] - 2026-11-05
 
 ### Changed
@@ -124,4 +131,5 @@ All notable changes to this project are documented here. The format follows
   the DSH profile and localStorage only.
 
 [1.0.0]: https://github.com/cgartlab/dsh-project-board/releases/tag/v1.0.0
+
 

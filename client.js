@@ -678,6 +678,29 @@ window.__ModuleLoader__.load({
       return null;
     }
 
+    /** Put the caret at the end of a composer input, for textarea and contenteditable alike. */
+    function moveCaretToEnd(input) {
+      if (!input) return false;
+      try {
+        if (typeof input.value === 'string' && typeof input.setSelectionRange === 'function') {
+          const end = input.value.length;
+          input.setSelectionRange(end, end);
+          return true;
+        }
+        if (input.isContentEditable) {
+          const range = document.createRange();
+          range.selectNodeContents(input);
+          range.collapse(false);
+          const selection = window.getSelection();
+          if (!selection) return false;
+          selection.removeAllRanges();
+          selection.addRange(range);
+          return true;
+        }
+      } catch (error) { /* ignore */ }
+      return false;
+    }
+
     /** Focus the conversation composer and put the caret at the end, without scrolling. */
     function focusComposerInput() {
       const card = document.querySelector('[data-composer-card]');
@@ -690,10 +713,7 @@ window.__ModuleLoader__.load({
       }
       if (!input) return false;
       try { input.focus({ preventScroll: true }); } catch (error) { /* ignore */ }
-      if (typeof input.value === 'string' && typeof input.setSelectionRange === 'function') {
-        const end = input.value.length;
-        try { input.setSelectionRange(end, end); } catch (error) { /* ignore */ }
-      }
+      moveCaretToEnd(input);
       return true;
     }
 
@@ -3476,6 +3496,30 @@ window.__ModuleLoader__.load({
         presetSource = created.source;
         return () => { presetSource = null; created.dispose(); };
       }, 'project-board: agent presets');
+
+      /* Whenever focus lands in the composer with existing text, put the caret at the end.
+         The click that focuses the textarea places the caret after focusin, so re-apply once
+         more on the next ticks instead of only before the click lands. */
+      ctx.effect(() => {
+        const onFocusIn = (event) => {
+          try {
+            const target = event && event.target;
+            if (!target || typeof target.matches !== 'function') return;
+            if (!target.matches('textarea, [contenteditable="true"]')) return;
+            const rect = target.getBoundingClientRect();
+            if (rect.width < 8 || rect.height < 8) return;
+            const hasText = typeof target.value === 'string'
+              ? target.value.length > 0
+              : Boolean(target.textContent && target.textContent.trim().length > 0);
+            if (!hasText) return;
+            moveCaretToEnd(target);
+            window.setTimeout(() => moveCaretToEnd(target), 0);
+            window.setTimeout(() => moveCaretToEnd(target), 140);
+          } catch (error) { /* ignore */ }
+        };
+        document.addEventListener('focusin', onFocusIn, true);
+        return () => document.removeEventListener('focusin', onFocusIn, true);
+      }, 'project-board: composer caret');
 
       const uiWorkspace = ctx.get('uiWorkspace');
       const shortcutsService = ctx.get('shortcuts');
