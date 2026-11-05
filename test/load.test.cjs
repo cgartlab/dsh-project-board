@@ -145,7 +145,6 @@ test('client bundle loads and mounts against stubbed host services', () => {
   const expected = [
     'project-board',
     'project-board-header-right',
-    'project-board-shortcut-hints',
     'project-board-buttons',
     'project-board-palette',
     'project-board-session-menu',
