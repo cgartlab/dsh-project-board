@@ -806,7 +806,7 @@ window.__ModuleLoader__.load({
       'col.preset': '模式', 'col.updated': '最后活动', 'col.appearance': '外观', 'col.total': '会话',
       'col.presets': '模式数',
       'col.kind': '类型', 'kind.auto': '自动化任务', 'kind.normal': '普通会话', 'filter.kind': '类型', 'stat.auto': '自动化',
-      'nav.switch': '切换会话', 'nav.switchLabel': '会话', 'nav.noSession': '未选择会话', 'nav.board': '看板', 'nav.openBoard': '打开项目看板', 'nav.cycle': 'Alt+I 上一个 · Alt+, 下一个',
+      'nav.switch': '切换会话', 'nav.switchLabel': '会话', 'nav.noSession': '未选择会话', 'nav.board': '看板', 'nav.openBoard': '打开项目看板', 'nav.cycle': 'Alt+I 上一个 · Alt+, 下一个', 'nav.more': '更多操作',
       'rightTab.title': '项目看板', 'compact.full': '全屏打开',
       'palette.placeholder': '搜索会话或项目…', 'palette.allProjects': '全部项目', 'palette.empty': '没有匹配的会话', 'palette.hint': '↑↓ / Alt+I / Alt+, 选择 · Enter 打开 · Alt+K/Esc 关闭',
       'hud.title': '活跃与最近会话', 'hud.collapsed': '活跃', 'hud.running': '进行中', 'hud.expand': '展开', 'hud.collapse': '收起', 'hud.empty': '当前没有非空闲会话', 'hud.prev': '上一个', 'hud.next': '下一个', 'hud.recent': '最近',
@@ -936,7 +936,7 @@ window.__ModuleLoader__.load({
       'col.preset': 'Mode', 'col.updated': 'Last activity', 'col.appearance': 'Appearance', 'col.total': 'Sessions',
       'col.presets': 'Presets',
       'col.kind': 'Type', 'kind.auto': 'Automation', 'kind.normal': 'Session', 'filter.kind': 'Type', 'stat.auto': 'Automation',
-      'nav.switch': 'Switch session', 'nav.switchLabel': 'Sessions', 'nav.noSession': 'No session', 'nav.board': 'Board', 'nav.openBoard': 'Open project board', 'nav.cycle': 'Alt+I previous · Alt+, next',
+      'nav.switch': 'Switch session', 'nav.switchLabel': 'Sessions', 'nav.noSession': 'No session', 'nav.board': 'Board', 'nav.openBoard': 'Open project board', 'nav.more': 'More controls', 'nav.cycle': 'Alt+I previous · Alt+, next',
       'rightTab.title': 'Project Board', 'compact.full': 'Open full screen',
       'palette.placeholder': 'Search sessions or projects…', 'palette.allProjects': 'All projects', 'palette.empty': 'No matching sessions', 'palette.hint': '↑↓ or Alt+I / Alt+, select · Enter open · Alt+K/Esc close',
       'hud.title': 'Active & recent', 'hud.collapsed': 'Active', 'hud.running': 'running', 'hud.expand': 'Expand', 'hud.collapse': 'Collapse', 'hud.empty': 'No active sessions', 'hud.prev': 'Previous', 'hud.next': 'Next', 'hud.recent': 'Recent',
@@ -1813,6 +1813,30 @@ window.__ModuleLoader__.load({
       const wsSnap = useWorkspaces((snapshot) => snapshot);
       const paletteSnap = usePalette((snapshot) => snapshot);
       const open = Boolean(paletteSnap && paletteSnap.open);
+      /* When a right-side panel is open the chat header is narrow, so fold the plugin controls
+         into a single "more" menu instead of letting them overlap the native panel chrome. */
+      const [panelOpen, setPanelOpen] = useState(false);
+      const [moreOpen, setMoreOpen] = useState(false);
+      useEffect(() => {
+        const read = () => {
+          const panel = document.querySelector('[class*="_panel"][data-sidebar-right-open]');
+          setPanelOpen(Boolean(panel));
+        };
+        read();
+        const timer = window.setInterval(read, 400);
+        window.addEventListener('resize', read);
+        return () => { window.clearInterval(timer); window.removeEventListener('resize', read); };
+      }, []);
+      useEffect(() => {
+        if (!moreOpen) return undefined;
+        const onDown = (event) => {
+          const target = event.target;
+          if (target && typeof target.closest === 'function' && target.closest('.pbx-navMoreWrap')) return;
+          setMoreOpen(false);
+        };
+        document.addEventListener('pointerdown', onDown, true);
+        return () => document.removeEventListener('pointerdown', onDown, true);
+      }, [moreOpen]);
       const archived = new Set((wsSnap && wsSnap.archivedSessionIds) || []);
       const ids = (list && list.ids) || [];
       const byId = (list && list.byId) || {};
@@ -1879,6 +1903,22 @@ window.__ModuleLoader__.load({
           }
         }
         return null;
+      }
+      if (props.side === 'right' && panelOpen && placement !== 'composer') {
+        const menuIds = Object.keys(DEFAULT_SETTINGS.headerButtons)
+          .filter((id) => buttons[id] && buttons[id].hidden !== true && Boolean(nodes[id]))
+          .sort((a, b) => ((buttons[a].order || 0) - (buttons[b].order || 0)));
+        if (menuIds.length === 0) return null;
+        return h('div', { className: 'pbx-navMoreWrap' },
+          h('button', {
+            type: 'button', className: 'pbx-navMore' + (moreOpen ? ' open' : ''), title: t('nav.more'), 'aria-label': t('nav.more'),
+            'aria-expanded': moreOpen ? 'true' : 'false',
+            onClick: () => setMoreOpen((value) => !value)
+          }, h('span', { className: 'pbx-navMoreDots', 'aria-hidden': 'true' }, '⋯')),
+          moreOpen ? h('div', { className: 'pbx-navMenu' },
+            menuIds.map((id) => h('div', { key: id, className: 'pbx-navMenuItem', onClickCapture: () => setMoreOpen(false) }, nodes[id]))
+          ) : null
+        );
       }
       const sideIds = Object.keys(DEFAULT_SETTINGS.headerButtons)
         .filter((id) => {
@@ -3818,6 +3858,13 @@ window.__ModuleLoader__.load({
       '.pbx-navHistory{display:flex;align-items:center;height:26px;border:1px solid var(--dsw-alias-border-l1);border-radius:7px;overflow:hidden;background:color-mix(in srgb,var(--dsw-alias-bg-layer-1) 78%,transparent)}',
       '.pbx-navSeg{display:inline-flex;align-items:center;justify-content:center;width:26px;height:24px;border:none;background:transparent;color:var(--dsw-alias-label-secondary);cursor:pointer}',
       '.pbx-navSeg+.pbx-navSeg{border-left:1px solid var(--dsw-alias-border-l1)}',
+      '.pbx-navMoreWrap{position:relative;display:inline-flex}',
+      '.pbx-navMore{display:inline-flex;align-items:center;justify-content:center;width:30px;height:28px;padding:0;border:1px solid var(--dsw-alias-border-l1);background:var(--dsw-alias-bg-layer-1);border-radius:8px;color:var(--dsw-alias-label-secondary);font:inherit;cursor:pointer;transition:background .15s ease,color .15s ease}',
+      '.pbx-navMore:hover,.pbx-navMore.open{background:var(--dsw-alias-interactive-bg-hover);color:var(--dsw-alias-label-primary)}',
+      '.pbx-navMoreDots{font-size:16px;line-height:1;letter-spacing:.5px;margin-top:-3px}',
+      '.pbx-navMenu{position:absolute;top:calc(100% + 6px);right:0;z-index:70;display:flex;flex-direction:column;gap:2px;min-width:200px;padding:6px;background:var(--dsw-alias-bg-overlay);border:1px solid var(--dsw-alias-border-l2);border-radius:10px;box-shadow:0 10px 26px rgba(0,0,0,.18)}',
+      '.pbx-navMenuItem{display:flex;align-items:center;width:100%}',
+      '.pbx-navMenuItem>*{width:100%}',
       '.pbx-navSeg:hover{background:var(--dsw-alias-interactive-bg-hover);color:var(--dsw-alias-label-primary)}',
       '.pbx-navEmpty{width:0;min-width:0;gap:0}',
       '.pbx-dockButtons{display:flex;align-items:center;justify-content:flex-end;gap:8px;flex-wrap:wrap;padding:2px 2px 0}',
