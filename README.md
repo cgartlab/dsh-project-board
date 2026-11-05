@@ -42,7 +42,7 @@ Every shortcut is configurable in **Settings → 项目看板设置**. Defaults:
 
 | Shortcut | Action |
 | --- | --- |
-| `Alt+K` | Search sessions — `Alt+I` / `Alt+,` / `↑` / `↓` move the selection, `Enter` opens it |
+| `Alt+K` | Open / close session search — inside, `Alt+I` / `Alt+,` / `↑` / `↓` move the selection, `Enter` opens it |
 | `Alt+I` / `Alt+,` | Previous / next session |
 | `Alt+U` / `Alt+M` | Previous / next user instruction (tap to jump, hold to scroll) |
 | `Alt+S` | Scroll to bottom and focus the composer |
