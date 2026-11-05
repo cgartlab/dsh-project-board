@@ -4,6 +4,13 @@ All notable changes to this project are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the project uses
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.0.11] - 2026-11-05
+
+### Changed
+
+- The floating list marks running sessions with a fixed blue indicator dot (blue glow pulse and
+  blue timer) instead of the theme brand color, which rendered black or white in some themes.
+
 ## [1.0.10] - 2026-11-05
 
 ### Added
@@ -131,5 +138,6 @@ All notable changes to this project are documented here. The format follows
   the DSH profile and localStorage only.
 
 [1.0.0]: https://github.com/cgartlab/dsh-project-board/releases/tag/v1.0.0
+
 
 
