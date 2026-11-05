@@ -1103,16 +1103,98 @@ window.__ModuleLoader__.load({
       bottom: ['M12 4v12', 'M7 11l5 5 5-5', 'M5 20h14'],
       left: ['M19 12H5', 'M11 6l-6 6 6 6']
     };
-    /* Icons lifted verbatim from the DSH client's own icon set (16px grid, 1px stroke) so the
-       plugin speaks the product's visual language instead of inventing its own shapes. */
+    /* Icons copied verbatim from the DSH client’s own icon set (16px grid, 1px stroke) so the
+       plugin speaks the product’s visual language instead of inventing its own shapes. */
     const NATIVE_ICONS = {
-      archive: {
+      search: {
         viewBox: '0 0 16 16',
         strokeWidth: 1,
         paths: [
-          'M13.5 2.5H2.5C1.94772 2.5 1.5 2.94772 1.5 3.5V4.5C1.5 5.05228 1.94772 5.5 2.5 5.5H13.5C14.0523 5.5 14.5 5.05228 14.5 4.5V3.5C14.5 2.94772 14.0523 2.5 13.5 2.5Z',
-          'M2.5 5.5V13.5C2.5 13.7652 2.60536 14.0196 2.79289 14.2071C2.98043 14.3946 3.23478 14.5 3.5 14.5H12.5C12.7652 14.5 13.0196 14.3946 13.2071 14.2071C13.3946 14.0196 13.5 13.7652 13.5 13.5V5.5',
-          'M6.5 9.5H9.5'
+          'M6.58727 11.8586C9.55061 11.8586 11.9529 9.45637 11.9529 6.49304C11.9529 3.5297 9.55061 1.12744 6.58727 1.12744C3.62394 1.12744 1.22168 3.5297 1.22168 6.49304C1.22168 9.45637 3.62394 11.8586 6.58727 11.8586Z',
+          'M10.2991 10.3933L14.7783 14.8725'
+        ]
+      },
+      close: {
+        viewBox: '0 0 16 16',
+        strokeWidth: 1,
+        paths: [
+          'M2.5 2.5L13.5 13.5',
+          'M13.5 2.5L2.5 13.5'
+        ]
+      },
+      up: {
+        viewBox: '0 0 16 16',
+        strokeWidth: 1,
+        paths: [
+          'M12 10L8.70711 6.70711C8.31658 6.31658 7.68342 6.31658 7.29289 6.70711L4 10'
+        ]
+      },
+      down: {
+        viewBox: '0 0 16 16',
+        strokeWidth: 1,
+        paths: [
+          'M4 6L7.29289 9.29289C7.68342 9.68342 8.31658 9.68342 8.70711 9.29289L12 6'
+        ]
+      },
+      left: {
+        viewBox: '0 0 16 16',
+        strokeWidth: 1,
+        paths: [
+          'M10 4L6.70711 7.29289C6.31658 7.68342 6.31658 8.31658 6.70711 8.70711L10 12'
+        ]
+      },
+      arrow: {
+        viewBox: '0 0 16 16',
+        strokeWidth: 1,
+        paths: [
+          'M6 12L9.29289 8.70711C9.68342 8.31658 9.68342 7.68342 9.29289 7.29289L6 4'
+        ]
+      },
+      chevron: {
+        viewBox: '0 0 16 16',
+        strokeWidth: 1,
+        paths: [
+          'M4 6L7.29289 9.29289C7.68342 9.68342 8.31658 9.68342 8.70711 9.29289L12 6'
+        ]
+      },
+      clock: {
+        viewBox: '0 0 16 16',
+        strokeWidth: 1,
+        paths: [
+          'M8 14C11.3137 14 14 11.3137 14 8C14 4.68629 11.3137 2 8 2C4.68629 2 2 4.68629 2 8C2 11.3137 4.68629 14 8 14Z',
+          'M8 4.31V8.46L11 10.08'
+        ]
+      },
+      check: {
+        viewBox: '0 0 16 16',
+        strokeWidth: 1,
+        paths: [
+          'M2.25 8.5L5.49732 11.7473C5.90519 12.1552 6.57263 12.1344 6.95426 11.7018L13.75 4'
+        ]
+      },
+      alert: {
+        viewBox: '0 0 16 16',
+        strokeWidth: 1,
+        paths: [
+          'M6.87 2.6a1.33 1.33 0 0 1 2.26 0l5.34 9.33A1.33 1.33 0 0 1 13.33 14H2.67a1.33 1.33 0 0 1-1.14-2.07Z',
+          'M8 6v3m0 2.33h.01'
+        ]
+      },
+      bottom: {
+        viewBox: '0 0 16 16',
+        strokeWidth: 1,
+        paths: [
+          'M8 1.95317V10.0469',
+          'M4.25 6.29688L8 10.0469L11.75 6.29688',
+          'M1.5 10.0469V13.158C1.5 13.3937 1.60536 13.6198 1.79289 13.7865C1.98043 13.9532 2.23478 14.0469 2.5 14.0469H13.5C13.7652 14.0469 14.0196 13.9532 14.2071 13.7865C14.3946 13.6198 14.5 13.3937 14.5 13.158V10.0469'
+        ]
+      },
+      grid: {
+        viewBox: '0 0 16 16',
+        strokeWidth: 1,
+        paths: [
+          'M6 3.5h7.5M6 8h7.5M6 12.5h7.5',
+          'M2.6 3.5h.01M2.6 8h.01M2.6 12.5h.01'
         ]
       }
     };
@@ -2950,7 +3032,7 @@ window.__ModuleLoader__.load({
             try { window.localStorage.setItem(HUD_COLLAPSE_KEY, '0'); } catch (error) { /* ignore */ }
           }
         },
-          h('span', { className: 'pbx-hudPillIcon' + pillTone }, h(Icon, { name: 'grid', size: 12, strokeWidth: 1.9 })),
+          h('span', { className: 'pbx-hudPillIcon' + pillTone }, h(Icon, { name: 'grid', size: 13 })),
           h('span', { className: 'pbx-hudPillText' }, String(runningCount)),
           h('span', { className: 'pbx-hudPillLabel' }, t('hud.running'))
         );
@@ -2968,7 +3050,7 @@ window.__ModuleLoader__.load({
                 setCollapsed(true);
                 try { window.localStorage.setItem(HUD_COLLAPSE_KEY, '1'); } catch (error) { /* ignore */ }
               }
-            }, h(Icon, { name: collapseDir, size: 13, strokeWidth: 2 }))
+            }, h(Icon, { name: collapseDir, size: 14 }))
           ),
           h('div', { className: 'pbx-hudList' + (listOverflow ? ' scrollable' : ''), style: Object.assign({ maxHeight: hudListMaxHeight + 'px' }, listHeight > 0 ? { height: listHeight + 'px' } : {}) },
             h('div', { ref: listContentRef, className: 'pbx-hudListInner' },
