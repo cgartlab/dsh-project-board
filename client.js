@@ -3196,38 +3196,49 @@ window.__ModuleLoader__.load({
         if (rank !== 0) return rank;
         return (b.updatedAt || 0) - (a.updatedAt || 0);
       });
-      /* When the floating list would cover the main column, pad that column so its content (header,
-         chat and composer) moves aside. The layout only exposes sidebar/rightbar widths, so the
-         flexible center column is nudged directly with padding, restored as soon as it fits. */
+      /* When the floating list would cover the conversation, nudge only the chat scroller and the
+         composer aside (never the header/title bar). No transition: animating padding during live
+         window resizes is what caused the smearing, so this is applied instantly and throttled. */
       useLayoutEffectSafe(() => {
         const gap = 14;
-        let column = null;
-        const clear = () => {
-          if (!column) return;
-          column.style.paddingLeft = '';
-          column.style.paddingRight = '';
-          column.style.transition = '';
-        };
         const apply = () => {
-          clear();
-          column = document.querySelector('[class*="_centerCol"]') || findChatScroller();
+          const scroller = findChatScroller();
+          const card = document.querySelector('[data-composer-card]');
           const box = hudRef.current;
-          if (collapsed || !box || !column) return;
+          if (scroller) { scroller.style.paddingLeft = ''; scroller.style.paddingRight = ''; }
+          if (card) { card.style.marginLeft = ''; card.style.marginRight = ''; }
+          if (collapsed || !box || !scroller) return;
           const rect = box.getBoundingClientRect();
-          const crect = column.getBoundingClientRect();
-          if (!crect.width) return;
-          const cap = Math.round(window.innerWidth * 0.4);
+          const srect = scroller.getBoundingClientRect();
+          if (!srect.width) return;
+          const cap = Math.round(window.innerWidth * 0.35);
           const leftSide = rect.left + rect.width / 2 <= window.innerWidth / 2;
-          const left = leftSide ? Math.max(0, Math.min(cap, Math.round(rect.right + gap - crect.left))) : 0;
-          const right = leftSide ? 0 : Math.max(0, Math.min(cap, Math.round(crect.right - (rect.left - gap))));
-          if (!left && !right) return;
-          column.style.transition = 'padding .18s ease';
-          if (left) column.style.paddingLeft = left + 'px';
-          if (right) column.style.paddingRight = right + 'px';
+          const left = leftSide ? Math.max(0, Math.min(cap, Math.round(rect.right + gap - srect.left))) : 0;
+          const right = leftSide ? 0 : Math.max(0, Math.min(cap, Math.round(srect.right - (rect.left - gap))));
+          /* Keep at least ~520px of usable conversation width; below that, do not squeeze it away. */
+          if (window.innerWidth - left - right < 520) return;
+          if (left) scroller.style.paddingLeft = left + 'px';
+          if (right) scroller.style.paddingRight = right + 'px';
+          if (card) {
+            if (left) card.style.marginLeft = left + 'px';
+            if (right) card.style.marginRight = right + 'px';
+          }
         };
         apply();
-        window.addEventListener('resize', apply);
-        return () => { window.removeEventListener('resize', apply); clear(); };
+        let frame = 0;
+        const onResize = () => {
+          if (frame) cancelAnimationFrame(frame);
+          frame = requestAnimationFrame(() => { frame = 0; apply(); });
+        };
+        window.addEventListener('resize', onResize);
+        return () => {
+          window.removeEventListener('resize', onResize);
+          if (frame) cancelAnimationFrame(frame);
+          const scroller = findChatScroller();
+          const card = document.querySelector('[data-composer-card]');
+          if (scroller) { scroller.style.paddingLeft = ''; scroller.style.paddingRight = ''; }
+          if (card) { card.style.marginLeft = ''; card.style.marginRight = ''; }
+        };
       }, [collapsed, hudWidth, pos && pos.x, pos && pos.y]);
       /* Fit the panel to the longest session title (bounded), so short lists do not waste width. */
       useLayoutEffectSafe(() => {
