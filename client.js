@@ -805,6 +805,7 @@ window.__ModuleLoader__.load({
       'col.attention': '待处理', 'col.done': '已完成', 'col.idle': '空闲', 'col.empty': '暂无会话',
       'col.preset': '模式', 'col.updated': '最后活动', 'col.appearance': '外观', 'col.total': '会话',
       'col.presets': '模式数',
+      'col.path': '路径',
       'compact.allProjects': '全部项目',
       'status.archived': '已归档',
       'col.kind': '类型', 'kind.auto': '自动化任务', 'kind.normal': '普通会话', 'filter.kind': '类型', 'stat.auto': '自动化',
@@ -946,6 +947,7 @@ window.__ModuleLoader__.load({
       'col.attention': 'Attention', 'col.done': 'Completed', 'col.idle': 'Idle', 'col.empty': 'No sessions',
       'col.preset': 'Mode', 'col.updated': 'Last activity', 'col.appearance': 'Appearance', 'col.total': 'Sessions',
       'col.presets': 'Presets',
+      'col.path': 'Path',
       'compact.allProjects': 'All projects',
       'status.archived': 'Archived',
       'col.kind': 'Type', 'kind.auto': 'Automation', 'kind.normal': 'Session', 'filter.kind': 'Type', 'stat.auto': 'Automation',
@@ -1808,19 +1810,25 @@ window.__ModuleLoader__.load({
             (typeof openFullBoard === 'function' ? h('button', { type: 'button', className: 'pbx-compactFull', title: t('compact.full'), onClick: () => openFullBoard() }, h(Icon, { name: 'expand', size: 14 })) : null)
           ),
           activeProject
-            ? (activeRows.length === 0
-                ? h('div', { className: 'pbx-cgroupEmpty' }, t('col.empty'))
-                : activeRows.map((row) => h('button', {
-                    key: row.id, type: 'button',
-                    className: 'pbx-crow' + (row.auto ? ' auto' : '') + (row.archived ? ' archived' : '') + (row.info.tone === 'running' ? ' live' : ''),
-                    title: t('card.open'), onClick: () => open(row.id)
-                  },
-                    h('span', { className: 'pbx-rdot', 'data-tone': row.info.tone }),
-                    row.auto ? h('span', { className: 'pbx-autoGlyph' }, h(Icon, { name: 'clock', size: 12 })) : null,
-                    h('span', { className: 'pbx-ctitle' }, row.title),
-                    row.archived ? h('span', { className: 'pbx-prowArchived' }, t('palette.archived')) : null,
-                    h('span', { className: 'pbx-ctime' }, relTime(row.updatedAt, t))
-                  )))
+            ? h('div', { className: 'pbx-compactBody' },
+                activeRows.length === 0
+                  ? h('div', { className: 'pbx-cgroupEmpty' }, t('col.empty'))
+                  : h('div', { className: 'pbx-compactList' }, activeRows.map((row) => h('button', {
+                      key: row.id, type: 'button',
+                      className: 'pbx-crow' + (row.auto ? ' auto' : '') + (row.archived ? ' archived' : '') + (row.info.tone === 'running' ? ' live' : ''),
+                      title: t('card.open'), onClick: () => open(row.id)
+                    },
+                      h('span', { className: 'pbx-rdot', 'data-tone': row.info.tone }),
+                      row.auto ? h('span', { className: 'pbx-autoGlyph' }, h(Icon, { name: 'clock', size: 12 })) : null,
+                      h('span', { className: 'pbx-ctitle' }, row.title),
+                      row.archived ? h('span', { className: 'pbx-prowArchived' }, t('palette.archived')) : null,
+                      h('span', { className: 'pbx-ctime' }, relTime(row.updatedAt, t))
+                    ))),
+                activeProject.path ? h('div', { className: 'pbx-compactPath', title: activeProject.path },
+                  h('span', { className: 'pbx-compactPathLabel' }, t('col.path')),
+                  h('span', { className: 'pbx-compactPathText' }, activeProject.path)
+                ) : null
+              )
             : (filteredProjects.length === 0
                 ? h('div', { className: 'pbx-cgroupEmpty' }, t('empty.filtered'))
                 : filteredProjects.map((project) => {
@@ -1835,7 +1843,6 @@ window.__ModuleLoader__.load({
                         h('span', { className: 'pbx-pcardName' }, project.name),
                         h('span', { className: 'pbx-pcardTotal' }, String(project.counts.total))
                       ),
-                      project.path ? h('span', { className: 'pbx-pcardPath' }, project.path) : null,
                       h('span', { className: 'pbx-pcardStats' },
                         statChip(t('stat.running'), project.counts.running, 'var(--dsw-alias-brand-primary)'),
                         statChip(t('stat.attention'), project.counts.attention, '#f59e0b'),
@@ -4139,7 +4146,7 @@ window.__ModuleLoader__.load({
       '.pbx-notifFoot{font-size:11px;color:var(--dsw-alias-label-secondary);opacity:.78}',
       '.pbx-setWarn{font-size:11.5px;color:var(--dsw-alias-state-warn-primary);line-height:1.45;overflow-wrap:anywhere}',
       '.pbx-compact{padding:0}',
-      '.pbx-compactWrap{padding:12px 10px 26px;max-width:none}',
+      '.pbx-compactWrap{padding:12px 10px 12px;max-width:none;display:flex;flex-direction:column;min-height:100%;box-sizing:border-box}',
       '.pbx-compactHead{display:flex;align-items:center;gap:8px;margin-bottom:10px}',
       '.pbx-compactTitle{display:flex;align-items:center;gap:7px;font-weight:600;font-size:14px;color:var(--dsw-alias-label-primary)}',
       '.pbx-compactMeta{margin-left:auto;font-size:11.5px;color:var(--dsw-alias-label-secondary)}',
@@ -4163,6 +4170,11 @@ window.__ModuleLoader__.load({
       '.pbx-compactBack{display:inline-flex;align-items:center;justify-content:center;width:22px;height:22px;padding:0;border:none;background:transparent;color:var(--dsw-alias-label-secondary);border-radius:6px;cursor:pointer;flex:none}',
       '.pbx-compactBack:hover{background:var(--dsw-alias-interactive-bg-hover);color:var(--dsw-alias-label-primary)}',
       '.pbx-crow.archived{opacity:.72}',
+      '.pbx-compactBody{display:flex;flex-direction:column;gap:2px;min-height:0;flex:1}',
+      '.pbx-compactList{display:flex;flex-direction:column;gap:2px;flex:1;min-height:0}',
+      '.pbx-compactPath{position:sticky;bottom:0;display:flex;align-items:center;gap:6px;margin-top:auto;padding:7px 2px 3px;border-top:1px solid color-mix(in srgb,var(--dsw-alias-border-l1) 70%,transparent);background:color-mix(in srgb,var(--dsw-alias-bg-base) 92%,transparent);font-size:10.5px;color:var(--dsw-alias-label-tertiary);min-width:0}',
+      '.pbx-compactPathLabel{flex:none;font-weight:600;letter-spacing:.02em;color:var(--dsw-alias-label-secondary)}',
+      '.pbx-compactPathText{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;direction:rtl;text-align:left}',
       '.pbx-setSubTitle{font-size:11.5px;font-weight:600;color:var(--dsw-alias-label-secondary);margin:10px 0 2px;padding-top:8px;border-top:1px dashed color-mix(in srgb,var(--dsw-alias-border-l1) 70%,transparent)}',
       '.pbx-crow:hover{background:var(--dsw-alias-interactive-bg-hover)}',
       '.pbx-crow.auto{background:color-mix(in srgb,var(--dsw-alias-state-warn-primary) 5%,transparent)}',
