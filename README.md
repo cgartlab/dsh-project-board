@@ -19,7 +19,8 @@ reading, and desktop-class task notifications.
   switching sessions only switches the conversation and never re-opens, closes or resizes
   the board.
 - **Floating session HUD** — live active/recent sessions with timers, attention badges,
-  automation markers, drag-to-move, and an animated pill ⇄ list collapse. One stable order:
+  automation markers, drag-to-move, and an animated pill ⇄ list collapse; while the native
+  left sidebar is open it tucks into the bottom-right corner and returns when that closes. One stable order:
   active sessions first, most recent activity first within a group; switching sessions
   highlights the new row without reshuffling the list, and `Alt+I` / `Alt+,` cycle in
   exactly that order.
@@ -114,5 +115,7 @@ Licensed under [Creative Commons Attribution-NonCommercial-ShareAlike 4.0 Intern
 the same license as [cgartlab.com](https://cgartlab.com).
 
 Copyright (c) 2025-2026 CGArtLab.
+
+
 
 

@@ -2467,6 +2467,10 @@ window.__ModuleLoader__.load({
       const rowRectsRef = useRef(null);
       const [listHeight, setListHeight] = useState(0);
       const [listOverflow, setListOverflow] = useState(false);
+      const collapsedStateRef = useRef(collapsed);
+      collapsedStateRef.current = collapsed;
+      const autoDockRef = useRef(false);
+      const sidebarSavedRef = useRef(null);
       const [present, setPresent] = useState(false);
       const publishedOrderRef = useRef('');
       const prevCurrentRef = useRef(undefined);
@@ -2544,7 +2548,7 @@ window.__ModuleLoader__.load({
       useEffect(() => {
         if (!pos) return undefined;
         const clamp = () => {
-          if (dragging) return;
+          if (dragging || autoDockRef.current) return;
           const box = hudRef.current;
           const width = box ? box.offsetWidth : 300;
           const height = box ? box.offsetHeight : 220;
@@ -2681,6 +2685,7 @@ window.__ModuleLoader__.load({
           }
         }
         prevBoxRef.current = { collapsed: collapsed, width: width, height: height, x: rect.left, y: rect.top };
+        if (autoDockRef.current) return;
         const edge = 26;
         let direction = 'down';
         if (rect.bottom >= window.innerHeight - edge) direction = 'down';
@@ -2689,6 +2694,74 @@ window.__ModuleLoader__.load({
         else if (rect.left <= edge) direction = 'left';
         setCollapseDir((previous) => previous === direction ? previous : direction);
       });
+
+      /* When the native left sidebar opens, tuck the floating list away as a pill in the
+         bottom-right corner; when that sidebar closes again, put it back where it was. */
+      useEffect(() => {
+        if (config.hud.enabled === false) return undefined;
+        let last = null;
+        const readExpanded = () => {
+          const frame = document.querySelector('[class*="_frame"][style*="grid-template-columns"]') || document.querySelector('[data-sidebar-collapsed]');
+          if (!frame) return null;
+          return !frame.hasAttribute('data-sidebar-collapsed');
+        };
+        const dockPos = () => {
+          const box = hudRef.current;
+          const width = box ? box.offsetWidth : 120;
+          const height = box ? box.offsetHeight : 34;
+          return { x: Math.max(6, window.innerWidth - width - 12), y: Math.max(6, window.innerHeight - height - 12) };
+        };
+        const dock = () => {
+          if (autoDockRef.current) return;
+          autoDockRef.current = true;
+          sidebarSavedRef.current = { pos: posRef.current ? Object.assign({}, posRef.current) : null, collapsed: collapsedStateRef.current };
+          setCollapsed(true);
+          window.setTimeout(() => {
+            const next = dockPos();
+            posRef.current = next;
+            setPos(next);
+          }, 80);
+        };
+        const restore = () => {
+          if (!autoDockRef.current) return;
+          autoDockRef.current = false;
+          const saved = sidebarSavedRef.current;
+          sidebarSavedRef.current = null;
+          if (saved) {
+            setCollapsed(Boolean(saved.collapsed));
+            if (saved.pos) { posRef.current = Object.assign({}, saved.pos); setPos(Object.assign({}, saved.pos)); }
+          }
+        };
+        const tick = () => {
+          const expanded = readExpanded();
+          if (expanded === null) return;
+          if (last === null) { last = expanded; if (expanded) dock(); return; }
+          if (expanded === last) return;
+          last = expanded;
+          if (expanded) dock(); else restore();
+        };
+        const onResize = () => {
+          if (!autoDockRef.current) return;
+          const next = dockPos();
+          posRef.current = next;
+          setPos(next);
+        };
+        let raf = 0;
+        const schedule = () => { if (raf) return; raf = window.requestAnimationFrame(() => { raf = 0; tick(); }); };
+        const observer = typeof MutationObserver !== 'undefined'
+          ? new MutationObserver(schedule)
+          : null;
+        if (observer) observer.observe(document.documentElement, { subtree: true, childList: true, attributes: true, attributeFilter: ['data-sidebar-collapsed'] });
+        const timer = window.setInterval(tick, 800);
+        window.addEventListener('resize', onResize);
+        tick();
+        return () => {
+          if (observer) observer.disconnect();
+          window.clearInterval(timer);
+          window.removeEventListener('resize', onResize);
+          if (raf) window.cancelAnimationFrame(raf);
+        };
+      }, [config.hud.enabled]);
 
       const onDragStart = (event) => {
         const hitButton = event.target && event.target.closest && event.target.closest('button');
