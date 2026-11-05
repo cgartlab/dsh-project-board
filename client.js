@@ -43,7 +43,8 @@ window.__ModuleLoader__.load({
       hud: { enabled: true, includeDone: true, defaultCollapsed: false, defaultPosition: 'top-right', recentEnabled: true, recentCount: 5, recentExcludeAuto: true, maxSessions: 6 },
       notify: { enabled: true, sound: true },
       log: { enabled: true, level: 'info', max: 200 },
-      board: { enabled: true, wideThreshold: 520, defaultView: 'sessions' }
+      board: { enabled: true, wideThreshold: 520, defaultView: 'projects' },
+      projectColumns: { total: true, running: true, attention: true, done: true, idle: true, auto: true, lastUpdated: true, presets: false }
     };
     function cloneJson(value) { try { return JSON.parse(JSON.stringify(value)); } catch (error) { return value; } }
     function mergeSettings(base, raw) {
@@ -61,6 +62,7 @@ window.__ModuleLoader__.load({
           if (raw.header && raw.header.capsule === false) out.headerButtons.capsule.hidden = true;
         }
         if (raw.hintsVersion !== 1) out.hints = cloneJson(DEFAULT_SETTINGS.hints);
+        if (raw.boardProjVersion !== 1) { out.board.defaultView = 'projects'; out.boardProjVersion = 1; }
         for (const key of Object.keys(DEFAULT_SETTINGS.shortcuts)) {
           if (!comboHasModifier(out.shortcuts[key])) out.shortcuts[key] = DEFAULT_SETTINGS.shortcuts[key];
         }
@@ -801,7 +803,8 @@ window.__ModuleLoader__.load({
       'group.byProject': '按项目分组', 'sort.hint': 'Shift+点击列头可叠加排序',
       'col.title': '名称', 'col.project': '项目', 'col.status': '状态', 'col.running': '运行', 'col.current': '当前',
       'col.attention': '待处理', 'col.done': '已完成', 'col.idle': '空闲', 'col.empty': '暂无会话',
-      'col.preset': '模式', 'col.updated': '最后活动', 'col.appearance': '图标/颜色', 'col.total': '会话',
+      'col.preset': '模式', 'col.updated': '最后活动', 'col.appearance': '外观', 'col.total': '会话',
+      'col.presets': '模式数',
       'col.kind': '类型', 'kind.auto': '自动化任务', 'kind.normal': '普通会话', 'filter.kind': '类型', 'stat.auto': '自动化',
       'nav.switch': '切换会话', 'nav.switchLabel': '会话', 'nav.noSession': '未选择会话', 'nav.board': '看板', 'nav.openBoard': '打开项目看板', 'nav.cycle': 'Alt+I 上一个 · Alt+, 下一个',
       'rightTab.title': '项目看板', 'compact.full': '全屏打开',
@@ -886,6 +889,9 @@ window.__ModuleLoader__.load({
       'settings.boardEnabled': '启用右侧看板页签', 'settings.boardEnabledDesc': '在右侧栏打开「项目看板」',
       'settings.boardThreshold': '完整看板宽度阈值（px）',
       'settings.boardView': '完整看板默认视图',
+      'settings.projectColumns': '项目看板 · 显示哪些项目属性',
+      'settings.projectColumnsHint': '勾选要在项目表格里显示的项目属性；名称和图标/颜色始终显示。',
+      'settings.pc.total': '会话总数', 'settings.pc.running': '运行中', 'settings.pc.attention': '待处理', 'settings.pc.done': '已完成', 'settings.pc.idle': '空闲', 'settings.pc.auto': '自动化任务', 'settings.pc.presets': '用到的模式数', 'settings.pc.lastUpdated': '最近活动',
       'settings.blur': '搜索面板模糊强度（px）',
       'settings.logging': '日志与排查',
       'settings.logEnabled': '记录日志',
@@ -927,7 +933,8 @@ window.__ModuleLoader__.load({
       'group.byProject': 'Group by project', 'sort.hint': 'Shift+click a column to add a sort',
       'col.title': 'Name', 'col.project': 'Project', 'col.status': 'Status', 'col.running': 'Running', 'col.current': 'Current',
       'col.attention': 'Attention', 'col.done': 'Completed', 'col.idle': 'Idle', 'col.empty': 'No sessions',
-      'col.preset': 'Mode', 'col.updated': 'Last activity', 'col.appearance': 'Icon / color', 'col.total': 'Sessions',
+      'col.preset': 'Mode', 'col.updated': 'Last activity', 'col.appearance': 'Appearance', 'col.total': 'Sessions',
+      'col.presets': 'Presets',
       'col.kind': 'Type', 'kind.auto': 'Automation', 'kind.normal': 'Session', 'filter.kind': 'Type', 'stat.auto': 'Automation',
       'nav.switch': 'Switch session', 'nav.switchLabel': 'Sessions', 'nav.noSession': 'No session', 'nav.board': 'Board', 'nav.openBoard': 'Open project board', 'nav.cycle': 'Alt+I previous · Alt+, next',
       'rightTab.title': 'Project Board', 'compact.full': 'Open full screen',
@@ -1012,6 +1019,9 @@ window.__ModuleLoader__.load({
       'settings.boardEnabled': 'Enable right-pane board tab', 'settings.boardEnabledDesc': 'Open the board in the right sidebar',
       'settings.boardThreshold': 'Full-board width threshold (px)',
       'settings.boardView': 'Default full-board view',
+      'settings.projectColumns': 'Project board · visible attributes',
+      'settings.projectColumnsHint': 'Choose which project attributes appear as columns; name and icon/color always show.',
+      'settings.pc.total': 'Sessions', 'settings.pc.running': 'Running', 'settings.pc.attention': 'Pending', 'settings.pc.done': 'Done', 'settings.pc.idle': 'Idle', 'settings.pc.auto': 'Automation', 'settings.pc.presets': 'Presets used', 'settings.pc.lastUpdated': 'Last activity',
       'settings.blur': 'Search panel blur strength (px)',
       'settings.logging': 'Logs & diagnostics',
       'settings.logEnabled': 'Record logs',
@@ -1060,6 +1070,17 @@ window.__ModuleLoader__.load({
 
     const PALETTE = ['#e5484d', '#f76b15', '#f5b301', '#30a46c', '#0ea5e9', '#3e63dd', '#8e4ec6', '#e93d82', '#6e7781'];
     const ICONS = ['folder', 'code', 'briefcase', 'pen', 'flask', 'star', 'bolt', 'book', 'globe', 'grid'];
+    /* Project attributes that can be shown as columns in the board's project table. */
+    const PROJECT_COLUMNS = [
+      { key: 'total', labelKey: 'settings.pc.total', type: '#' },
+      { key: 'running', labelKey: 'settings.pc.running', type: '#' },
+      { key: 'attention', labelKey: 'settings.pc.attention', type: '#' },
+      { key: 'done', labelKey: 'settings.pc.done', type: '#' },
+      { key: 'idle', labelKey: 'settings.pc.idle', type: '#' },
+      { key: 'auto', labelKey: 'settings.pc.auto', type: '#' },
+      { key: 'presets', labelKey: 'settings.pc.presets', type: '#' },
+      { key: 'lastUpdated', labelKey: 'settings.pc.lastUpdated', type: '◷' }
+    ];
 
     function hashString(value) {
       let hash = 0; const text = String(value);
@@ -1416,10 +1437,18 @@ window.__ModuleLoader__.load({
         return workspaces.map((workspace) => {
           const rows = allSessions.filter((s) => s.workspaceId === workspace.workspaceId);
           const counts = { total: rows.length, running: 0, attention: 0, done: 0, idle: 0, auto: 0 };
+          const presets = new Set();
           let last = 0;
-          for (const row of rows) { if (counts[row.info.tone] !== undefined) counts[row.info.tone] += 1; if (row.auto) counts.auto += 1; last = Math.max(last, row.updatedAt); }
+          let hasCurrent = false;
+          for (const row of rows) {
+            if (counts[row.info.tone] !== undefined) counts[row.info.tone] += 1;
+            if (row.auto) counts.auto += 1;
+            if (row.preset) presets.add(row.preset);
+            if (row.current) hasCurrent = true;
+            last = Math.max(last, row.updatedAt);
+          }
           if (!last) last = Date.parse(workspace.updatedAt) || 0;
-          return { workspaceId: workspace.workspaceId, name: workspaceLabel(workspace.title, t), path: workspace.path || '', counts: counts, lastUpdated: last };
+          return { workspaceId: workspace.workspaceId, name: workspaceLabel(workspace.title, t), path: workspace.path || '', counts: counts, presets: presets, hasCurrent: hasCurrent, lastUpdated: last };
         });
       }, [workspaces, allSessions, t]);
 
@@ -1460,6 +1489,7 @@ window.__ModuleLoader__.load({
       const projectSortValue = (project, key) => {
         if (key === 'name') return project.name.toLowerCase();
         if (key === 'lastUpdated') return project.lastUpdated;
+        if (key === 'presets') return project.presets ? project.presets.size : 0;
         return project.counts[key] !== undefined ? project.counts[key] : 0;
       };
       const compareBySorts = (sortList, valueOf) => (a, b) => {
@@ -1543,13 +1573,13 @@ window.__ModuleLoader__.load({
         onClick: () => open(row.id), tabIndex: 0,
         onKeyDown: (e) => { if (e.key === 'Enter') open(row.id); }
       },
+        h('td', null, projectChip(row.workspaceId, row.workspaceLabel)),
         h('td', null, h('div', { className: 'pbx-titleCell' },
           row.auto ? h('span', { className: 'pbx-autoGlyph', title: t('kind.auto') }, h(Icon, { name: 'clock', size: 13 })) : null,
           h('span', { className: 'pbx-rdot', 'data-tone': row.info.tone }),
           h('span', { className: 'pbx-titleText' }, row.title),
           row.current ? h('span', { className: 'pbx-curTag' }, t('card.current')) : null
         )),
-        h('td', null, projectChip(row.workspaceId, row.workspaceLabel)),
         h('td', null, statusPill(row.info)),
         h('td', null, row.auto ? h('span', { className: 'pbx-kindTag auto' }, h(Icon, { name: 'clock', size: 12 }), t('kind.auto')) : h('span', { className: 'pbx-kindTag' }, t('kind.normal'))),
         h('td', null, row.preset ? h('span', { className: 'pbx-modeTag' }, presetText(row.preset)) : h('span', { className: 'pbx-modeTag empty' }, t('preset.none'))),
@@ -1586,6 +1616,17 @@ window.__ModuleLoader__.load({
         return rows;
       };
 
+      const projectCols = PROJECT_COLUMNS.filter((def) => !config.projectColumns || config.projectColumns[def.key] !== false);
+      const projectCell = (project, def) => {
+        if (def.key === 'lastUpdated') return relTime(project.lastUpdated, t);
+        if (def.key === 'presets') return String(project.presets ? project.presets.size : 0);
+        const value = project.counts[def.key] ?? 0;
+        const style = def.key === 'running' ? { color: value > 0 ? 'var(--dsw-alias-brand-primary)' : undefined }
+          : def.key === 'attention' ? { color: value > 0 ? '#f59e0b' : undefined }
+          : def.key === 'auto' ? { color: value > 0 ? 'var(--dsw-alias-state-warn-primary)' : undefined }
+          : undefined;
+        return h('td', { className: 'pbx-num' + (def.key === 'total' ? ' pbx-strong' : ''), style: style }, String(value));
+      };
       const renderProjectRow = (project) => {
         const spec = specOf(project.workspaceId);
         const isEditing = editingProject === project.workspaceId;
@@ -1603,13 +1644,7 @@ window.__ModuleLoader__.load({
               h(Icon, { name: 'palette', size: 13 }), h('span', null, t('col.appearance'))),
             isEditing ? renderPopover(project.workspaceId, spec.color, spec.icon) : null
           )),
-          h('td', { className: 'pbx-num pbx-strong' }, String(project.counts.total)),
-          h('td', { className: 'pbx-num', style: { color: project.counts.auto > 0 ? 'var(--dsw-alias-state-warn-primary)' : undefined } }, String(project.counts.auto)),
-          h('td', { className: 'pbx-num', style: { color: project.counts.running > 0 ? 'var(--dsw-alias-brand-primary)' : undefined } }, String(project.counts.running)),
-          h('td', { className: 'pbx-num', style: { color: project.counts.attention > 0 ? '#f59e0b' : undefined } }, String(project.counts.attention)),
-          h('td', { className: 'pbx-num' }, String(project.counts.done)),
-          h('td', { className: 'pbx-num' }, String(project.counts.idle)),
-          h('td', { className: 'pbx-num' }, relTime(project.lastUpdated, t))
+          projectCols.map((def) => projectCell(project, def))
         );
       };
 
@@ -1630,8 +1665,8 @@ window.__ModuleLoader__.load({
 
       const toolbar = h('div', { className: 'pbx-toolbar' },
         h('div', { className: 'pbx-tabs' },
-          h('button', { type: 'button', className: 'pbx-tab' + (view === 'sessions' ? ' active' : ''), onClick: () => setView('sessions') }, t('view.sessions'), h('span', { className: 'pbx-tabCount' }, String(allSessions.length))),
-          h('button', { type: 'button', className: 'pbx-tab' + (view === 'projects' ? ' active' : ''), onClick: () => setView('projects') }, t('view.projects'), h('span', { className: 'pbx-tabCount' }, String(projectModels.length)))
+          h('button', { type: 'button', className: 'pbx-tab' + (view === 'projects' ? ' active' : ''), onClick: () => setView('projects') }, t('view.projects'), h('span', { className: 'pbx-tabCount' }, String(projectModels.length))),
+          h('button', { type: 'button', className: 'pbx-tab' + (view === 'sessions' ? ' active' : '') , onClick: () => setView('sessions') }, t('view.sessions'), h('span', { className: 'pbx-tabCount' }, String(allSessions.length)))
         ),
         h('div', { className: 'pbx-tools' },
           h('input', { className: 'pbx-input', type: 'text', placeholder: t('filter.search'), value: query, onChange: (e) => setQuery(e.target.value) }),
@@ -1669,8 +1704,8 @@ window.__ModuleLoader__.load({
         body = h('div', { className: 'pbx-dbScroll' },
           h('table', { className: 'pbx-table' },
             h('thead', null, h('tr', null,
-              th('title', t('col.title'), 'Aa'),
               th('project', t('col.project'), '↗'),
+              th('title', t('col.title'), 'Aa'),
               th('status', t('col.status'), '◉'),
               th('kind', t('col.kind'), '◇'),
               th('preset', t('col.preset'), '◈'),
@@ -1687,17 +1722,11 @@ window.__ModuleLoader__.load({
             h('thead', null, h('tr', null,
               th('name', t('col.project'), 'Aa'),
               th('appearance', t('col.appearance'), '◨', { sortable: false }),
-              th('total', t('col.total'), '#', { num: true }),
-              th('auto', t('stat.auto'), '#', { num: true }),
-              th('running', t('stat.running'), '#', { num: true }),
-              th('attention', t('stat.attention'), '#', { num: true }),
-              th('done', t('status.done'), '#', { num: true }),
-              th('idle', t('status.idle'), '#', { num: true }),
-              th('lastUpdated', t('col.updated'), '◷', { num: true })
+              projectCols.map((def) => th(def.key, t(def.labelKey), def.type, { num: true }))
             )),
             h('tbody', null,
               filteredProjects.length === 0
-                ? h('tr', null, h('td', { colSpan: 9, className: 'pbx-emptyCell' }, t('empty.filtered')))
+                ? h('tr', null, h('td', { colSpan: 2 + projectCols.length, className: 'pbx-emptyCell' }, t('empty.filtered')))
                 : filteredProjects.map(renderProjectRow)
             )
           ),
@@ -1706,38 +1735,36 @@ window.__ModuleLoader__.load({
       }
 
       if (compact) {
-        const defs = [
-          { tone: 'running', titleKey: 'col.running' },
-          { tone: 'attention', titleKey: 'col.attention' },
-          { tone: 'done', titleKey: 'col.done' },
-          { tone: 'idle', titleKey: 'col.idle' }
-        ];
-        const toneColor = (tone) => tone === 'running' ? '#2f6fed' : tone === 'attention' ? '#f59e0b' : tone === 'done' ? 'var(--dsw-alias-state-success-primary)' : 'var(--dsw-alias-state-idle-primary)';
-        const groups = defs.map((def) => ({ tone: def.tone, titleKey: def.titleKey, rows: allSessions.filter((row) => row.info.tone === def.tone).slice().sort((a, b) => b.updatedAt - a.updatedAt) }));
+        const statChip = (label, value, color) => value > 0 ? h('span', { className: 'pbx-pcardStat', style: { color: color } }, String(value) + ' ' + label) : null;
         return h('div', { className: 'pbx-root pbx-compact' }, h('div', { className: 'pbx-compactWrap' },
           h('div', { className: 'pbx-compactHead' },
             h('div', { className: 'pbx-compactTitle' }, h(Icon, { name: 'board', size: 16 }), h('span', null, t('title'))),
-            h('div', { className: 'pbx-compactMeta' }, String(totals.running) + ' ' + t('stat.running') + ' · ' + String(totals.attention) + ' ' + t('stat.attention')),
+            h('div', { className: 'pbx-compactMeta' }, String(projectModels.length) + ' ' + t('stat.workspaces') + ' · ' + String(totals.running) + ' ' + t('stat.running')),
             (typeof openFullBoard === 'function' ? h('button', { type: 'button', className: 'pbx-compactFull', title: t('compact.full'), onClick: () => openFullBoard() }, h(Icon, { name: 'expand', size: 14 })) : null)
           ),
-          groups.map((group) => h('div', { className: 'pbx-cgroup' + (group.rows.length ? '' : ' empty'), key: group.tone, style: { '--pbx-tone': toneColor(group.tone) } },
-            h('div', { className: 'pbx-cgroupHead' },
-              h('span', { className: 'pbx-kdot', 'data-tone': group.tone }),
-              h('span', { className: 'pbx-cgroupTitle' }, t(group.titleKey)),
-              h('span', { className: 'pbx-cgroupCount' }, String(group.rows.length))
-            ),
-            group.rows.length === 0
-              ? h('div', { className: 'pbx-cgroupEmpty' }, t('col.empty'))
-              : group.rows.map((row) => h('button', {
-                  key: row.id, type: 'button', className: 'pbx-crow' + (row.auto ? ' auto' : '') + (row.running ? ' live' : ''),
-                  title: t('card.open'), onClick: () => open(row.id)
+          filteredProjects.length === 0
+            ? h('div', { className: 'pbx-cgroupEmpty' }, t('empty.filtered'))
+            : filteredProjects.map((project) => {
+                const spec = specOf(project.workspaceId);
+                return h('button', {
+                  key: project.workspaceId, type: 'button', className: 'pbx-pcard',
+                  title: t('card.open'),
+                  onClick: () => { setProjectFilter(project.workspaceId); setView('sessions'); setStatusFilter('all'); if (typeof openFullBoard === 'function') openFullBoard(); }
                 },
-                  h('span', { className: 'pbx-rdot', 'data-tone': row.info.tone }),
-                  row.auto ? h('span', { className: 'pbx-autoGlyph' }, h(Icon, { name: 'clock', size: 12 })) : null,
-                  h('span', { className: 'pbx-ctitle' }, row.title),
-                  h('span', { className: 'pbx-ctime' }, relTime(row.updatedAt, t))
-                ))
-          ))
+                  h('span', { className: 'pbx-pcardTop' },
+                    h('span', { className: 'pbx-chipIcon', style: { color: spec.color, background: hexToRgba(spec.color, 0.16) } }, h(Icon, { name: spec.icon, size: 13 })),
+                    h('span', { className: 'pbx-pcardName' }, project.name),
+                    h('span', { className: 'pbx-pcardTotal' }, String(project.counts.total))
+                  ),
+                  project.path ? h('span', { className: 'pbx-pcardPath' }, project.path) : null,
+                  h('span', { className: 'pbx-pcardStats' },
+                    statChip(t('stat.running'), project.counts.running, 'var(--dsw-alias-brand-primary)'),
+                    statChip(t('stat.attention'), project.counts.attention, '#f59e0b'),
+                    statChip(t('status.done'), project.counts.done, 'var(--dsw-alias-state-success-primary)'),
+                    statChip(t('stat.auto'), project.counts.auto, 'var(--dsw-alias-state-warn-primary)')
+                  )
+                );
+              })
         ));
       }
 
@@ -3604,6 +3631,9 @@ window.__ModuleLoader__.load({
             { value: 'sessions', labelKey: 'view.sessions' },
             { value: 'projects', labelKey: 'view.projects' }
           ]),
+          h('div', { className: 'pbx-setSubTitle' }, t('settings.projectColumns')),
+          PROJECT_COLUMNS.map((def) => toggleRow('projectColumns', def.key, def.labelKey)),
+          h('div', { className: 'pbx-setHint' }, t('settings.projectColumnsHint')),
           toggleRow('notify', 'enabled', 'settings.notifyEnabled', 'settings.notifyEnabledDesc'),
           toggleRow('notify', 'sound', 'settings.notifySound', 'settings.notifySoundDesc'),
           rangeRow('palette', 'blur', 'settings.blur', 6, 32, 1)
@@ -3925,6 +3955,14 @@ window.__ModuleLoader__.load({
       '.pbx-cgroupEmpty{padding:8px 11px;font-size:11.5px;color:var(--dsw-alias-label-tertiary)}',
       '.pbx-crow{display:flex;align-items:center;gap:7px;width:100%;padding:7px 10px;border:none;background:transparent;border-radius:0;cursor:pointer;font:inherit;text-align:left;color:var(--dsw-alias-label-primary)}',
       '.pbx-crow + .pbx-crow{box-shadow:inset 0 1px 0 color-mix(in srgb,var(--dsw-alias-border-l1) 55%,transparent)}',
+      '.pbx-pcard{display:flex;flex-direction:column;gap:5px;width:100%;padding:10px 11px;margin:0 0 8px;border:1px solid var(--dsw-alias-border-l1);border-radius:10px;background:var(--dsw-alias-bg-layer-1);cursor:pointer;font:inherit;text-align:left;color:var(--dsw-alias-label-primary);transition:background .16s ease,border-color .16s ease}',
+      '.pbx-pcard:hover{background:var(--dsw-alias-interactive-bg-hover);border-color:var(--dsw-alias-border-l2)}',
+      '.pbx-pcardTop{display:flex;align-items:center;gap:8px;min-width:0}',
+      '.pbx-pcardName{flex:1;min-width:0;font-size:13px;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}',
+      '.pbx-pcardTotal{font-size:11px;color:var(--dsw-alias-label-secondary);background:var(--dsw-alias-bg-layer-2);border:1px solid var(--dsw-alias-border-l1);border-radius:999px;padding:0 6px;line-height:16px;flex:none}',
+      '.pbx-pcardPath{font-size:10.5px;color:var(--dsw-alias-label-tertiary);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}',
+      '.pbx-pcardStats{display:flex;align-items:center;gap:8px;flex-wrap:wrap;font-size:10.5px;color:var(--dsw-alias-label-secondary)}',
+      '.pbx-setSubTitle{font-size:11.5px;font-weight:600;color:var(--dsw-alias-label-secondary);margin:10px 0 2px;padding-top:8px;border-top:1px dashed color-mix(in srgb,var(--dsw-alias-border-l1) 70%,transparent)}',
       '.pbx-crow:hover{background:var(--dsw-alias-interactive-bg-hover)}',
       '.pbx-crow.auto{background:color-mix(in srgb,var(--dsw-alias-state-warn-primary) 5%,transparent)}',
       '.pbx-ctitle{flex:1;min-width:0;font-size:13px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}',
@@ -4118,7 +4156,7 @@ window.__ModuleLoader__.load({
           }, 800);
         } catch (error) { /* ignore */ }
       });
-      const writeSettings = (next) => { const merged = mergeSettings(DEFAULT_SETTINGS, next); merged.headerButtonsVersion = 3; merged.hintsVersion = 1; merged.shortcutsVersion = 1; persistSettings(merged); settingsStore.set(merged); logEvent('info', 'settings', 'saved'); };
+      const writeSettings = (next) => { const merged = mergeSettings(DEFAULT_SETTINGS, next); merged.headerButtonsVersion = 3; merged.hintsVersion = 1; merged.shortcutsVersion = 1; merged.boardProjVersion = 1; persistSettings(merged); settingsStore.set(merged); logEvent('info', 'settings', 'saved'); };
       const toggleHud = () => {
         try {
           window.dispatchEvent(new CustomEvent('pbx-hud-toggle'));
