@@ -2848,15 +2848,27 @@ window.__ModuleLoader__.load({
         if (config.hud.enabled === false) return undefined;
         let last = null;
         const frameNow = () => document.querySelector('[class*="_frame"][style*="grid-template-columns"]') || document.querySelector('[data-sidebar-collapsed]');
+        const sidebarColumn = () => {
+          const frame = frameNow();
+          return document.querySelector('[class*="_sidebarCol"]') || (frame ? frame.firstElementChild : null);
+        };
+        /* Judge by the sidebar column's real width: a fullscreen board can hide the column entirely,
+           and an attribute-only check then wrongly looked "expanded" and made the pill dock. */
         const readExpanded = () => {
+          if (document.querySelector('[data-sidebar-right-panel="fullscreen"]')) return false;
+          const column = sidebarColumn();
+          if (column) {
+            const width = column.getBoundingClientRect().width;
+            if (width > 120) return true;
+            if (width > 0) return false;
+          }
           const frame = frameNow();
           if (!frame) return null;
           return !frame.hasAttribute('data-sidebar-collapsed');
         };
         /* Right edge of the native session list, so the pill hugs that column instead of the window. */
         const sidebarRightEdge = () => {
-          const frame = frameNow();
-          const column = document.querySelector('[class*="_sidebarCol"]') || (frame && frame.firstElementChild);
+          const column = sidebarColumn();
           const rect = column ? column.getBoundingClientRect() : null;
           if (!rect || rect.width < 60) return null;
           return rect.right;
@@ -3856,7 +3868,7 @@ window.__ModuleLoader__.load({
       '.pbx-prowTime{font-size:11.5px;color:var(--dsw-alias-label-secondary);flex:none;min-width:44px;text-align:right}',
       '.pbx-paletteEmpty{padding:24px;text-align:center;color:var(--dsw-alias-label-secondary);font-size:13.5px}',
       '.pbx-paletteFoot{padding:9px 16px;border-top:1px solid var(--dsw-alias-border-l1);font-size:12px;color:var(--dsw-alias-label-secondary)}',
-      '.pbx-hud{position:fixed;z-index:900;width:300px;max-width:calc(100vw - 16px);background:linear-gradient(180deg,color-mix(in srgb,var(--dsw-alias-bg-overlay) 92%,transparent),color-mix(in srgb,var(--dsw-alias-bg-overlay) 84%,transparent));backdrop-filter:blur(24px) saturate(1.3);-webkit-backdrop-filter:blur(24px) saturate(1.3);border:1px solid var(--dsw-alias-border-l1);border-radius:14px;box-shadow:inset 0 1px 0 rgba(255,255,255,.05);overflow:hidden;pointer-events:auto;transform-origin:top right}',
+      '.pbx-hud{position:fixed;z-index:1000;width:300px;max-width:calc(100vw - 16px);background:linear-gradient(180deg,color-mix(in srgb,var(--dsw-alias-bg-overlay) 92%,transparent),color-mix(in srgb,var(--dsw-alias-bg-overlay) 84%,transparent));backdrop-filter:blur(24px) saturate(1.3);-webkit-backdrop-filter:blur(24px) saturate(1.3);border:1px solid var(--dsw-alias-border-l1);border-radius:14px;box-shadow:inset 0 1px 0 rgba(255,255,255,.05);overflow:hidden;pointer-events:auto;transform-origin:top right}',
       '.pbx-hudInner{display:flex;flex-direction:column;min-height:0}',
       '.pbx-hudInner.swap-out{animation:pbxHudSwapOut .12s cubic-bezier(.4,0,1,1) both}',
       '.pbx-hudInner.swap-in{animation:pbxHudSwapIn .26s cubic-bezier(.22,.82,.3,1) both}',
