@@ -2491,6 +2491,32 @@ window.__ModuleLoader__.load({
         return () => { window.removeEventListener('pointermove', move); window.removeEventListener('pointerup', up); };
       }, [dragging]);
 
+      /* Keep an edge-snapped HUD on its edge when the pill and the list swap sizes:
+         a bottom-left list must collapse into a bottom-left pill, not float up. */
+      const prevBoxRef = useRef({ collapsed: null, width: 0, height: 0, x: 0, y: 0 });
+      useLayoutEffectSafe(() => {
+        const box = hudRef.current;
+        if (!box) return;
+        const rect = box.getBoundingClientRect();
+        const width = rect.width;
+        const height = rect.height;
+        const previous = prevBoxRef.current;
+        if (previous.collapsed !== null && previous.collapsed !== collapsed && posRef.current && width > 0 && height > 0) {
+          const gap = 4;
+          const rightAnchored = previous.x + previous.width >= window.innerWidth - 10;
+          const bottomAnchored = previous.y + previous.height >= window.innerHeight - 10;
+          if (rightAnchored || bottomAnchored) {
+            const next = {
+              x: rightAnchored ? Math.max(gap, window.innerWidth - width - gap) : posRef.current.x,
+              y: bottomAnchored ? Math.max(gap, window.innerHeight - height - gap) : posRef.current.y
+            };
+            setPos(next);
+            saveJson(HUD_POS_KEY, next);
+          }
+        }
+        prevBoxRef.current = { collapsed: collapsed, width: width, height: height, x: rect.left, y: rect.top };
+      });
+
       const onDragStart = (event) => {
         const hitButton = event.target && event.target.closest && event.target.closest('button');
         if (event.button !== 0 || (hitButton && hitButton !== event.currentTarget)) return;

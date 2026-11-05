@@ -5,6 +5,12 @@
 版本号从 `0.1.0` 开始：小步走，每次改动都单独发一个版本，方便你对照着升级。
 日期按发布时间倒序排列，最新的在最上面。
 
+## [0.1.12] - 2026-11-05
+
+### 修了
+
+- 悬浮列表吸在左下角时，收起成小胶囊不会再"浮"到上面去：胶囊照样贴住左下角，重新展开也从原来的角落往外长。右边、右下角吸附同理。
+
 ## [0.1.11] - 2026-11-05
 
 ### 改了
@@ -122,3 +128,4 @@
 [0.1.9]: https://github.com/cgartlab/dsh-project-board/releases/tag/v0.1.9
 [0.1.10]: https://github.com/cgartlab/dsh-project-board/releases/tag/v0.1.10
 [0.1.11]: https://github.com/cgartlab/dsh-project-board/releases/tag/v0.1.11
+
