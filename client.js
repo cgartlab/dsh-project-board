@@ -1081,6 +1081,17 @@ window.__ModuleLoader__.load({
       { key: 'presets', labelKey: 'settings.pc.presets', type: '#' },
       { key: 'lastUpdated', labelKey: 'settings.pc.lastUpdated', type: '◷' }
     ];
+    /* Measure rendered text so the floating list can shrink/grow to the longest session title. */
+    let hudMeasureCanvas = null;
+    function measureTextWidth(text, font) {
+      try {
+        if (!hudMeasureCanvas) hudMeasureCanvas = document.createElement('canvas');
+        const ctx = hudMeasureCanvas.getContext('2d');
+        if (!ctx) return String(text || '').length * 7;
+        if (font) ctx.font = font;
+        return ctx.measureText(String(text || '')).width;
+      } catch (error) { return String(text || '').length * 7; }
+    }
 
     function hashString(value) {
       let hash = 0; const text = String(value);
@@ -2602,6 +2613,7 @@ window.__ModuleLoader__.load({
       const rowRectsRef = useRef(null);
       const [listHeight, setListHeight] = useState(0);
       const [listOverflow, setListOverflow] = useState(false);
+      const [hudWidth, setHudWidth] = useState(0);
       const collapsedStateRef = useRef(collapsed);
       collapsedStateRef.current = collapsed;
       const autoDockRef = useRef(false);
@@ -3021,6 +3033,19 @@ window.__ModuleLoader__.load({
         if (rank !== 0) return rank;
         return (b.updatedAt || 0) - (a.updatedAt || 0);
       });
+      /* Fit the panel to the longest session title (bounded), so short lists do not waste width. */
+      useLayoutEffectSafe(() => {
+        if (!rows.length || collapsed) return;
+        const titleEl = listContentRef.current ? listContentRef.current.querySelector('.pbx-hudRowTitle') : null;
+        const font = titleEl ? (window.getComputedStyle(titleEl).font || '') : '';
+        let longest = 0;
+        for (const row of rows) { const w = measureTextWidth(row.title, font); if (w > longest) longest = w; }
+        if (!longest) return;
+        const minWidth = 208;
+        const maxWidth = Math.min(420, Math.max(260, window.innerWidth * 0.42));
+        const next = Math.round(Math.min(maxWidth, Math.max(minWidth, longest + 124)));
+        setHudWidth((previous) => Math.abs(previous - next) > 1 ? next : previous);
+      }, [rows.map((row) => row.title).join('|'), collapsed]);
       const fullOrderIds = rows.map((row) => row.id);
       if (rows.length > hudMaxSessions) {
         const keep = rows.slice(0, hudMaxSessions);
@@ -3062,7 +3087,7 @@ window.__ModuleLoader__.load({
 
       const positionMode = config.hud.defaultPosition || 'top-right';
       const useSavedPosition = Boolean(pos) && (positionMode === 'last' || dragging || hasDragged);
-      const style = useSavedPosition ? { left: pos.x + 'px', top: pos.y + 'px' } : null;
+      const style = Object.assign({}, useSavedPosition ? { left: pos.x + 'px', top: pos.y + 'px' } : {}, (!collapsed && hudWidth) ? { width: hudWidth + 'px' } : {});
       const className = 'pbx-hud' + (useSavedPosition ? ' moved' : ' default' + (positionMode === 'bottom-right' ? ' bottom' : '')) + (dragging ? ' dragging' : '') + (closing ? ' closing' : '');
       const runningCount = rows.filter((row) => row.tone === 'running').length;
       const [hintsHidden, setHintsHidden] = useState(false);
