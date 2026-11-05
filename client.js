@@ -2036,7 +2036,7 @@ window.__ModuleLoader__.load({
           .filter((id) => buttons[id] && buttons[id].hidden !== true && Boolean(nodes[id]))
           .sort((a, b) => ((buttons[a].order || 0) - (buttons[b].order || 0)));
         if (menuIds.length === 0) return null;
-        return h('div', { className: 'pbx-navMoreWrap', ref: navWrapRef },
+        return h('div', { className: 'pbx-navMoreWrap' },
           h('button', {
             type: 'button', className: 'pbx-navMore' + (moreOpen ? ' open' : ''), title: t('nav.more'), 'aria-label': t('nav.more'),
             'aria-expanded': moreOpen ? 'true' : 'false', 'aria-haspopup': 'menu',
@@ -2070,7 +2070,6 @@ window.__ModuleLoader__.load({
         }));
       }
       return h('div', {
-        ref: navWrapRef,
         className: 'pbx-nav' + (props.side === 'right' ? ' pbx-navRight' : '') + (tightNav ? ' pbx-tight' : '') + (children.length === 0 ? ' pbx-navEmpty' : '')
       }, children);
     }
