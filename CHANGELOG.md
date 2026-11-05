@@ -4,6 +4,23 @@ All notable changes to this project are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the project uses
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.0.4] - 2026-11-05
+
+### Fixed
+
+- On macOS the fixed-position top UI (floating session HUD, toast stack, search palette,
+  and rename / session dialogs) now clears the system menu bar and window-control strip.
+  It follows DSH's `--dsh-frame-top-clearance` (48px on macOS, plus a 20px offset) and
+  returns to 20px in fullscreen; other platforms keep their previous offsets.
+- The plugin sets `data-pbx-platform` on `<html>` itself: Electron injects `data-platform`
+  only into the native window, so the web UI would otherwise miss the macOS clearance.
+
+### Notes
+
+- The host's own conversation header is deliberately not shifted. DSH does not apply top
+  clearance to that header, and moving only the injected buttons would misalign them with
+  DSH's own header controls.
+
 ## [1.0.3] - 2026-11-05
 
 ### Changed

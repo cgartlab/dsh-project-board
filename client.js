@@ -3523,6 +3523,7 @@ window.__ModuleLoader__.load({
       '.pbx-capDot{width:7px;height:7px;border-radius:50%;background:var(--dsw-alias-state-error-primary);flex:none}',
       '.pbx-capBoard{display:inline-flex;align-items:center;gap:5px;padding-left:8px;border-left:1px solid var(--dsw-alias-border-l1);color:var(--dsw-alias-label-secondary)}',
       '.pbx-paletteBackdrop{position:fixed;inset:0;z-index:1000;background:rgba(8,10,14,.20);backdrop-filter:blur(15px) saturate(1.35);-webkit-backdrop-filter:blur(15px) saturate(1.35);display:flex;justify-content:center;align-items:flex-start;padding-top:12vh;pointer-events:auto;animation:pbxBackdropIn .2s ease-out both}',
+      'html[data-pbx-platform="darwin"] .pbx-paletteBackdrop{padding-top:max(12vh,calc(var(--dsh-frame-top-clearance,48px) + 20px))}',
       '.pbx-palette{width:min(700px,92vw);max-height:72vh;display:flex;flex-direction:column;background:linear-gradient(180deg,color-mix(in srgb,var(--dsw-alias-bg-overlay) 74%,transparent),color-mix(in srgb,var(--dsw-alias-bg-overlay) 56%,transparent));backdrop-filter:blur(26px) saturate(1.55);-webkit-backdrop-filter:blur(26px) saturate(1.55);border:1px solid color-mix(in srgb,var(--dsw-alias-border-l2) 62%,rgba(255,255,255,.26));border-radius:16px;box-shadow:0 28px 90px rgba(0,0,0,.5),inset 0 1px 0 rgba(255,255,255,.09);overflow:hidden;animation:pbxPaletteIn .22s cubic-bezier(.2,.8,.2,1) both}',
       '.pbx-paletteHead{display:flex;align-items:center;gap:10px;padding:14px 16px;border-bottom:1px solid var(--dsw-alias-border-l1);color:var(--dsw-alias-label-secondary)}',
       '.pbx-paletteInput{flex:1;border:none;background:transparent;color:var(--dsw-alias-label-primary);font:inherit;font-size:15px;line-height:22px;outline:none}',
@@ -3547,6 +3548,10 @@ window.__ModuleLoader__.load({
       '.pbx-hudInner.swap-in{animation:pbxHudSwapIn .26s cubic-bezier(.22,.82,.3,1) both}',
       '.pbx-hud.default{right:18px;top:72px}',
       '.pbx-hud.moved{right:auto;top:auto}',
+      /* macOS reserves 48px under the menu bar / window controls. DSH publishes it as
+         --dsh-frame-top-clearance; fall back to 48px when the web UI does not set it. */
+      'html[data-pbx-platform="darwin"] .pbx-hud.default{top:calc(var(--dsh-frame-top-clearance,48px) + 20px)}',
+      'html[data-pbx-platform="darwin"][data-fullscreen] .pbx-hud.default{top:20px}',
       '.pbx-hud.dragging{cursor:grabbing}',
       '.pbx-hudHead{display:flex;align-items:center;gap:8px;padding:10px 12px;border-bottom:1px solid var(--dsw-alias-border-l1);cursor:grab;user-select:none}',
       '.pbx-hudGrip{width:10px;height:14px;background-image:radial-gradient(var(--dsw-alias-label-secondary) 1px,transparent 1px);background-size:3px 3px;opacity:.5;flex:none}',
@@ -3587,6 +3592,7 @@ window.__ModuleLoader__.load({
       '.pbx-responsive>.pbx-root{flex:1;min-height:0}',
       '.pbx-headerRight{display:flex;align-items:center;gap:10px;flex-wrap:wrap}',
       '.pbx-renameBackdrop{position:fixed;inset:0;z-index:1100;display:flex;justify-content:center;align-items:flex-start;padding-top:16vh;background:rgba(8,10,14,.34);backdrop-filter:blur(3px);-webkit-backdrop-filter:blur(3px);pointer-events:auto;animation:pbxBackdropIn .16s ease-out both}',
+      'html[data-pbx-platform="darwin"] .pbx-renameBackdrop{padding-top:max(16vh,calc(var(--dsh-frame-top-clearance,48px) + 20px))}',
       '.pbx-renameCard{width:min(420px,calc(100vw - 32px));box-sizing:border-box;background:var(--dsw-alias-bg-layer-2);border:1px solid var(--dsw-alias-border-l2);border-radius:var(--dsw-radius-xl);box-shadow:0 24px 64px rgba(0,0,0,.32);padding:18px;display:flex;flex-direction:column;gap:7px;animation:pbxPaletteIn .18s cubic-bezier(.2,.8,.2,1) both}',
       '.pbx-renameTitle{font-size:15px;font-weight:600;color:var(--dsw-alias-label-primary);margin-bottom:2px}',
       '.pbx-renameLabel{font-size:12px;color:var(--dsw-alias-label-secondary)}',
@@ -3603,6 +3609,8 @@ window.__ModuleLoader__.load({
       '.pbx-renameBtn.danger:hover:not(:disabled){background:color-mix(in srgb,var(--dsw-alias-state-error-primary) 12%,transparent)}',
       '.pbx-menuHint{font-size:11.5px;color:var(--dsw-alias-label-secondary);line-height:1.45;overflow-wrap:anywhere}',
       '.pbx-toasts{position:fixed;top:calc(var(--dsh-windows-titlebar-height,0px) + 12px);left:50%;transform:translateX(-50%);z-index:1200;display:flex;flex-direction:column;align-items:center;gap:8px;pointer-events:none}',
+      'html[data-pbx-platform="darwin"] .pbx-toasts{top:calc(var(--dsh-frame-top-clearance,48px) + 20px)}',
+      'html[data-pbx-platform="darwin"][data-fullscreen] .pbx-toasts{top:20px}',
       '.pbx-toast{pointer-events:auto;display:flex;align-items:flex-start;gap:10px;min-width:260px;max-width:min(520px,calc(100vw - 32px));box-sizing:border-box;padding:10px 12px;background:var(--dsw-alias-bg-layer-2);border:1px solid var(--dsw-alias-border-l2);border-radius:var(--dsw-radius-md);box-shadow:0 12px 32px rgba(0,0,0,.28);animation:pbxToastIn .18s ease-out both}',
       '.pbx-toast[data-tone=warn]{border-color:color-mix(in srgb,var(--dsw-alias-state-warn-primary) 55%,var(--dsw-alias-border-l2))}',
       '.pbx-toastIcon{display:inline-flex;color:var(--dsw-alias-state-warn-primary);flex:none;padding-top:1px}',
@@ -3701,6 +3709,14 @@ window.__ModuleLoader__.load({
     /* ----------------------------------------------------------------- apply */
     function apply(ctx) {
       ctx.effect(() => ctx.locale.register(NS, { zh: zh, en: en }), 'project-board: dictionaries');
+      /* Electron injects data-platform only in the native window; mark it ourselves so
+         fixed-position UI can honour the macOS menu bar / traffic-light clearance in
+         both the desktop app and the web UI. */
+      ctx.effect(() => {
+        const root = document.documentElement;
+        root.setAttribute('data-pbx-platform', IS_MAC ? 'darwin' : 'other');
+        return () => { root.removeAttribute('data-pbx-platform'); };
+      }, 'project-board: platform marker');
       ctx.effect(() => {
         const tag = document.createElement('style');
         tag.dataset.plugin = '@local/dsh-project-board';

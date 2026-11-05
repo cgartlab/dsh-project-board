@@ -22,8 +22,8 @@ function createElementStub() {
     textContent: '',
     style: {},
     dataset: {},
-    setAttribute() {},
-    removeAttribute() {},
+    setAttribute(name, value) { (this._attrs || (this._attrs = {}))[name] = value; },
+    removeAttribute(name) { if (this._attrs) delete this._attrs[name]; },
     appendChild() {},
     remove() {},
     addEventListener() {},
@@ -236,4 +236,33 @@ test('bindings stay platform-neutral so saved shortcuts keep working', () => {
   assert.match(source, /shortcuts:\s*\{\s*palette:\s*'alt\+KeyK'/);
   assert.match(source, /if \(event\.altKey\) parts\.push\('alt'\)/);
   assert.match(source, /part === 'ctrl' \? 'control' : part/);
+});
+
+test('platform marker is applied for macOS and other platforms', () => {
+  const mac = loadModule('MacIntel');
+  moduleApply(mac);
+  assert.equal(mac.document.documentElement._attrs['data-pbx-platform'], 'darwin');
+
+  const win = loadModule('Win32');
+  moduleApply(win);
+  assert.equal(win.document.documentElement._attrs['data-pbx-platform'], 'other');
+});
+
+function moduleApply(loaded) {
+  const { ctx } = createContext(loaded.window, loaded.document);
+  loaded.module.apply(ctx);
+}
+
+test('macOS CSS clears the window-control strip and follows fullscreen', () => {
+  const fs = require('node:fs');
+  const source = fs.readFileSync(path.join(root, 'client.js'), 'utf8');
+  // HUD, toasts and the two modal backdrops all use DSH's frame clearance with a 48px fallback.
+  assert.match(source, /html\[data-pbx-platform="darwin"\] \.pbx-hud\.default\{top:calc\(var\(--dsh-frame-top-clearance,48px\) \+ 20px\)\}/);
+  assert.match(source, /html\[data-pbx-platform="darwin"\]\[data-fullscreen\] \.pbx-hud\.default\{top:20px\}/);
+  assert.match(source, /html\[data-pbx-platform="darwin"\] \.pbx-toasts\{top:calc\(var\(--dsh-frame-top-clearance,48px\) \+ 20px\)\}/);
+  assert.match(source, /html\[data-pbx-platform="darwin"\]\[data-fullscreen\] \.pbx-toasts\{top:20px\}/);
+  assert.match(source, /html\[data-pbx-platform="darwin"\] \.pbx-paletteBackdrop/);
+  assert.match(source, /html\[data-pbx-platform="darwin"\] \.pbx-renameBackdrop/);
+  // Non-mac defaults are unchanged.
+  assert.match(source, /'\.pbx-hud\.default\{right:18px;top:72px\}'/);
 });
