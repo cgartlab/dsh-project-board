@@ -1102,7 +1102,7 @@ window.__ModuleLoader__.load({
       down: ['M6 9l6 6 6-6'],
       bottom: ['M12 4v12', 'M7 11l5 5 5-5', 'M5 20h14'],
       left: ['M19 12H5', 'M11 6l-6 6 6 6'],
-      archive: ['M3 7h18', 'M5 7v12a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1V7', 'M9 7V4h6v3', 'M10 11h4']
+      archive: ['M12 4.5v7.5', 'M8.4 9L12 12.6 15.6 9', 'M4.5 13v4.5A2 2 0 0 0 6.5 19.5h11a2 2 0 0 0 2-2V13']
     };
     function Icon(props) {
       const name = props.name || 'folder'; const size = props.size || 16; const strokeWidth = props.strokeWidth || 1.7;
@@ -2409,6 +2409,24 @@ window.__ModuleLoader__.load({
       return hours > 0 ? hours + ':' + pad(minutes) + ':' + pad(seconds) : minutes + ':' + pad(seconds);
     }
 
+    /** Top edge of the main chat panel, so the floating list never covers the header/title bar. */
+    function hudContentTop() {
+      try {
+        const anchor = document.querySelector('[data-chat-anchor-key]');
+        let node = anchor ? anchor.parentElement : null;
+        while (node && node !== document.body) {
+          const style = window.getComputedStyle(node);
+          if (/(auto|scroll)/.test(style.overflowY) && node.getBoundingClientRect().height > 120) return node.getBoundingClientRect().top;
+          node = node.parentElement;
+        }
+        const scroller = document.querySelector('.an3WzG_scrollBody');
+        if (scroller) return scroller.getBoundingClientRect().top;
+        const flow = document.querySelector('[data-slot="conversation.chat.flow"]');
+        if (flow) { const rect = flow.getBoundingClientRect(); if (rect.height > 0) return rect.top; }
+      } catch (error) { /* ignore */ }
+      return 112;
+    }
+
     function FloatingStatus(props) {
       const { useSessions, useSessionStatus, useWorkspaces, t, openSession, saveSettings } = props;
       const useSettings = typeof props.useSettings === 'function' ? props.useSettings : NO_SCHEDULE_HOOK;
@@ -2422,7 +2440,9 @@ window.__ModuleLoader__.load({
       const autoSet = (scheduleSnap && scheduleSnap.activeSessionIds) || NO_AUTO;
       const focusSnap = useFocus((snapshot) => snapshot);
       const hudMaxSessions = Math.min(20, Math.max(1, Number(config.hud.maxSessions) || 6));
-      const hudListMaxHeight = Math.min(hudMaxSessions * 50 + 12, Math.max(160, (window.innerHeight || 800) - 180));
+      const hudListRowUnit = 51;
+      const hudListChrome = 15;
+      const hudListMaxHeight = Math.min(hudMaxSessions * hudListRowUnit + hudListChrome, Math.max(hudListRowUnit + hudListChrome, Math.floor(((window.innerHeight || 800) - 180) / hudListRowUnit) * hudListRowUnit + hudListChrome));
       const [now, setNow] = useState(() => Date.now());
       const [collapsed, setCollapsed] = useState(() => {
         try {
@@ -2445,14 +2465,13 @@ window.__ModuleLoader__.load({
       const hudRef = useRef(null);
       const listContentRef = useRef(null);
       const [listHeight, setListHeight] = useState(0);
+      const [listOverflow, setListOverflow] = useState(false);
       const [present, setPresent] = useState(false);
       const publishedOrderRef = useRef('');
       const prevCurrentRef = useRef(undefined);
       const [localSpot, setLocalSpot] = useState({ id: null, at: 0 });
       const dragRef = useRef(null);
       const posRef = useRef(pos);
-      const collapsedRef = useRef(collapsed);
-      collapsedRef.current = collapsed;
       const startsRef = useRef(null);
       if (startsRef.current === null) {
         const stored = loadJson(HUD_STARTS_KEY, {});
@@ -2528,9 +2547,10 @@ window.__ModuleLoader__.load({
           const box = hudRef.current;
           const width = box ? box.offsetWidth : 300;
           const height = box ? box.offsetHeight : 220;
+          const minTop = hudContentTop() + 4;
           const next = {
             x: Math.min(Math.max(4, posRef.current.x), Math.max(4, window.innerWidth - width - 4)),
-            y: Math.min(Math.max(4, posRef.current.y), Math.max(4, window.innerHeight - height - 4))
+            y: Math.min(Math.max(minTop, posRef.current.y), Math.max(minTop, window.innerHeight - height - 4))
           };
           if (next.x !== posRef.current.x || next.y !== posRef.current.y) {
             setPos(next);
@@ -2561,6 +2581,7 @@ window.__ModuleLoader__.load({
         if (!element) return;
         const next = Math.min(element.scrollHeight, hudListMaxHeight);
         setListHeight((previous) => Math.abs(previous - next) > 0.5 ? next : previous);
+        setListOverflow((previous) => { const overflows = element.scrollHeight > hudListMaxHeight + 1; return previous === overflows ? previous : overflows; });
       });
       useEffect(() => {
         if (!dragging) return undefined;
@@ -2575,24 +2596,21 @@ window.__ModuleLoader__.load({
           const gap = 4;
           const rawX = event.clientX - (drag.dx || 0);
           const rawY = event.clientY - (drag.dy || 0);
+          const minTop = hudContentTop() + gap;
           const maxX = Math.max(gap, window.innerWidth - width - gap);
-          const maxY = Math.max(gap, window.innerHeight - height - gap);
+          const maxY = Math.max(minTop, window.innerHeight - height - gap);
           let x = Math.min(Math.max(gap, rawX), maxX);
-          let y = Math.min(Math.max(gap, rawY), maxY);
-          let snappedX = false;
-          let snappedY = false;
-          /* Glue to the nearest edge / corner while dragging. */
-          if (rawX <= SNAP) { x = gap; snappedX = true; }
-          else if (rawX + width >= window.innerWidth - SNAP) { x = maxX; snappedX = true; }
-          if (rawY <= SNAP) { y = gap; snappedY = true; }
-          else if (rawY + height >= window.innerHeight - SNAP) { y = maxY; snappedY = true; }
-          dragRef.current = Object.assign({}, drag, { snapped: snappedX || snappedY });
+          let y = Math.min(Math.max(minTop, rawY), maxY);
+          /* Glue to the nearest edge / corner while dragging; dropping there keeps the list open. */
+          if (rawX <= SNAP) x = gap;
+          else if (rawX + width >= window.innerWidth - SNAP) x = maxX;
+          if (rawY <= SNAP) y = minTop;
+          else if (rawY + height >= window.innerHeight - SNAP) y = maxY;
           const next = { x: x, y: y };
           posRef.current = next;
           setPos(next);
         };
         const up = () => {
-          const snapped = Boolean(dragRef.current && dragRef.current.snapped);
           setDragging(false);
           if (!hudDragMovedRef.current) return;
           setHasDragged(true);
@@ -2602,13 +2620,7 @@ window.__ModuleLoader__.load({
             next.hud = Object.assign({}, next.hud, { defaultPosition: 'last' });
             saveSettings(next);
           }
-          /* Dropped on an edge or corner: fold the list into its small pill so it stays
-             out of the way while still marking its corner. */
-          if (snapped && !collapsedRef.current) {
-            logEvent('debug', 'hud', 'snap drop -> collapse', posRef.current || {});
-            try { window.localStorage.setItem(HUD_COLLAPSE_KEY, '1'); } catch (error) { /* ignore */ }
-            setCollapsed(true);
-          }
+          if (posRef.current) logEvent('debug', 'hud', 'drag drop', posRef.current);
         };
         window.addEventListener('pointermove', move);
         window.addEventListener('pointerup', up);
@@ -2838,7 +2850,7 @@ window.__ModuleLoader__.load({
               }
             }, h(Icon, { name: collapseDir, size: 13, strokeWidth: 2 }))
           ),
-          h('div', { className: 'pbx-hudList', style: Object.assign({ maxHeight: hudListMaxHeight + 'px' }, listHeight > 0 ? { height: listHeight + 'px' } : {}) },
+          h('div', { className: 'pbx-hudList' + (listOverflow ? ' scrollable' : ''), style: Object.assign({ maxHeight: hudListMaxHeight + 'px' }, listHeight > 0 ? { height: listHeight + 'px' } : {}) },
             h('div', { ref: listContentRef, className: 'pbx-hudListInner' },
               rows.map((row) => h('div', {
               key: row.id, role: 'button', tabIndex: 0, 'data-hud-id': row.id, className: 'pbx-hudRow' + (row.auto ? ' auto' : '') + (row.tone === 'running' ? ' live' : '') + (row.current ? ' current' : '') + (row.spotlight ? ' spotlight' : ''),
@@ -2861,7 +2873,7 @@ window.__ModuleLoader__.load({
                 className: 'pbx-hudArchive', role: 'button', tabIndex: -1, title: t('hud.archive'), 'aria-label': t('hud.archive'),
                 onClick: (event) => { event.stopPropagation(); archiveRow(row); },
                 onKeyDown: (event) => { event.stopPropagation(); }
-              }, h(Icon, { name: 'archive', size: 12, strokeWidth: 1.8 }))
+              }, h(Icon, { name: 'archive', size: 14, strokeWidth: 1.6 }))
             ))
           ))
         )
@@ -3538,46 +3550,51 @@ window.__ModuleLoader__.load({
       '.pbx-prowTime{font-size:11.5px;color:var(--dsw-alias-label-secondary);flex:none;min-width:44px;text-align:right}',
       '.pbx-paletteEmpty{padding:24px;text-align:center;color:var(--dsw-alias-label-secondary);font-size:13.5px}',
       '.pbx-paletteFoot{padding:9px 16px;border-top:1px solid var(--dsw-alias-border-l1);font-size:12px;color:var(--dsw-alias-label-secondary)}',
-      '.pbx-hud{position:fixed;z-index:900;width:300px;max-width:calc(100vw - 16px);background:linear-gradient(180deg,color-mix(in srgb,var(--dsw-alias-bg-overlay) 88%,transparent),color-mix(in srgb,var(--dsw-alias-bg-overlay) 78%,transparent));backdrop-filter:blur(26px) saturate(1.35);-webkit-backdrop-filter:blur(26px) saturate(1.35);border:1px solid var(--dsw-alias-border-l1);border-radius:14px;box-shadow:0 18px 48px rgba(0,0,0,.28);overflow:hidden;pointer-events:auto;transform-origin:top right}',
+      '.pbx-hud{position:fixed;z-index:900;width:300px;max-width:calc(100vw - 16px);background:linear-gradient(180deg,color-mix(in srgb,var(--dsw-alias-bg-overlay) 92%,transparent),color-mix(in srgb,var(--dsw-alias-bg-overlay) 84%,transparent));backdrop-filter:blur(24px) saturate(1.3);-webkit-backdrop-filter:blur(24px) saturate(1.3);border:1px solid var(--dsw-alias-border-l1);border-radius:14px;box-shadow:inset 0 1px 0 rgba(255,255,255,.05);overflow:hidden;pointer-events:auto;transform-origin:top right}',
       '.pbx-hudInner{display:flex;flex-direction:column;min-height:0}',
       '.pbx-hudInner.swap-out{animation:pbxHudSwapOut .12s cubic-bezier(.4,0,1,1) both}',
       '.pbx-hudInner.swap-in{animation:pbxHudSwapIn .26s cubic-bezier(.22,.82,.3,1) both}',
-      '.pbx-hud.default{right:18px;top:72px}',
+      '.pbx-hud.default{right:18px;top:120px}',
       '.pbx-hud.moved{right:auto;top:auto}',
-      '.pbx-hud.dragging{cursor:grabbing}',
-      '.pbx-hudHead{display:flex;align-items:center;gap:8px;padding:10px 12px;border-bottom:1px solid var(--dsw-alias-border-l1);cursor:grab;user-select:none}',
-      '.pbx-hudGrip{width:10px;height:14px;background-image:radial-gradient(var(--dsw-alias-label-secondary) 1px,transparent 1px);background-size:3px 3px;opacity:.5;flex:none}',
-      '.pbx-hudHeadTitle{font-size:12.5px;font-weight:600;color:var(--dsw-alias-label-primary)}',
-      '.pbx-hudCount{margin-left:auto;font-size:11px;color:var(--dsw-alias-label-secondary);background:var(--dsw-alias-bg-layer-2);border-radius:999px;padding:0 7px;line-height:17px}',
-      '.pbx-hudCollapse{width:22px;height:22px;display:inline-flex;align-items:center;justify-content:center;padding:0;border:none;background:transparent;color:var(--dsw-alias-label-secondary);border-radius:6px;cursor:pointer;font:inherit;line-height:1;transition:background .16s ease,color .16s ease,transform .12s ease}',
+      '.pbx-hud.dragging{cursor:grabbing;box-shadow:inset 0 1px 0 rgba(255,255,255,.05),0 18px 44px rgba(0,0,0,.26)}',
+      '.pbx-hudHead{display:flex;align-items:center;gap:8px;padding:10px 12px;border-bottom:1px solid color-mix(in srgb,var(--dsw-alias-border-l1) 70%,transparent);cursor:grab;user-select:none}',
+      '.pbx-hudGrip{width:6px;height:12px;background-image:radial-gradient(circle,var(--dsw-alias-label-secondary) 1px,transparent 1.1px);background-size:3px 4px;opacity:.45;flex:none;margin-right:0}',
+      '.pbx-hudHeadTitle{font-size:12px;font-weight:600;letter-spacing:.01em;color:var(--dsw-alias-label-primary)}',
+      '.pbx-hudCount{margin-left:auto;min-width:20px;text-align:center;box-sizing:border-box;font-size:10.5px;font-variant-numeric:tabular-nums;color:var(--dsw-alias-label-secondary);background:var(--dsw-alias-bg-layer-2);border:1px solid var(--dsw-alias-border-l1);border-radius:999px;padding:0 6px;line-height:18px}',
+      '.pbx-hudCollapse{width:22px;height:22px;margin-left:2px;display:inline-flex;align-items:center;justify-content:center;padding:0;border:none;background:transparent;color:var(--dsw-alias-label-secondary);border-radius:6px;cursor:pointer;font:inherit;line-height:1;transition:background .16s ease,color .16s ease,transform .12s ease}',
       '.pbx-hudCollapse:hover{background:color-mix(in srgb,var(--dsw-alias-label-secondary) 14%,transparent);color:var(--dsw-alias-label-primary)}',
       '.pbx-hudCollapse:active{transform:scale(.92)}',
       '.pbx-hudCollapse:focus-visible{outline:2px solid var(--dsw-alias-brand-primary);outline-offset:1px}',
-      '.pbx-hudList{max-height:260px;overflow-x:hidden;overflow-y:auto;padding:7px;transition:height .28s cubic-bezier(.2,.8,.2,1);scrollbar-width:none;-ms-overflow-style:none}',
+      '.pbx-hudList{max-height:260px;overflow-x:hidden;overflow-y:auto;padding:8px 8px 10px;transition:height .26s cubic-bezier(.2,.8,.2,1);scrollbar-width:none;-ms-overflow-style:none}',
       '.pbx-hudList::-webkit-scrollbar{width:0;height:0}',
+      '.pbx-hudList.scrollable{mask-image:linear-gradient(to bottom,#000 calc(100% - 12px),transparent);-webkit-mask-image:linear-gradient(to bottom,#000 calc(100% - 12px),transparent)}',
       '.pbx-hud:hover .pbx-hudList{scrollbar-width:thin;scrollbar-color:var(--dsw-alias-border-l2) transparent}',
       '.pbx-hud:hover .pbx-hudList::-webkit-scrollbar{width:6px;height:6px}',
       '.pbx-hud:hover .pbx-hudList::-webkit-scrollbar-thumb{background:var(--dsw-alias-border-l2);border-radius:3px}',
       '.pbx-hud:hover .pbx-hudList::-webkit-scrollbar-track{background:transparent}',
-      '.pbx-hudListInner{display:flex;flex-direction:column;}',
-      '.pbx-hudRow{position:relative;display:flex;align-items:center;gap:9px;width:100%;padding:8px 9px;border:none;background:transparent;border-radius:9px;cursor:pointer;font:inherit;text-align:left;color:var(--dsw-alias-label-primary);transition:background .45s ease,box-shadow .45s ease;animation:pbxHudRowIn .26s cubic-bezier(.2,.8,.2,1) both}',
+      '.pbx-hudListInner{display:flex;flex-direction:column;gap:3px}',
+      '.pbx-hudRow{position:relative;box-sizing:border-box;display:flex;align-items:center;gap:8px;width:100%;padding:7px 9px;border:none;background:transparent;border-radius:8px;cursor:pointer;font:inherit;text-align:left;color:var(--dsw-alias-label-primary);outline:none;transition:background .18s ease,box-shadow .18s ease;animation:pbxHudRowIn .26s cubic-bezier(.2,.8,.2,1) both}',
       '.pbx-hudRow:hover{background:var(--dsw-alias-interactive-bg-hover)}',
       '.pbx-hudRow.auto{background:color-mix(in srgb,var(--dsw-alias-state-warn-primary) 6%,transparent)}',
       '.pbx-hudRow.auto:hover{background:color-mix(in srgb,var(--dsw-alias-state-warn-primary) 12%,var(--dsw-alias-interactive-bg-hover))}',
       '.pbx-hudRow.auto::before{content:"";position:absolute;left:0;top:7px;bottom:7px;width:2px;border-radius:2px;background:var(--dsw-alias-state-warn-primary);opacity:.75}',
       '.pbx-hudAuto{display:inline-flex;align-items:center;color:var(--dsw-alias-state-warn-primary);flex:none}',
-      '.pbx-hudRow.current{box-shadow:inset 0 0 0 1px color-mix(in srgb,var(--dsw-alias-brand-primary) 45%,transparent)}',
-      '.pbx-hudRow.spotlight{box-shadow:inset 0 0 0 1px var(--dsw-alias-brand-primary)}',
+      '.pbx-hudRow.current{background:rgba(47,111,237,.07);box-shadow:none}',
+      '.pbx-hudRow.spotlight{box-shadow:inset 0 0 0 1px rgba(47,111,237,.35)}',
+      '.pbx-hudRow.current::before{content:"";position:absolute;left:0;top:8px;bottom:8px;width:2px;border-radius:2px;background:#2f6fed;opacity:.9}',
+      '.pbx-hudRow.current:hover{background:rgba(47,111,237,.12)}',
+      '.pbx-hudRow:focus-visible{outline:2px solid var(--dsw-alias-brand-primary);outline-offset:-2px}',
       '@keyframes pbxRunningDotPulse{0%{box-shadow:0 0 0 0 rgba(47,111,237,.55)}70%{box-shadow:0 0 0 6px rgba(47,111,237,0)}100%{box-shadow:0 0 0 0 rgba(47,111,237,0)}}',
       '.pbx-hudRow.live .pbx-hudTimer{color:#2f6fed}',
-      '.pbx-hudRowMain{display:flex;flex-direction:column;min-width:0;flex:1;gap:1px}',
-      '.pbx-hudRowTitle{font-size:13px;font-weight:500;line-height:18px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}',
-      '.pbx-hudRowMeta{font-size:11px;line-height:15px;color:var(--dsw-alias-label-secondary);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}',
-      '.pbx-hudTimer{font-size:11.5px;color:var(--dsw-alias-label-secondary);font-variant-numeric:tabular-nums;flex:none;transition:opacity .12s ease}',
-      '.pbx-hudArchive{position:absolute;right:7px;top:50%;transform:translateY(-50%);width:21px;height:21px;display:inline-flex;align-items:center;justify-content:center;padding:0;border:none;border-radius:6px;background:transparent;color:var(--dsw-alias-label-secondary);cursor:pointer;opacity:0;pointer-events:none;transition:opacity .12s ease,background .12s ease,color .12s ease}',
+      '.pbx-hudRowMain{display:flex;flex-direction:column;min-width:0;flex:1;gap:2px}',
+      '.pbx-hudRowTitle{font-size:12.8px;font-weight:500;line-height:17px;letter-spacing:.01em;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}',
+      '.pbx-hudRowMeta{font-size:10.8px;line-height:15px;letter-spacing:.01em;color:var(--dsw-alias-label-secondary);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}',
+      '.pbx-hudTimer{font-size:11px;min-width:44px;text-align:right;color:var(--dsw-alias-label-secondary);font-variant-numeric:tabular-nums;flex:none;transition:opacity .12s ease}',
+      '.pbx-hudArchive{position:absolute;right:8px;top:50%;transform:translateY(-50%);width:22px;height:22px;display:inline-flex;align-items:center;justify-content:center;padding:0;border:1px solid transparent;border-radius:6px;background:transparent;color:var(--dsw-alias-label-secondary);cursor:pointer;opacity:0;pointer-events:none;transition:opacity .12s ease,background .12s ease,color .12s ease,border-color .12s ease}',
       '.pbx-hudRow:hover .pbx-hudTimer,.pbx-hudRow:focus-within .pbx-hudTimer{opacity:0}',
       '.pbx-hudRow:hover .pbx-hudArchive,.pbx-hudRow:focus-within .pbx-hudArchive{opacity:1;pointer-events:auto}',
-      '.pbx-hudArchive:hover{background:color-mix(in srgb,var(--dsw-alias-label-secondary) 16%,transparent);color:var(--dsw-alias-label-primary)}',
+      '.pbx-hudArchive:hover{background:color-mix(in srgb,var(--dsw-alias-label-secondary) 16%,transparent);border-color:var(--dsw-alias-border-l1);color:var(--dsw-alias-label-primary)}',
+      '.pbx-hudArchive:focus-visible{opacity:1;pointer-events:auto;outline:2px solid var(--dsw-alias-brand-primary);outline-offset:1px}',
       '.pbx-hudArchive:active{transform:translateY(-50%) scale(.92)}',
       '.pbx-prowArchived{font-size:10.5px;line-height:16px;padding:0 6px;border-radius:999px;background:color-mix(in srgb,var(--dsw-alias-label-secondary) 14%,transparent);color:var(--dsw-alias-label-secondary);flex:none;white-space:nowrap}',
       '.pbx-prow.archived .pbx-prowTitle{color:var(--dsw-alias-label-secondary)}',
@@ -3587,14 +3604,17 @@ window.__ModuleLoader__.load({
       '.pbx-hudFootItem{display:inline-flex;align-items:center;gap:3px;flex:none}',
       '.pbx-hudKey{font-family:inherit;font-size:9.5px;line-height:13px;padding:1px 4px;border-radius:4px;border:1px solid var(--dsw-alias-border-l1);background:var(--dsw-alias-bg-layer-2);color:var(--dsw-alias-label-secondary)}',
       '.pbx-hudFootLabel{font-size:10.5px;color:var(--dsw-alias-label-secondary)}',
-      '.pbx-hud.collapsed{display:inline-flex;align-items:center;gap:6px;width:auto;padding:7px 11px;border-radius:999px;background:color-mix(in srgb,var(--dsw-alias-bg-overlay) 84%,transparent);backdrop-filter:blur(24px) saturate(1.35);-webkit-backdrop-filter:blur(24px) saturate(1.35);border:1px solid var(--dsw-alias-border-l1);cursor:pointer;font:inherit;color:var(--dsw-alias-label-primary);animation:pbxHudPillIn .2s ease both}',
-      '.pbx-hudPillIcon{width:20px;height:20px;border-radius:7px;display:inline-flex;align-items:center;justify-content:center;flex:none;background:color-mix(in srgb,var(--dsw-alias-label-secondary) 13%,transparent);color:var(--dsw-alias-label-secondary);transition:background .18s ease,color .18s ease,box-shadow .18s ease}',
+      '.pbx-hud.collapsed{display:inline-flex;align-items:center;gap:7px;width:auto;padding:6px 12px;border-radius:999px;background:color-mix(in srgb,var(--dsw-alias-bg-overlay) 88%,transparent);backdrop-filter:blur(24px) saturate(1.35);-webkit-backdrop-filter:blur(24px) saturate(1.35);border:1px solid var(--dsw-alias-border-l1);cursor:pointer;font:inherit;color:var(--dsw-alias-label-primary);transition:transform .18s ease,box-shadow .18s ease;animation:pbxHudPillIn .2s ease both}',
+      '.pbx-hudPillIcon{width:19px;height:19px;border-radius:6px;display:inline-flex;align-items:center;justify-content:center;flex:none;background:color-mix(in srgb,var(--dsw-alias-label-secondary) 13%,transparent);color:var(--dsw-alias-label-secondary);transition:background .18s ease,color .18s ease,box-shadow .18s ease}',
       '.pbx-hudPillIcon.live{background:rgba(47,111,237,.16);color:#2f6fed;box-shadow:0 0 0 0 rgba(47,111,237,.45);animation:pbxPillIconPulse 2.2s ease-out infinite}',
       '.pbx-hudPillIcon.attention{background:color-mix(in srgb,var(--dsw-alias-state-error-primary) 16%,transparent);color:var(--dsw-alias-state-error-primary)}',
       '.pbx-hud.collapsed:hover .pbx-hudPillIcon{background:color-mix(in srgb,var(--dsw-alias-label-secondary) 20%,transparent)}',
       '.pbx-hud.collapsed:hover .pbx-hudPillIcon.live{background:rgba(47,111,237,.24)}',
       '@keyframes pbxPillIconPulse{0%{box-shadow:0 0 0 0 rgba(47,111,237,.42)}70%{box-shadow:0 0 0 5px rgba(47,111,237,0)}100%{box-shadow:0 0 0 0 rgba(47,111,237,0)}}',
-      '.pbx-hudPillLabel{font-size:11.5px;color:var(--dsw-alias-label-secondary)}',
+      '.pbx-hudPillText{font-size:12px;font-weight:650;font-variant-numeric:tabular-nums;letter-spacing:.01em;color:var(--dsw-alias-label-primary)}',
+      '.pbx-hudPillLabel{font-size:11px;letter-spacing:.01em;color:var(--dsw-alias-label-secondary)}',
+      '.pbx-hud.collapsed:hover{transform:translateY(-1px)}',
+      '.pbx-hud.collapsed:focus-visible{outline:2px solid var(--dsw-alias-brand-primary);outline-offset:2px}',
       '.pbx-responsive{height:100%;min-height:0;display:flex;flex-direction:column}',
       '.pbx-responsive>.pbx-root{flex:1;min-height:0}',
       '.pbx-headerRight{display:flex;align-items:center;gap:10px;flex-wrap:wrap}',
