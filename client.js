@@ -3186,6 +3186,39 @@ window.__ModuleLoader__.load({
         if (rank !== 0) return rank;
         return (b.updatedAt || 0) - (a.updatedAt || 0);
       });
+      /* When the floating list would cover the main column, pad that column so its content (header,
+         chat and composer) moves aside. The layout only exposes sidebar/rightbar widths, so the
+         flexible center column is nudged directly with padding, restored as soon as it fits. */
+      useLayoutEffectSafe(() => {
+        const gap = 14;
+        let column = null;
+        const clear = () => {
+          if (!column) return;
+          column.style.paddingLeft = '';
+          column.style.paddingRight = '';
+          column.style.transition = '';
+        };
+        const apply = () => {
+          clear();
+          column = document.querySelector('[class*="_centerCol"]') || findChatScroller();
+          const box = hudRef.current;
+          if (collapsed || !box || !column) return;
+          const rect = box.getBoundingClientRect();
+          const crect = column.getBoundingClientRect();
+          if (!crect.width) return;
+          const cap = Math.round(window.innerWidth * 0.4);
+          const leftSide = rect.left + rect.width / 2 <= window.innerWidth / 2;
+          const left = leftSide ? Math.max(0, Math.min(cap, Math.round(rect.right + gap - crect.left))) : 0;
+          const right = leftSide ? 0 : Math.max(0, Math.min(cap, Math.round(crect.right - (rect.left - gap))));
+          if (!left && !right) return;
+          column.style.transition = 'padding .18s ease';
+          if (left) column.style.paddingLeft = left + 'px';
+          if (right) column.style.paddingRight = right + 'px';
+        };
+        apply();
+        window.addEventListener('resize', apply);
+        return () => { window.removeEventListener('resize', apply); clear(); };
+      }, [collapsed, hudWidth, pos && pos.x, pos && pos.y]);
       /* Fit the panel to the longest session title (bounded), so short lists do not waste width. */
       useLayoutEffectSafe(() => {
         if (!rows.length || collapsed) return;
