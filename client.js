@@ -1437,12 +1437,20 @@ window.__ModuleLoader__.load({
       const [grouped, setGrouped] = useState(false);
       const [collapsed, setCollapsed] = useState({});
       const [compactProjectId, setCompactProjectId] = useState(null);
+      const [popoverPos, setPopoverPos] = useState(null);
 
       useEffect(() => {
         if (editingProject === null) return undefined;
         const onDown = (event) => { if (popRef.current && !popRef.current.contains(event.target)) setEditingProject(null); };
+        const onScroll = () => setEditingProject(null);
         document.addEventListener('pointerdown', onDown, true);
-        return () => document.removeEventListener('pointerdown', onDown, true);
+        window.addEventListener('scroll', onScroll, true);
+        window.addEventListener('resize', onScroll);
+        return () => {
+          document.removeEventListener('pointerdown', onDown, true);
+          window.removeEventListener('scroll', onScroll, true);
+          window.removeEventListener('resize', onScroll);
+        };
       }, [editingProject]);
 
       const updateAppearance = (id, patch) => {
@@ -1599,7 +1607,8 @@ window.__ModuleLoader__.load({
 
       const renderPopover = (workspaceId, color, icon) => {
         const spec = appearance[workspaceId] || {};
-        return h('div', { className: 'pbx-pop', ref: popRef, onClick: (event) => event.stopPropagation() },
+        const popStyle = popoverPos ? { left: popoverPos.left + 'px', top: popoverPos.top + 'px' } : undefined;
+        return h('div', { className: 'pbx-pop', ref: popRef, style: popStyle, onClick: (event) => event.stopPropagation() },
           h('div', { className: 'pbx-popLabel' }, t('appearance.color')),
           h('div', { className: 'pbx-swatches' }, PALETTE.map((value) => h('button', {
             key: value, type: 'button', className: 'pbx-swatchBtn' + ((spec.color || color) === value ? ' sel' : ''), style: { background: value }, 'aria-label': value,
@@ -1633,9 +1642,16 @@ window.__ModuleLoader__.load({
         return h('th', {
           className: 'pbx-th' + (opts.sortable === false ? '' : ' sortable') + (active ? ' active' : '') + (opts.num ? ' num' : ''),
           title: opts.sortable === false ? undefined : t('sort.hint'),
-          onClick: opts.sortable === false ? undefined : (event) => sortBy(key, Boolean(event.shiftKey))
+          'aria-sort': opts.sortable === false ? undefined : (active ? (direction === 'asc' ? 'ascending' : 'descending') : 'none'),
+          tabIndex: opts.sortable === false ? undefined : 0,
+          onClick: opts.sortable === false ? undefined : (event) => sortBy(key, Boolean(event.shiftKey)),
+          onKeyDown: opts.sortable === false ? undefined : (event) => {
+            if (event.key !== 'Enter' && event.key !== ' ') return;
+            event.preventDefault();
+            sortBy(key, Boolean(event.shiftKey));
+          }
         },
-          h('span', { className: 'pbx-thType' }, type || ''),
+          h('span', { className: 'pbx-thType', 'aria-hidden': 'true' }, type || ''),
           h('span', { className: 'pbx-thLabel' }, label),
           active ? h('span', { className: 'pbx-sortMark' }, (sorts.length > 1 ? String(position + 1) : '') + (direction === 'asc' ? '↑' : '↓')) : null
         );
@@ -1644,7 +1660,7 @@ window.__ModuleLoader__.load({
       const renderSessionRow = (row) => h('tr', {
         key: row.id, className: 'pbx-tr' + (row.running ? ' pbx-tr-live' : '') + (row.current ? ' pbx-tr-current' : '') + (row.auto ? ' pbx-tr-auto' : ''),
         onClick: () => open(row.id), tabIndex: 0,
-        onKeyDown: (e) => { if (e.key === 'Enter') open(row.id); }
+        onKeyDown: (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); open(row.id); } }
       },
         h('td', null, projectChip(row.workspaceId, row.workspaceLabel)),
         h('td', null, h('div', { className: 'pbx-titleCell' },
@@ -1713,7 +1729,16 @@ window.__ModuleLoader__.load({
                 type: 'button', className: 'pbx-chipIcon lg pbx-iconTrigger', title: t('col.appearance'), 'aria-label': t('col.appearance'),
                 style: { color: spec.color, background: hexToRgba(spec.color, 0.16) },
                 onPointerDown: (e) => e.stopPropagation(),
-                onClick: (e) => { e.stopPropagation(); setEditingProject(isEditing ? null : project.workspaceId); }
+                onClick: (e) => {
+                  e.stopPropagation();
+                  if (isEditing) { setEditingProject(null); return; }
+                  const rect = e.currentTarget.getBoundingClientRect();
+                  setPopoverPos({
+                    left: Math.max(12, Math.min(window.innerWidth - 248, Math.round(rect.left))),
+                    top: Math.max(12, Math.min(window.innerHeight - 300, Math.round(rect.bottom + 8)))
+                  });
+                  setEditingProject(project.workspaceId);
+                }
               }, h(Icon, { name: spec.icon, size: 15 })),
               isEditing ? renderPopover(project.workspaceId, spec.color, spec.icon) : null
             ),
@@ -1739,12 +1764,12 @@ window.__ModuleLoader__.load({
       );
 
       const toolbar = h('div', { className: 'pbx-toolbar' },
-        h('div', { className: 'pbx-tabs' },
-          h('button', { type: 'button', className: 'pbx-tab' + (view === 'projects' ? ' active' : ''), onClick: () => setView('projects') }, t('view.projects'), h('span', { className: 'pbx-tabCount' }, String(projectModels.length))),
-          h('button', { type: 'button', className: 'pbx-tab' + (view === 'sessions' ? ' active' : '') , onClick: () => setView('sessions') }, t('view.sessions'), h('span', { className: 'pbx-tabCount' }, String(allSessions.length)))
+        h('div', { className: 'pbx-tabs', role: 'tablist' },
+          h('button', { type: 'button', role: 'tab', 'aria-selected': view === 'projects' ? 'true' : 'false', className: 'pbx-tab' + (view === 'projects' ? ' active' : ''), onClick: () => setView('projects') }, t('view.projects'), h('span', { className: 'pbx-tabCount' }, String(projectModels.length))),
+          h('button', { type: 'button', role: 'tab', 'aria-selected': view === 'sessions' ? 'true' : 'false', className: 'pbx-tab' + (view === 'sessions' ? ' active' : '') , onClick: () => setView('sessions') }, t('view.sessions'), h('span', { className: 'pbx-tabCount' }, String(allSessions.length)))
         ),
         h('div', { className: 'pbx-tools' },
-          h('input', { className: 'pbx-input', type: 'text', placeholder: t('filter.search'), value: query, onChange: (e) => setQuery(e.target.value) }),
+          h('input', { className: 'pbx-input', type: 'text', placeholder: t('filter.search'), 'aria-label': t('filter.search'), value: query, onChange: (e) => setQuery(e.target.value) }),
           view === 'sessions' ? h('select', { className: 'pbx-select', value: statusFilter, onChange: (e) => setStatusFilter(e.target.value), 'aria-label': t('filter.status') },
             h('option', { value: 'all' }, t('filter.status') + ': ' + t('filter.all')),
             h('option', { value: 'running' }, t('status.running')),
@@ -2094,7 +2119,7 @@ window.__ModuleLoader__.load({
       if (items.length === 0) return null;
       return h('div', { className: 'pbx-toasts', role: 'status', 'aria-live': 'polite' },
         items.map((item) => h('div', { key: item.id, className: 'pbx-toast', 'data-tone': item.tone || 'warn' },
-          h('span', { className: 'pbx-toastIcon' }, h(Icon, { name: 'alert', size: 15 })),
+          h('span', { className: 'pbx-toastIcon' }, h(Icon, { name: item.tone === 'success' ? 'check' : 'alert', size: 15 })),
           h('div', { className: 'pbx-toastMain' },
             item.title ? h('div', { className: 'pbx-toastTitle' }, item.title) : null,
             item.message ? h('div', { className: 'pbx-toastMsg' }, item.message) : null
@@ -2257,6 +2282,7 @@ window.__ModuleLoader__.load({
       const items = (snap && snap.items) || [];
       const [bounds, setBounds] = useState({ right: 16, bottom: 16 });
       useEffect(() => {
+        if (items.length === 0) return undefined;
         const update = () => {
           const scroller = findChatScroller();
           const rect = scroller ? scroller.getBoundingClientRect() : null;
@@ -2272,7 +2298,7 @@ window.__ModuleLoader__.load({
         window.addEventListener('resize', update);
         const timer = window.setInterval(update, 1000);
         return () => { window.removeEventListener('resize', update); window.clearInterval(timer); };
-      }, []);
+      }, [items.length]);
       if (items.length === 0) return null;
       const open = (item) => {
         if (typeof props.openSession === 'function' && item.sessionId) props.openSession(item.sessionId);
@@ -2642,7 +2668,7 @@ window.__ModuleLoader__.load({
         if (isComposingEvent(event)) return;
         if (event.key === 'ArrowDown') { event.preventDefault(); setIndex((value) => Math.min(value + 1, Math.max(0, visible.length - 1))); }
         else if (event.key === 'ArrowUp') { event.preventDefault(); setIndex((value) => Math.max(0, value - 1)); }
-        else if (event.key === 'Enter') { event.preventDefault(); choose(visible[index]); }
+        else if (event.key === 'Enter') { event.preventDefault(); if (visible.length > 0) choose(visible[Math.min(index, visible.length - 1)]); }
         else if (event.key === 'Escape') { event.preventDefault(); event.stopPropagation(); if (scope) setScope(null); else close(); }
       };
 
@@ -2652,16 +2678,29 @@ window.__ModuleLoader__.load({
       return h('div', { className: 'pbx-paletteBackdrop' + (closing ? ' closing' : ''), style: backdropStyle, onClick: close },
         h('div', {
           className: 'pbx-palette', style: panelStyle,
+          role: 'dialog', 'aria-modal': 'true', 'aria-label': t('palette.placeholder'),
           onClick: (event) => event.stopPropagation(),
           onKeyDown: (event) => {
-            if (event.key !== 'Escape' || isComposingEvent(event)) return;
+            if (isComposingEvent(event)) return;
+            if (event.key === 'Tab') {
+              const panel = event.currentTarget;
+              const nodes = Array.prototype.slice.call(panel.querySelectorAll('button, input'))
+                .filter((node) => !node.disabled && node.getClientRects().length > 0);
+              if (nodes.length === 0) return;
+              const first = nodes[0];
+              const last = nodes[nodes.length - 1];
+              if (event.shiftKey && document.activeElement === first) { event.preventDefault(); last.focus(); }
+              else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first.focus(); }
+              return;
+            }
+            if (event.key !== 'Escape') return;
             event.preventDefault();
             if (scope) setScope(null); else close();
           }
         },
           h('div', { className: 'pbx-paletteHead' },
             h(Icon, { name: 'search', size: 16 }),
-            h('input', { ref: inputRef, className: 'pbx-paletteInput', value: query, placeholder: t('palette.placeholder'), onChange: (event) => setQuery(event.target.value), onKeyDown: onKeyDown })
+            h('input', { ref: inputRef, className: 'pbx-paletteInput', value: query, placeholder: t('palette.placeholder'), 'aria-label': t('palette.placeholder'), onChange: (event) => setQuery(event.target.value), onKeyDown: onKeyDown })
           ),
           h('div', { className: 'pbx-paletteChips' },
             h('button', { type: 'button', className: 'pbx-pchip' + (scope === null ? ' on' : ''), onClick: () => { setScope(null); if (inputRef.current) inputRef.current.focus(); } }, t('palette.allProjects')),
@@ -2677,7 +2716,7 @@ window.__ModuleLoader__.load({
             visible.length === 0
               ? h('div', { className: 'pbx-paletteEmpty' }, t('palette.empty'))
               : visible.map((row, i) => h('button', {
-                  key: row.id, type: 'button',
+                  key: row.id, type: 'button', role: 'option', 'aria-selected': i === index ? 'true' : 'false',
                   className: 'pbx-prow' + (i === index ? ' active' : '') + (row.archived ? ' archived' : ''),
                   onMouseEnter: () => setIndex(i),
                   onClick: () => choose(row)
@@ -2963,6 +3002,7 @@ window.__ModuleLoader__.load({
             saveSettings(next);
           }
           if (posRef.current) logEvent('debug', 'hud', 'drag drop', posRef.current);
+          window.setTimeout(() => { hudDragMovedRef.current = false; }, 220);
         };
         window.addEventListener('pointermove', move);
         window.addEventListener('pointerup', up);
@@ -3773,7 +3813,7 @@ window.__ModuleLoader__.load({
       );
       const toggleRow = (section, key, labelKey, descKey) => row(section + '-' + key, labelKey, descKey,
         h('button', {
-          type: 'button', role: 'switch', 'aria-checked': Boolean(config[section][key]),
+          type: 'button', role: 'switch', 'aria-checked': Boolean(config[section][key]), 'aria-label': t(labelKey),
           className: 'pbx-switch' + (config[section][key] ? ' on' : ''),
           onClick: () => update(section, { [key]: !config[section][key] })
         }, h('span', { className: 'pbx-switchThumb' }))
@@ -3986,6 +4026,8 @@ window.__ModuleLoader__.load({
       '.pbx-twoLine{display:flex;flex-direction:column;min-width:0;gap:1px}',
       '.pbx-rdot{width:8px;height:8px;border-radius:50%;flex:none}',
       '.pbx-hudPillAttn{display:inline-flex;align-items:center;justify-content:center;min-width:15px;height:15px;padding:0 4px;border-radius:999px;background:color-mix(in srgb,var(--dsw-alias-state-warn-primary) 18%,transparent);color:var(--dsw-alias-state-warn-primary);font-size:10px;font-weight:600;line-height:1}',
+      '.pbx-root button:focus-visible,.pbx-root select:focus-visible,.pbx-root input:focus-visible,.pbx-root [role="button"]:focus-visible,.pbx-hud button:focus-visible,.pbx-toasts button:focus-visible,.pbx-notifDock [role="button"]:focus-visible{outline:2px solid var(--dsw-alias-brand-primary);outline-offset:2px}',
+      '.pbx-tr:focus-within .pbx-openBtn,.pbx-openBtn:focus-visible{opacity:1}',
       '.pbx-runRing{display:inline-block;position:relative;flex:none;border-radius:50%;box-sizing:border-box;border:1.6px solid color-mix(in srgb,var(--dsw-alias-brand-primary) 22%,transparent)}',
       '.pbx-runRing::after{content:"";position:absolute;inset:-1.6px;border-radius:50%;border:1.6px solid transparent;border-top-color:var(--dsw-alias-brand-primary);animation:pbxRunSpin .85s linear infinite}',
       '@keyframes pbxRunSpin{to{transform:rotate(360deg)}}',
@@ -4035,7 +4077,7 @@ window.__ModuleLoader__.load({
       '.pbx-loading{padding:40px 8px;color:var(--dsw-alias-label-secondary);font-size:13px}',
       '.pbx-empty{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;padding:72px 24px;color:var(--dsw-alias-label-secondary);background:var(--dsw-alias-bg-layer-1);border:1px dashed var(--dsw-alias-border-l2);border-radius:16px}',
       '.pbx-emptyIcon{opacity:.7}.pbx-emptyTitle{font-size:15px;font-weight:600;color:var(--dsw-alias-label-primary)}.pbx-emptyDesc{font-size:13px;text-align:center;max-width:340px}',
-      '.pbx-pop{position:absolute;top:calc(100% + 6px);left:0;right:auto;z-index:60;background:var(--dsw-alias-bg-overlay);border:1px solid var(--dsw-alias-border-l2);border-radius:12px;padding:12px;width:236px;box-shadow:0 10px 30px rgba(0,0,0,.28)}',
+      '.pbx-pop{position:fixed;top:auto;left:auto;right:auto;z-index:1250;background:var(--dsw-alias-bg-overlay);border:1px solid var(--dsw-alias-border-l2);border-radius:12px;padding:12px;width:236px;box-shadow:0 10px 30px rgba(0,0,0,.28)}',
       '.pbx-popLabel{font-size:12px;color:var(--dsw-alias-label-secondary);margin:0 0 8px}',
       '.pbx-swatches{display:grid;grid-template-columns:repeat(9,1fr);gap:6px;margin-bottom:12px}',
       '.pbx-swatchBtn{width:100%;aspect-ratio:1;border-radius:7px;border:2px solid transparent;cursor:pointer;padding:0}',
@@ -4165,7 +4207,7 @@ window.__ModuleLoader__.load({
       '.pbx-hudArchive:active{transform:translateY(-50%) scale(.92)}',
       '.pbx-prowArchived{font-size:10.5px;line-height:16px;padding:0 6px;border-radius:999px;background:color-mix(in srgb,var(--dsw-alias-label-secondary) 14%,transparent);color:var(--dsw-alias-label-secondary);flex:none;white-space:nowrap}',
       '.pbx-prow.archived .pbx-prowTitle{color:var(--dsw-alias-label-secondary)}',
-      '.pbx-hudFoot{position:relative;display:flex;flex-direction:column;gap:4px;padding:7px 10px 8px;border-top:1px solid color-mix(in srgb,var(--dsw-alias-border-l1) 65%,transparent);opacity:.62;transition:opacity var(--pbx-dur-small) var(--pbx-ease-standard)}',
+      '.pbx-hudFoot{position:relative;display:flex;flex-direction:column;gap:4px;padding:7px 10px 8px;border-top:1px solid color-mix(in srgb,var(--dsw-alias-border-l1) 65%,transparent);opacity:1;transition:opacity var(--pbx-dur-small) var(--pbx-ease-standard)}',
       '.pbx-hudFoot:hover{opacity:1}',
       '.pbx-hudFootRow{display:flex;align-items:center;gap:6px;flex-wrap:wrap;padding-right:16px;min-width:0}',
       '.pbx-hudFootTitle{font-size:9.5px;font-weight:600;letter-spacing:.02em;color:var(--dsw-alias-label-tertiary);flex:none;min-width:26px}',
@@ -4246,10 +4288,11 @@ window.__ModuleLoader__.load({
       '.pbx-setWarn{font-size:11.5px;color:var(--dsw-alias-state-warn-primary);line-height:1.45;overflow-wrap:anywhere}',
       '.pbx-compact{padding:0}',
       '.pbx-compactWrap{padding:12px 10px 12px;max-width:none;display:flex;flex-direction:column;min-height:100%;box-sizing:border-box}',
-      '.pbx-compactHead{display:flex;align-items:center;gap:8px;margin-bottom:10px}',
-      '.pbx-compactTitle{display:flex;align-items:center;gap:7px;font-weight:600;font-size:14px;color:var(--dsw-alias-label-primary)}',
-      '.pbx-compactMeta{margin-left:auto;font-size:11.5px;color:var(--dsw-alias-label-secondary)}',
-      '.pbx-compactFull{display:inline-flex;align-items:center;justify-content:center;width:24px;height:24px;border:none;background:transparent;color:var(--dsw-alias-label-secondary);border-radius:6px;cursor:pointer}',
+      '.pbx-compactHead{display:flex;align-items:center;gap:8px;margin-bottom:10px;min-width:0}',
+      '.pbx-compactTitle{display:flex;align-items:center;gap:7px;font-weight:600;font-size:14px;color:var(--dsw-alias-label-primary);flex:1;min-width:0;overflow:hidden}',
+      '.pbx-compactTitle>span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0}',
+      '.pbx-compactMeta{margin-left:auto;font-size:11.5px;color:var(--dsw-alias-label-secondary);white-space:nowrap;flex:none}',
+      '.pbx-compactFull{display:inline-flex;align-items:center;justify-content:center;width:24px;height:24px;border:none;background:transparent;color:var(--dsw-alias-label-secondary);border-radius:6px;cursor:pointer;flex:none}',
       '.pbx-compactFull:hover{background:var(--dsw-alias-interactive-bg-hover);color:var(--dsw-alias-label-primary)}',
       '.pbx-cgroup{margin:0 0 10px;border:1px solid var(--dsw-alias-border-l1);border-radius:10px;background:color-mix(in srgb,var(--pbx-tone,transparent) 6%,var(--dsw-alias-bg-layer-1));overflow:hidden}',
       '.pbx-cgroupHead{display:flex;align-items:center;gap:7px;padding:7px 10px;font-size:11.5px;font-weight:600;color:var(--dsw-alias-label-primary);background:color-mix(in srgb,var(--pbx-tone,transparent) 10%,var(--dsw-alias-bg-layer-2));border-bottom:1px solid color-mix(in srgb,var(--pbx-tone,var(--dsw-alias-border-l1)) 22%,var(--dsw-alias-border-l1))}',
@@ -4271,9 +4314,9 @@ window.__ModuleLoader__.load({
       '.pbx-crow.archived{opacity:.72}',
       '.pbx-compactBody{display:flex;flex-direction:column;gap:2px;min-height:0;flex:1}',
       '.pbx-compactList{display:flex;flex-direction:column;gap:2px;flex:1;min-height:0}',
-      '.pbx-compactPath{position:sticky;bottom:0;display:flex;align-items:center;gap:6px;margin-top:auto;padding:7px 2px 3px;border-top:1px solid color-mix(in srgb,var(--dsw-alias-border-l1) 70%,transparent);background:color-mix(in srgb,var(--dsw-alias-bg-base) 92%,transparent);font-size:10.5px;color:var(--dsw-alias-label-tertiary);min-width:0}',
+      '.pbx-compactPath{position:sticky;bottom:0;display:flex;align-items:center;gap:6px;margin-top:auto;padding:7px 2px 3px;border-top:1px solid color-mix(in srgb,var(--dsw-alias-border-l1) 70%,transparent);background:var(--dsw-alias-bg-base);box-shadow:0 -1px 0 color-mix(in srgb,var(--dsw-alias-border-l1) 70%,transparent);font-size:10.5px;color:var(--dsw-alias-label-tertiary);min-width:0}',
       '.pbx-compactPathLabel{flex:none;font-weight:600;letter-spacing:.02em;color:var(--dsw-alias-label-secondary)}',
-      '.pbx-compactPathText{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;direction:rtl;text-align:left}',
+      '.pbx-compactPathText{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;direction:rtl;unicode-bidi:plaintext;text-align:left}',
       '.pbx-setSubTitle{font-size:11.5px;font-weight:600;color:var(--dsw-alias-label-secondary);margin:10px 0 2px;padding-top:8px;border-top:1px dashed color-mix(in srgb,var(--dsw-alias-border-l1) 70%,transparent)}',
       '.pbx-crow:hover{background:var(--dsw-alias-interactive-bg-hover)}',
       '.pbx-crow.auto{background:color-mix(in srgb,var(--dsw-alias-state-warn-primary) 5%,transparent)}',
