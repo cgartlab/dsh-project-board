@@ -144,7 +144,13 @@ window.__ModuleLoader__.load({
       else if (code === 'Space') label = 'Space';
       else if (code === 'ArrowUp') label = '↑';
       else if (code === 'ArrowDown') label = '↓';
-      const mods = parts.map((part) => MODIFIER_LABELS[part] || part);
+      /* DSH renders modifiers in control → alt → shift → meta order; show the same
+         canonical order regardless of the order the combo was recorded in. */
+      const MODIFIER_ORDER = ['ctrl', 'alt', 'shift', 'meta'];
+      const mods = parts
+        .slice()
+        .sort((left, right) => MODIFIER_ORDER.indexOf(left) - MODIFIER_ORDER.indexOf(right))
+        .map((part) => MODIFIER_LABELS[part] || part);
       return mods.concat(label).join('+');
     }
     function comboHasModifier(combo) {

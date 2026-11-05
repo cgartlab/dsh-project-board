@@ -170,18 +170,35 @@ test('zh and en dictionaries expose the same keys', () => {
 });
 
 /** Render the header slot and return the serialized element tree for label assertions. */
-function headerLabels(platform) {
+function headerLabels(platform, shortcutOverride) {
   const { module, window, document } = loadModule(platform);
   const { ctx, translations, registrations } = createContext(window, document);
   module.apply(ctx);
   const noop = () => {};
+  const cfg = {
+    shortcuts: Object.assign({
+      palette: 'alt+KeyK', prev: 'alt+KeyI', next: 'alt+Comma',
+      userPrev: 'alt+KeyU', userNext: 'alt+KeyM', scrollBottom: 'alt+KeyS',
+      sidebarBoard: 'alt+KeyN', panelHalf: 'alt+KeyB', panelFull: 'alt+KeyV',
+      rename: 'alt+KeyR', interject: 'alt+Enter', hud: 'alt+KeyE', sessionMenu: 'alt+KeyD'
+    }, shortcutOverride || {}),
+    palette: { enabled: true, blur: 15 },
+    board: { enabled: true, wideThreshold: 520, defaultView: 'sessions' },
+    header: { capsule: true, placement: 'header' },
+    headerButtons: {
+      switch: { hidden: false, side: 'left', order: 10 },
+      historyNav: { hidden: false, side: 'left', order: 20 },
+      capsule: { hidden: false, side: 'left', order: 50 }
+    }
+  };
   // DSH store hooks return the selected snapshot, not a React [value, setter] tuple.
   const hook = (selector) => (selector ? selector(undefined) : undefined);
+  const useSettings = (selector) => (selector ? selector(cfg) : cfg);
   const entry = registrations.find((item) => item.spec.name === 'conversation.header.leading');
   assert.ok(entry, 'header slot registered');
   const wrapped = entry.component({
     t: ctx.locale.bind('projectBoard'),
-    useSettings: hook, useSessions: hook, useSessionStatus: hook,
+    useSettings: useSettings, useSessions: hook, useSessionStatus: hook,
     useWorkspaces: hook, usePalette: hook, useHeaderDrag: hook,
     palette: { set: noop }, openBoard: noop, saveSettings: noop, headerDrag: {}
   });
@@ -200,6 +217,17 @@ test('macOS shows Option (⌥) shortcut labels; other platforms keep Alt', () =>
   const win = headerLabels('Win32');
   assert.match(win.text, /Alt\+K/, 'Windows keycap uses Alt');
   assert.doesNotMatch(win.text, /⌥/, 'Windows keycap does not use macOS symbols');
+});
+
+test('modifier labels follow the platform canonical order', () => {
+  // Same combo recorded in a non-canonical order must still display ⌥ before ⌘.
+  const mac = headerLabels('MacIntel', { palette: 'meta+alt+KeyK' });
+  assert.match(mac.text, /⌥\+⌘\+K/, 'macOS renders Option before Command');
+  assert.doesNotMatch(mac.text, /⌘\+⌥\+K/, 'no reversed modifier order');
+
+  const win = headerLabels('Win32', { palette: 'meta+ctrl+KeyK' });
+  assert.match(win.text, /Ctrl\+Meta\+K/, 'Windows renders Ctrl before Meta');
+  assert.doesNotMatch(win.text, /Meta\+Ctrl\+K/, 'no reversed modifier order on Windows');
 });
 
 test('bindings stay platform-neutral so saved shortcuts keep working', () => {

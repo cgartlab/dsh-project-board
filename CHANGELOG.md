@@ -13,6 +13,8 @@ All notable changes to this project are documented here. The format follows
   unchanged.
 - Settings help text and both READMEs name the Option and Command keys explicitly (with
   their Windows equivalents), and the shortcut tables use macOS notation.
+- Modifier labels now follow DSH's canonical order (control → alt → shift → meta), so a
+  chord recorded in any order displays as `⌥+⌘+,` on macOS / `Ctrl+Meta+…` on Windows.
 
 ### Notes
 
