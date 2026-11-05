@@ -1107,7 +1107,15 @@ window.__ModuleLoader__.load({
     /* Icons copied verbatim from the DSH client’s own icon set (16px grid, 1px stroke) so the
        plugin speaks the product’s visual language instead of inventing its own shapes. */
     const NATIVE_ICONS = {
-      search: {
+      archive: {
+        viewBox: '0 0 16 16',
+        strokeWidth: 1,
+        paths: [
+          'M13.5 2.5H2.5C1.94772 2.5 1.5 2.94772 1.5 3.5V4.5C1.5 5.05228 1.94772 5.5 2.5 5.5H13.5C14.0523 5.5 14.5 5.05228 14.5 4.5V3.5C14.5 2.94772 14.0523 2.5 13.5 2.5Z',
+          'M2.5 5.5V13.5C2.5 13.7652 2.60536 14.0196 2.79289 14.2071C2.98043 14.3946 3.23478 14.5 3.5 14.5H12.5C12.7652 14.5 13.0196 14.3946 13.2071 14.2071C13.3946 14.0196 13.5 13.7652 13.5 13.5V5.5',
+          'M6.5 9.5H9.5'
+        ]
+      },      search: {
         viewBox: '0 0 16 16',
         strokeWidth: 1,
         paths: [
@@ -3076,7 +3084,7 @@ window.__ModuleLoader__.load({
                 className: 'pbx-hudArchive', role: 'button', tabIndex: -1, title: t('hud.archive'), 'aria-label': t('hud.archive'),
                 onClick: (event) => { event.stopPropagation(); archiveRow(row); },
                 onKeyDown: (event) => { event.stopPropagation(); }
-              }, h(Icon, { name: 'archive', size: 14, strokeWidth: 1.6 }))
+              }, h(Icon, { name: 'archive', size: 16 }))
             ))
           )),
           (!hintsHidden && config.hints && config.hints.shortcuts !== false) ? h('div', { className: 'pbx-hudFoot' },
