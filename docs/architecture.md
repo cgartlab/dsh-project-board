@@ -64,7 +64,10 @@ each action (see `DEFAULT_SETTINGS.shortcuts`). It is registered on mount and ga
 
 Hold-to-scroll (`Alt+U` / `Alt+M`) starts a `requestAnimationFrame` loop that resolves the
 live chat scroller each frame, prefetches older history when approaching the top, and
-falls back to anchor scrolling when a position write is reverted by the chat view.
+falls back to anchor scrolling when a position write is reverted by the chat view. It
+sends one synthetic wheel signal before the first write because DSH can hold a preserved
+scroll anchor that would otherwise pull the view back every frame, and holding down to the
+bottom focuses the composer.
 
 ## Notifications
 

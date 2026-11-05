@@ -26,7 +26,8 @@ reading, and desktop-class task notifications.
   jump-to-session.
 - **Hold-to-scroll reading** — the conversation scrolls smoothly while the key is held,
   loads older history automatically before reaching the boundary, and falls back to anchor
-  stepping if the chat view reverts a position write.
+  stepping if the chat view reverts a position write. Holding `Alt+M` down to the end
+  activates the composer so a reply can be typed immediately.
 - **Task notifications** — a session finishing a turn, waiting for an answer, or asking
   for permission raises an in-app card at the bottom-right of the conversation with a
   chime; when the app is in the background a system notification carries the full question

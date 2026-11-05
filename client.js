@@ -409,6 +409,12 @@ window.__ModuleLoader__.load({
         if (!fallback) fallback = flow;
         const rect = flow.getBoundingClientRect();
         if (rect.width > 4 && rect.height > 4) return flow;
+        /* A flow host can be display:contents with no box of its own; judge it by its turns. */
+        const turn = flow.querySelector('[data-slot="conversation.chat.turn"], [data-slot="conversation.chat.user.content"], [data-slot="conversation.chat.assistant"]');
+        if (turn) {
+          const turnRect = turn.getBoundingClientRect();
+          if (turnRect.width > 4 && turnRect.height > 4) return flow;
+        }
       }
       return fallback;
     }
@@ -435,6 +441,7 @@ window.__ModuleLoader__.load({
       if (state.raf) window.cancelAnimationFrame(state.raf);
       if (typeof state.restore === 'function') { try { state.restore(); } catch (error) { /* ignore */ } }
       if (allowJump && state.mode === 'pending') jumpUserMessage(state.dir);
+      if (state.dir > 0 && state.bottomFocused) focusComposerInput();
     }
 
     function startHoldLoop(state) {
@@ -450,6 +457,7 @@ window.__ModuleLoader__.load({
       state.retries = 0;
       state.pauseUntil = 0;
       state.poll = 0;
+      state.bottomFocused = false;
       state.last = window.performance && typeof window.performance.now === 'function' ? window.performance.now() : Date.now();
       const previousBehavior = initial.style.scrollBehavior;
       initial.style.scrollBehavior = 'auto';
@@ -539,14 +547,33 @@ window.__ModuleLoader__.load({
         state.speed = Math.min(30, state.speed + 0.8 * frames);
         const max = Math.max(0, node.scrollHeight - node.clientHeight);
         if (state.dir > 0) {
-          if (node.scrollTop >= max - 0.5) { state.stall = 0; schedule(); return; }
+          if (node.scrollTop >= max - 0.5) {
+            /* Holding down past the end means the reader wants to reply: activate the
+               composer once, and keep polling so streamed content stays in view. */
+            if (!state.bottomFocused) { state.bottomFocused = true; focusComposerInput(); }
+            state.stall = 0;
+            schedule();
+            return;
+          }
           const before = node.scrollTop;
           node.scrollTop = Math.min(max, before + state.speed * frames);
           if (Math.abs(node.scrollTop - before) < 0.5) { state.stall += frames; } else { state.stall = 0; }
+          if (node.scrollTop >= max - 0.5 && !state.bottomFocused) {
+            state.bottomFocused = true;
+            focusComposerInput();
+          }
           schedule();
           return;
         }
         /* Prefetch the next history page one screen before the boundary so scrolling never stalls. */
+        if (!state.kicked) {
+          state.kicked = true;
+          /* DSH may still hold a preserved scroll anchor; a wheel signal marks a reader
+             gesture so the held scroll can take over. */
+          try {
+            node.dispatchEvent(new WheelEvent('wheel', { deltaY: -240, deltaMode: 0, bubbles: true, cancelable: true, view: window }));
+          } catch (error) { /* ignore */ }
+        }
         if (!state.loading && !state.exhausted && node.scrollTop < node.clientHeight * 1.2) requestOlder(false);
         if (node.scrollTop <= 0.5) {
           if (state.exhausted) { state.mode = 'done'; return; }
@@ -651,6 +678,25 @@ window.__ModuleLoader__.load({
       return null;
     }
 
+    /** Focus the conversation composer and put the caret at the end, without scrolling. */
+    function focusComposerInput() {
+      const card = document.querySelector('[data-composer-card]');
+      let input = card ? card.querySelector('textarea, [contenteditable="true"]') : null;
+      if (!input) {
+        input = Array.prototype.find.call(document.querySelectorAll('textarea, [contenteditable="true"]'), (element) => {
+          const rect = element.getBoundingClientRect();
+          return rect.width > 0 && rect.height > 0;
+        });
+      }
+      if (!input) return false;
+      try { input.focus({ preventScroll: true }); } catch (error) { /* ignore */ }
+      if (typeof input.value === 'string' && typeof input.setSelectionRange === 'function') {
+        const end = input.value.length;
+        try { input.setSelectionRange(end, end); } catch (error) { /* ignore */ }
+      }
+      return true;
+    }
+
     /** Scroll the open conversation to its bottom and focus the composer input. */
     function scrollToComposerAndFocus() {
       const flow = visibleChatFlow();
@@ -679,21 +725,7 @@ window.__ModuleLoader__.load({
       } else if (flow) {
         flow.scrollIntoView({ block: 'end', behavior: 'smooth' });
       }
-      const card = document.querySelector('[data-composer-card]');
-      let input = card ? card.querySelector('textarea, [contenteditable="true"]') : null;
-      if (!input) {
-        input = Array.prototype.find.call(document.querySelectorAll('textarea, [contenteditable="true"]'), (element) => {
-          const rect = element.getBoundingClientRect();
-          return rect.width > 0 && rect.height > 0;
-        });
-      }
-      if (input) {
-        input.focus({ preventScroll: true });
-        if (typeof input.value === 'string' && typeof input.setSelectionRange === 'function') {
-          const end = input.value.length;
-          try { input.setSelectionRange(end, end); } catch (error) { /* ignore */ }
-        }
-      }
+      focusComposerInput();
     }
 
     /* ---------------------------------------------------------------- locale */

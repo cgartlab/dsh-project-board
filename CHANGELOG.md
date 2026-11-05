@@ -4,6 +4,22 @@ All notable changes to this project are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the project uses
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.0.4] - 2026-11-05
+
+### Fixed
+
+- Hold-to-scroll (`Alt+U` / `Alt+M`) now works from any position: when the chat view is
+  holding a preserved scroll anchor, a wheel signal marks the reader gesture so held
+  scrolling can take over instead of being pulled back every frame.
+- The visible conversation is detected by its rendered turns, because a conversation flow
+  host can be `display: contents` with no box of its own; previously a hidden retained view
+  could win and the hold engine would scroll the wrong element.
+
+### Changed
+
+- Holding `Alt+M` down to the end of the conversation now activates the composer: the input
+  is focused with the caret at the end, ready to type a reply.
+
 ## [1.0.3] - 2026-11-05
 
 ### Changed
