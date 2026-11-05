@@ -4,6 +4,14 @@ All notable changes to this project are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the project uses
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.0.5] - 2026-11-05
+
+### Changed
+
+- In the session search panel, `Alt+I` and `Alt+K` move the selection up and down just like
+  the arrow keys, and `Enter` opens the highlighted session. A second `Alt+K` no longer
+  closes the panel, and session-switching shortcuts are ignored while it is open.
+
 ## [1.0.4] - 2026-11-05
 
 ### Fixed
