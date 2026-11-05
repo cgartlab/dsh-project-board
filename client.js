@@ -203,6 +203,20 @@ window.__ModuleLoader__.load({
       } catch (error) { /* ignore */ }
       return false;
     }
+    /* The plugin's own palette is aria-modal too, but it owns its keys: it must not suppress
+       Alt+K (close) or Alt+I / Alt+, (move). Only real dialogs block shortcuts. */
+    function hasBlockingDialog() {
+      try {
+        const nodes = document.querySelectorAll('[role="dialog"][aria-modal="true"]');
+        for (const node of nodes) {
+          if (node.getClientRects().length === 0) continue;
+          if (node.getAttribute('data-pbx-overlay') === 'palette') continue;
+          if (node.closest && node.closest('.pbx-paletteBackdrop')) continue;
+          return true;
+        }
+      } catch (error) { /* ignore */ }
+      return false;
+    }
     let shortcutSuppressed = false;
     let userJumpLoading = false;
     let userJumpLastTarget = null;
@@ -2520,12 +2534,7 @@ window.__ModuleLoader__.load({
           const eventCombo = comboFromEvent(event);
           if (!eventCombo || !comboHasModifier(eventCombo)) return;
           const shortcuts = (settingsRef.current && settingsRef.current.shortcuts) || DEFAULT_SETTINGS.shortcuts;
-          if (hasOpenDialog()) return;
-          /* Do not eat Option/Alt keystrokes while the user is typing (macOS needs them for
-             characters such as ⌥I / ⌥S / ⌥D); Ctrl/Cmd combos still work. */
-          const activeEl = document.activeElement;
-          const typing = Boolean(activeEl) && (activeEl.tagName === 'TEXTAREA' || activeEl.tagName === 'INPUT' || activeEl.isContentEditable === true);
-          if (typing && !event.ctrlKey && !event.metaKey) return;
+          if (hasBlockingDialog()) return;
           if (matchCombo(event, shortcuts.palette)) {
             event.preventDefault();
             event.stopPropagation();
@@ -2553,7 +2562,7 @@ window.__ModuleLoader__.load({
           const isRename = matchCombo(event, shortcuts.rename);
           if (isRename) {
             const target = renameRef.current;
-            if (!target || hasOpenDialog()) return;
+            if (!target || hasBlockingDialog()) return;
             stopHoldScroll(false);
             if (paletteOpenRef.current && palette) palette.set({ open: false });
             event.preventDefault();
@@ -2564,7 +2573,7 @@ window.__ModuleLoader__.load({
           const isSessionMenu = matchCombo(event, shortcuts.sessionMenu);
           if (isSessionMenu) {
             const target = renameRef.current;
-            if (!target || hasOpenDialog()) return;
+            if (!target || hasBlockingDialog()) return;
             stopHoldScroll(false);
             if (paletteOpenRef.current && palette) palette.set({ open: false });
             event.preventDefault();
@@ -2592,7 +2601,7 @@ window.__ModuleLoader__.load({
           }
           const isHudToggle = matchCombo(event, shortcuts.hud);
           if (isHudToggle) {
-            if (paletteOpenRef.current) return;
+            if (paletteOpenRef.current) { event.preventDefault(); return; }
             event.preventDefault();
             event.stopPropagation();
             stopHoldScroll(false);
@@ -2601,7 +2610,7 @@ window.__ModuleLoader__.load({
           }
           const isInterject = matchCombo(event, shortcuts.interject);
           if (isInterject) {
-            if (paletteOpenRef.current) return;
+            if (paletteOpenRef.current) { event.preventDefault(); return; }
             event.preventDefault();
             event.stopPropagation();
             stopHoldScroll(false);
@@ -2614,14 +2623,14 @@ window.__ModuleLoader__.load({
           const isUserNext = matchCombo(event, shortcuts.userNext);
           const isUserPrev = matchCombo(event, shortcuts.userPrev);
           if (isUserNext || isUserPrev) {
-            if (paletteOpenRef.current) return;
+            if (paletteOpenRef.current) { event.preventDefault(); return; }
             event.preventDefault();
             event.stopPropagation();
             beginHoldScroll(isUserNext ? 1 : -1, event.code);
             return;
           }
           if (matchCombo(event, shortcuts.scrollBottom)) {
-            if (paletteOpenRef.current) return;
+            if (paletteOpenRef.current) { event.preventDefault(); return; }
             event.preventDefault();
             event.stopPropagation();
             stopHoldScroll(false);
@@ -2631,7 +2640,7 @@ window.__ModuleLoader__.load({
           const isNext = matchCombo(event, shortcuts.next);
           const isPrev = matchCombo(event, shortcuts.prev);
           if (isNext || isPrev) {
-            if (paletteOpenRef.current) return;
+            if (paletteOpenRef.current) { event.preventDefault(); return; }
             const cycle = cycleRef.current || { active: [], current: undefined };
             const active = cycle.active || [];
             if (active.length === 0) return;
@@ -2647,7 +2656,11 @@ window.__ModuleLoader__.load({
               if (focusRef.current) focusRef.current.set({ id: target.id, at: Date.now() });
               if (typeof openRef.current === 'function') openRef.current(target.id);
             }
+            return;
           }
+          /* Reaching here means no branch claimed the combo: keep a debug breadcrumb so a broken
+             shortcut can be diagnosed from the in-app log instead of guessing. */
+          if (event.altKey) logEvent('debug', 'shortcut', 'unmatched', { combo: eventCombo });
         };
         document.addEventListener('keydown', onShortcut, true);
         return () => document.removeEventListener('keydown', onShortcut, true);
@@ -2677,7 +2690,7 @@ window.__ModuleLoader__.load({
       return h('div', { className: 'pbx-paletteBackdrop' + (closing ? ' closing' : ''), style: backdropStyle, onClick: close },
         h('div', {
           className: 'pbx-palette', style: panelStyle,
-          role: 'dialog', 'aria-modal': 'true', 'aria-label': t('palette.placeholder'),
+          role: 'dialog', 'aria-modal': 'true', 'data-pbx-overlay': 'palette', 'aria-label': t('palette.placeholder'),
           onClick: (event) => event.stopPropagation(),
           onKeyDown: (event) => {
             if (isComposingEvent(event)) return;
@@ -4537,9 +4550,15 @@ window.__ModuleLoader__.load({
           if (expanded && rightBoardActive()) sidebarRight.toggleExpanded();
         } catch (error) { /* ignore */ }
       };
+      const boardPanelVisible = () => {
+        try { return Boolean(document.querySelector('[class*="_panel"][data-sidebar-right-open]')); } catch (error) { return false; }
+      };
       const rightbarWidthNow = () => {
-        const column = document.querySelector('[data-rightbar-col]');
-        return column ? column.getBoundingClientRect().width : 0;
+        const column = document.querySelector('[data-rightbar-col]') || document.querySelector('[class*="_rightbarCol"]');
+        const own = column ? column.getBoundingClientRect().width : 0;
+        if (own > 0) return own;
+        const panel = document.querySelector('[class*="_panel"][data-sidebar-right-open]');
+        return panel ? panel.getBoundingClientRect().width : 0;
       };
       const BOARD_WIDTH_KEY = 'pbx.board.width';
       /* The width the user last left the board at becomes the default for the next open. */
@@ -4604,10 +4623,8 @@ window.__ModuleLoader__.load({
       /** Whether the board pane is currently visible, regardless of the active session. */
       const boardOpenNow = () => {
         try {
-          const sidebarRight = ctx.sidebarRight;
-          if (!sidebarRight) return false;
-          const expanded = typeof sidebarRight.isExpanded === 'function' ? sidebarRight.isExpanded() : false;
-          return Boolean(expanded && rightBoardActive());
+          if (!ctx.sidebarRight) return false;
+          return Boolean(boardPanelVisible() && rightBoardActive());
         } catch (error) { return false; }
       };
       /** Open or close the board pane without touching its width or presentation. */
@@ -4617,10 +4634,10 @@ window.__ModuleLoader__.load({
           if (!sidebarRight) return;
           if (want) {
             if (!rightBoardActive()) sidebarRight.openTab(BOARD_KIND);
-            if (!sidebarRight.isExpanded()) sidebarRight.toggleExpanded();
+            if (!boardPanelVisible()) sidebarRight.toggleExpanded();
             return;
           }
-          if (sidebarRight.isExpanded()) sidebarRight.toggleExpanded();
+          if (boardPanelVisible()) sidebarRight.toggleExpanded();
         } catch (error) { /* ignore */ }
       };
       /** Current board pane state: { open, mode: 'narrow' | 'half' | 'full' | null }. */
@@ -4642,7 +4659,7 @@ window.__ModuleLoader__.load({
           if (!sidebarRight) return;
           if (!want.open) { setBoardOpen(false); return; }
           if (!rightBoardActive()) sidebarRight.openTab(BOARD_KIND);
-          if (!sidebarRight.isExpanded()) sidebarRight.toggleExpanded();
+          if (!boardPanelVisible()) sidebarRight.toggleExpanded();
           const mode = want.mode === 'narrow' || want.mode === 'full' ? want.mode : 'half';
           if (mode === 'full') {
             if (!rightbarFullscreen()) toggleRightbarFullscreen();
@@ -4659,7 +4676,7 @@ window.__ModuleLoader__.load({
           const sidebarRight = ctx.sidebarRight;
           if (!sidebarRight) return;
           if (!rightBoardActive()) sidebarRight.openTab(BOARD_KIND);
-          if (!sidebarRight.isExpanded()) sidebarRight.toggleExpanded();
+          if (!boardPanelVisible()) sidebarRight.toggleExpanded();
           if (mode === 'full') {
             if (!rightbarFullscreen()) toggleRightbarFullscreen();
             return;
@@ -4698,7 +4715,7 @@ window.__ModuleLoader__.load({
           const sidebarRight = ctx.sidebarRight;
           if (!sidebarRight) return;
           const visible = rightBoardActive();
-          const expanded = typeof sidebarRight.isExpanded === 'function' ? sidebarRight.isExpanded() : false;
+          const expanded = boardPanelVisible();
           const full = rightbarFullscreen();
           if (mode === 'full') {
             if (visible && expanded && full) {
@@ -4710,9 +4727,12 @@ window.__ModuleLoader__.load({
             return;
           }
           const viewport = window.innerWidth || 1200;
-          const targetWidth = mode === 'narrow' ? boardWidthDefault() : Math.round(viewport * 0.5);
-          if (visible && expanded && !full && Math.abs(rightbarWidthNow() - targetWidth) < 40) {
-            sidebarRight.toggleExpanded();
+          const currentWidth = rightbarWidthNow();
+          const currentMode = currentWidth > 0 && currentWidth <= 460 ? 'narrow' : 'half';
+          if (visible && expanded && !full) {
+            /* Same mode again closes; a different size key just resizes the open pane. */
+            if (currentMode === mode) { sidebarRight.toggleExpanded(); return; }
+            showNativeBoard(mode);
             return;
           }
           showNativeBoard(mode);
@@ -4723,8 +4743,7 @@ window.__ModuleLoader__.load({
           const sidebarRight = ctx.sidebarRight;
           if (!sidebarRight) return;
           sidebarRight.openTab(BOARD_KIND);
-          const expanded = typeof sidebarRight.isExpanded === 'function' ? sidebarRight.isExpanded() : true;
-          if (!expanded) {
+          if (!boardPanelVisible()) {
             sidebarRight.toggleExpanded();
             const width = boardWidthDefault();
             window.setTimeout(() => { if (!rightbarFullscreen()) setRightbarWidth(width); }, 60);

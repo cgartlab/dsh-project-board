@@ -1,0 +1,1104 @@
+'use strict';
+
+/*
+ * Keyboard-shortcut verification for @local/dsh-project-board.
+ *
+ * The plugin binds its global shortcuts inside the Palette component:
+ *
+ *     useEffect(() => {
+ *       const onShortcut = (event) => { ... };
+ *       document.addEventListener('keydown', onShortcut, true);
+ *       return () => document.removeEventListener('keydown', onShortcut, true);
+ *     }, [palette]);
+ *
+ * test/load.test.cjs only checks that the bundle mounts, and its React stub never
+ * runs effects, so this file adds the missing machinery instead of mocking the
+ * handler:
+ *
+ *   - a tiny React runtime that really executes useEffect (this is what installs
+ *     the keydown listener) and re-renders when state/store snapshots change;
+ *   - a virtual DOM in which the rendered Palette tree is attached, so the
+ *     plugin's own `document.querySelectorAll('[aria-modal="true"]')` checks run
+ *     against the same markup the browser would see (palette panel vs real modal);
+ *   - a KeyboardEvent-shaped event object dispatched through the plugin's real
+ *     document listener (Node has no DOM, so the shim only provides DOM fields).
+ *
+ * Everything is deterministic: timers are recorded but never fire, no network,
+ * no real storage, and every test gets a fresh sandbox around client.js.
+ */
+
+const test = require('node:test');
+const assert = require('node:assert/strict');
+const fs = require('node:fs');
+const path = require('node:path');
+const vm = require('node:vm');
+
+const root = path.resolve(__dirname, '..');
+const source = fs.readFileSync(path.join(root, 'client.js'), 'utf8');
+
+const BOARD_KIND = 'projectBoard'; // client.js: BOARD_KIND
+
+/* =============================================================== virtual DOM */
+
+function splitSelector(selector) {
+  return String(selector || '').split(',').map((part) => part.trim()).filter(Boolean);
+}
+
+function compoundMatches(node, compound) {
+  if (!node || node.tag === '#text') return false;
+  const match = /^([a-zA-Z][\w-]*|\*)?((?:\.[\w-]+|\[[^\]]+\])*)$/.exec(compound);
+  if (!match) return false;
+  if (match[1] && match[1] !== '*' && node.tag !== match[1].toLowerCase()) return false;
+  const tokens = match[2] || '';
+  const tokenRe = /(\.[\w-]+|\[[^\]]+\])/g;
+  let token;
+  while ((token = tokenRe.exec(tokens))) {
+    const piece = token[0];
+    if (piece[0] === '.') {
+      const classes = String(node.className || '').split(/\s+/).filter(Boolean);
+      if (classes.indexOf(piece.slice(1)) < 0) return false;
+      continue;
+    }
+    const inner = piece.slice(1, -1);
+    const eq = inner.indexOf('=');
+    if (eq < 0) {
+      if (!node.hasAttribute(inner)) return false;
+      continue;
+    }
+    const name = inner.slice(0, eq).trim();
+    let value = inner.slice(eq + 1).trim();
+    if ((value[0] === '"' && value[value.length - 1] === '"') || (value[0] === "'" && value[value.length - 1] === "'")) value = value.slice(1, -1);
+    if (node.getAttribute(name) !== value) return false;
+  }
+  return true;
+}
+
+function selectorMatches(node, selector) {
+  if (!node || node.tag === '#text') return false;
+  return splitSelector(selector).some((compound) => compoundMatches(node, compound));
+}
+
+let nodeSeq = 0;
+
+class VirtualNode {
+  constructor(tag, props, children, ownerDocument) {
+    this.id = ++nodeSeq;
+    this.tag = String(tag || 'div').toLowerCase();
+    this.tagName = this.tag.toUpperCase();
+    this.ownerDocument = ownerDocument || null;
+    this.props = props || {};
+    this.className = typeof this.props.className === 'string' ? this.props.className : '';
+    this.attributes = {};
+    for (const [key, value] of Object.entries(this.props)) {
+      if (key === 'className' || key === 'key' || key === 'ref' || key === 'style' || key === 'children') continue;
+      if (typeof value === 'string' || typeof value === 'number' || typeof value === 'boolean') this.attributes[key] = String(value);
+    }
+    if (this.className) this.attributes.class = this.className;
+    this.dataset = {};
+    this.style = this.props.style || {};
+    this.children = [];
+    this.parentNode = null;
+    this.isConnected = true;
+    this.textContent = '';
+    this.value = '';
+    this.disabled = Boolean(this.props.disabled);
+    this.scrollTop = 0;
+    this.scrollHeight = 0;
+    this.clientHeight = 0;
+    this.isContentEditable = this.attributes.contenteditable === 'true';
+    for (const child of children || []) this.appendChild(child);
+  }
+
+  appendChild(child) {
+    if (!child) return child;
+    child.parentNode = this;
+    this.children.push(child);
+    return child;
+  }
+
+  removeChild(child) {
+    const index = this.children.indexOf(child);
+    if (index >= 0) this.children.splice(index, 1);
+    if (child) child.parentNode = null;
+    return child;
+  }
+
+  remove() {
+    if (this.parentNode) this.parentNode.removeChild(this);
+    this.isConnected = false;
+  }
+
+  getClientRects() {
+    return [{ width: 120, height: 40, top: 0, left: 0, right: 120, bottom: 40 }];
+  }
+
+  getBoundingClientRect() {
+    return { width: 120, height: 40, top: 0, left: 0, right: 120, bottom: 40 };
+  }
+
+  getAttribute(name) {
+    return Object.prototype.hasOwnProperty.call(this.attributes, name) ? this.attributes[name] : null;
+  }
+
+  setAttribute(name, value) {
+    this.attributes[name] = String(value);
+  }
+
+  removeAttribute(name) {
+    delete this.attributes[name];
+  }
+
+  hasAttribute(name) {
+    return Object.prototype.hasOwnProperty.call(this.attributes, name);
+  }
+
+  matches(selector) {
+    return selectorMatches(this, selector);
+  }
+
+  closest(selector) {
+    let node = this;
+    while (node) {
+      if (selectorMatches(node, selector)) return node;
+      node = node.parentNode;
+    }
+    return null;
+  }
+
+  contains(other) {
+    let node = other;
+    while (node) {
+      if (node === this) return true;
+      node = node.parentNode;
+    }
+    return false;
+  }
+
+  querySelectorAll(selector) {
+    const out = [];
+    const walk = (node) => {
+      for (const child of node.children || []) {
+        if (selectorMatches(child, selector)) out.push(child);
+        walk(child);
+      }
+    };
+    walk(this);
+    return out;
+  }
+
+  querySelector(selector) {
+    const list = this.querySelectorAll(selector);
+    return list.length > 0 ? list[0] : null;
+  }
+
+  focus() {
+    if (this.ownerDocument) this.ownerDocument.activeElement = this;
+  }
+
+  blur() {
+    if (this.ownerDocument && this.ownerDocument.activeElement === this) this.ownerDocument.activeElement = this.ownerDocument.body;
+  }
+
+  scrollIntoView() {}
+
+  click() {}
+
+  setSelectionRange() {}
+
+  addEventListener() {}
+
+  removeEventListener() {}
+
+  dispatchEvent() {
+    return true;
+  }
+}
+
+function createVirtualDocument() {
+  const listeners = new Map();
+  const extraRoots = [];
+  const componentRoots = new Map();
+
+  const doc = {
+    visibilityState: 'visible',
+    hasFocus: () => true,
+    activeElement: null,
+    addEventListener(type, handler) {
+      if (!listeners.has(type)) listeners.set(type, []);
+      listeners.get(type).push(handler);
+    },
+    removeEventListener(type, handler) {
+      const list = listeners.get(type);
+      if (!list) return;
+      const index = list.indexOf(handler);
+      if (index >= 0) list.splice(index, 1);
+    },
+    dispatchEvent(event) {
+      if (!event.target) event.target = doc.activeElement;
+      event.currentTarget = doc;
+      for (const handler of (listeners.get(event.type) || []).slice()) {
+        handler(event);
+      }
+      return !event.defaultPrevented;
+    },
+    createElement(tag) {
+      return new VirtualNode(tag, {}, [], doc);
+    },
+    createElementNS(_namespace, tag) {
+      return new VirtualNode(tag, {}, [], doc);
+    },
+    createRange() {
+      return { selectNodeContents() {}, collapse() {}, setStart() {}, setEnd() {} };
+    },
+    querySelectorAll(selector) {
+      const roots = doc.allRoots();
+      const out = [];
+      for (const node of roots) {
+        if (selectorMatches(node, selector)) out.push(node);
+        for (const child of node.querySelectorAll(selector)) out.push(child);
+      }
+      return out;
+    },
+    querySelector(selector) {
+      const list = doc.querySelectorAll(selector);
+      return list.length > 0 ? list[0] : null;
+    },
+    allRoots() {
+      const roots = extraRoots.slice();
+      for (const node of componentRoots.values()) if (node) roots.push(node);
+      return roots;
+    },
+    __addRoot(node) {
+      if (node && extraRoots.indexOf(node) < 0) extraRoots.push(node);
+    },
+    __removeRoot(node) {
+      const index = extraRoots.indexOf(node);
+      if (index >= 0) extraRoots.splice(index, 1);
+    },
+    __setComponentRoot(key, node) {
+      componentRoots.set(key, node);
+    }
+  };
+
+  doc.head = new VirtualNode('head', {}, [], doc);
+  doc.body = new VirtualNode('body', {}, [], doc);
+  doc.documentElement = new VirtualNode('html', {}, [], doc);
+  doc.scrollingElement = doc.documentElement;
+  doc.activeElement = doc.body;
+  return doc;
+}
+
+/** Turn a React-element tree (h() output) into VirtualNodes and publish `ref` objects. */
+function convertTree(element, doc) {
+  if (element === null || element === undefined || element === false) return null;
+  if (Array.isArray(element)) return element.map((child) => convertTree(child, doc)).filter(Boolean);
+  if (typeof element === 'string' || typeof element === 'number') {
+    const text = new VirtualNode('#text', {}, [], doc);
+    text.textContent = String(element);
+    return text;
+  }
+  if (typeof element !== 'object') return null;
+  if (typeof element.type !== 'string') {
+    // Fragment or a nested component (e.g. Icon): opaque to the shortcut checks.
+    return new VirtualNode('component', {}, [], doc);
+  }
+  const node = new VirtualNode(element.type, element.props || {}, [], doc);
+  if (element.props && element.props.ref && typeof element.props.ref === 'object') {
+    element.props.ref.current = node;
+  }
+  const flat = [];
+  const push = (child) => {
+    if (Array.isArray(child)) child.forEach(push);
+    else if (child !== null && child !== undefined && child !== false) flat.push(child);
+  };
+  for (const child of element.children || []) push(child);
+  for (const child of flat) {
+    const converted = convertTree(child, doc);
+    if (converted) node.appendChild(converted);
+  }
+  return node;
+}
+
+/* ============================================================ keyboard event */
+
+class KeyboardEventShim {
+  constructor(type, init) {
+    const source = init || {};
+    this.type = type;
+    this.bubbles = Boolean(source.bubbles);
+    this.cancelable = source.cancelable !== false;
+    this.key = source.key === undefined ? '' : String(source.key);
+    this.code = source.code === undefined ? '' : String(source.code);
+    this.altKey = Boolean(source.altKey);
+    this.ctrlKey = Boolean(source.ctrlKey);
+    this.metaKey = Boolean(source.metaKey);
+    this.shiftKey = Boolean(source.shiftKey);
+    this.repeat = Boolean(source.repeat);
+    this.isComposing = Boolean(source.isComposing);
+    this.keyCode = Number(source.keyCode) || 0;
+    this.defaultPrevented = false;
+    this.propagationStopped = false;
+    this.target = source.target || null;
+    this.currentTarget = null;
+  }
+
+  preventDefault() {
+    if (this.cancelable) this.defaultPrevented = true;
+  }
+
+  stopPropagation() {
+    this.propagationStopped = true;
+  }
+
+  stopImmediatePropagation() {
+    this.propagationStopped = true;
+  }
+
+  composedPath() {
+    return [];
+  }
+}
+
+/* ============================================================ React runtime */
+
+/*
+ * Minimal but faithful hook runtime for the one component under test:
+ * state setters re-render, effect deps are compared, cleanups run before the
+ * next run, and refs are attached while the rendered tree is converted.
+ */
+function createReactRuntime(doc) {
+  let activeInstance = null;
+
+  function depsChanged(previous, next) {
+    if (!previous) return true;
+    if (!next) return true;
+    if (previous.length !== next.length) return true;
+    for (let i = 0; i < previous.length; i += 1) {
+      if (!Object.is(previous[i], next[i])) return true;
+    }
+    return false;
+  }
+
+  function useState(initial) {
+    const instance = activeInstance;
+    const index = instance.cursor;
+    instance.cursor += 1;
+    if (!instance.hooks[index]) {
+      instance.hooks[index] = { kind: 'state', value: typeof initial === 'function' ? initial() : initial };
+    }
+    const slot = instance.hooks[index];
+    const setState = (next) => {
+      const value = typeof next === 'function' ? next(slot.value) : next;
+      if (Object.is(value, slot.value)) return;
+      slot.value = value;
+      instance.dirty = true;
+    };
+    return [slot.value, setState];
+  }
+
+  function useEffect(factory, deps) {
+    const instance = activeInstance;
+    const index = instance.cursor;
+    instance.cursor += 1;
+    const previous = instance.hooks[index];
+    if (previous && previous.kind === 'effect' && !depsChanged(previous.deps, deps)) {
+      instance.effectSlots.push(previous);
+      return;
+    }
+    const slot = { kind: 'effect', deps: deps ? deps.slice() : null, cleanup: previous && previous.cleanup, pending: factory, previous: previous || null };
+    instance.hooks[index] = slot;
+    instance.effectSlots.push(slot);
+  }
+
+  function useMemo(factory, deps) {
+    const instance = activeInstance;
+    const index = instance.cursor;
+    instance.cursor += 1;
+    const previous = instance.hooks[index];
+    if (previous && previous.kind === 'memo' && !depsChanged(previous.deps, deps)) return previous.value;
+    const value = factory();
+    instance.hooks[index] = { kind: 'memo', value, deps: deps ? deps.slice() : null };
+    return value;
+  }
+
+  function useRef(value) {
+    const instance = activeInstance;
+    const index = instance.cursor;
+    instance.cursor += 1;
+    if (!instance.hooks[index]) instance.hooks[index] = { kind: 'ref', ref: { current: value } };
+    return instance.hooks[index].ref;
+  }
+
+  function useCallback(fn, deps) {
+    return useMemo(() => fn, deps);
+  }
+
+  const React = {
+    createElement: (type, props, ...children) => ({ type, props: props || {}, children }),
+    useState,
+    useEffect,
+    useLayoutEffect: useEffect,
+    useMemo,
+    useRef,
+    useCallback,
+    Fragment: 'Fragment'
+  };
+
+  function mount(component, props, onTree) {
+    const instance = {
+      component,
+      props,
+      hooks: [],
+      cursor: 0,
+      dirty: false,
+      effectSlots: [],
+      onTree,
+      node: null,
+      renders: 0
+    };
+
+    function flushEffects() {
+      const slots = instance.effectSlots;
+      instance.effectSlots = [];
+      for (const slot of slots) {
+        if (!slot.pending) continue;
+        if (typeof slot.cleanup === 'function') {
+          try { slot.cleanup(); } catch (error) { /* a cleanup must not break the harness */ }
+        }
+        slot.cleanup = slot.pending();
+        slot.pending = null;
+      }
+    }
+
+    function render() {
+      let guard = 0;
+      do {
+        instance.dirty = false;
+        activeInstance = instance;
+        instance.cursor = 0;
+        instance.effectSlots = [];
+        const tree = instance.component(instance.props);
+        activeInstance = null;
+        instance.renders += 1;
+        const node = convertTree(tree, doc);
+        instance.node = node;
+        if (typeof instance.onTree === 'function') instance.onTree(instance.node);
+        flushEffects();
+      } while (instance.dirty && ++guard < 40);
+      return instance.node;
+    }
+
+    instance.render = render;
+    return instance;
+  }
+
+  return { React, mount };
+}
+
+/* ================================================================ the harness */
+
+function createLocalStorage() {
+  const data = new Map();
+  return {
+    getItem: (key) => (data.has(key) ? data.get(key) : null),
+    setItem: (key, value) => { data.set(key, String(value)); },
+    removeItem: (key) => { data.delete(key); },
+    clear: () => data.clear()
+  };
+}
+
+function createWindowStub(doc, localStorage) {
+  const timers = [];
+  const dispatched = [];
+  const listenerMap = new Map();
+  let idSeq = 0;
+
+  const win = {
+    document: doc,
+    localStorage,
+    innerWidth: 1440,
+    innerHeight: 900,
+    devicePixelRatio: 1,
+    screenX: 0,
+    screenY: 0,
+    navigator: { platform: 'test' },
+    matchMedia: () => ({ matches: false, addEventListener() {}, removeEventListener() {} }),
+    getComputedStyle: () => ({ overflowY: 'visible' }),
+    getSelection: () => null,
+    performance: { now: () => 0 },
+    addEventListener(type, handler) {
+      if (!listenerMap.has(type)) listenerMap.set(type, []);
+      listenerMap.get(type).push(handler);
+    },
+    removeEventListener(type, handler) {
+      const list = listenerMap.get(type);
+      if (!list) return;
+      const index = list.indexOf(handler);
+      if (index >= 0) list.splice(index, 1);
+    },
+    dispatchEvent(event) {
+      dispatched.push(event);
+      return true;
+    },
+    setTimeout(fn, delay) {
+      idSeq += 1;
+      timers.push({ id: idSeq, fn, delay, cleared: false });
+      return idSeq;
+    },
+    clearTimeout(id) {
+      const timer = timers.find((entry) => entry.id === id);
+      if (timer) timer.cleared = true;
+    },
+    setInterval() {
+      idSeq += 1;
+      return idSeq;
+    },
+    clearInterval() {},
+    requestAnimationFrame() {
+      idSeq += 1;
+      return idSeq;
+    },
+    cancelAnimationFrame() {},
+    __timers: timers,
+    __dispatched: dispatched
+  };
+
+  win.CustomEvent = class CustomEvent {
+    constructor(type, init) {
+      this.type = type;
+      this.detail = init ? init.detail : undefined;
+    }
+  };
+  return win;
+}
+
+function createServices() {
+  const calls = {
+    openSession: [],
+    sidebarOpenTab: [],
+    sidebarToggleExpanded: [],
+    layoutToggleSidebar: [],
+    setRightbar: []
+  };
+  return {
+    calls,
+    uiWorkspace: {
+      openSession(sessionId) { calls.openSession.push(sessionId); }
+    },
+    sidebarRight: {
+      active: () => undefined,
+      isExpanded: () => false,
+      openTab(kind) { calls.sidebarOpenTab.push(kind); },
+      toggleExpanded() { calls.sidebarToggleExpanded.push(true); },
+      commandTarget: () => undefined,
+      toggleFullscreen() {}
+    },
+    layout: {
+      toggleSidebar() { calls.layoutToggleSidebar.push(true); },
+      panels: { setRightbar(px) { calls.setRightbar.push(px); } },
+      selectPanel() {}
+    }
+  };
+}
+
+function createContext(doc, services) {
+  const translations = {};
+  const registrations = [];
+  const effects = [];
+  const ctx = {
+    locale: {
+      register(namespace, dicts) { translations[namespace] = dicts; },
+      bind(namespace) {
+        return (key, params) => {
+          const table = (translations[namespace] || {})[key] ? (translations[namespace] || {}) : null;
+          let text = table ? table[key] : key;
+          if (params) {
+            for (const [name, value] of Object.entries(params)) text = text.split('{' + name + '}').join(String(value));
+          }
+          return text;
+        };
+      }
+    },
+    effect(factory) {
+      const dispose = factory();
+      if (typeof dispose === 'function') effects.push(dispose);
+      return () => {};
+    },
+    get(name) { return services[name]; },
+    on() { return () => {}; },
+    sidebarRight: services.sidebarRight,
+    sidebarRightTabs: { register() { return () => {}; } },
+    slots: {
+      inject(name, factory) { return factory(); },
+      register(spec, component) {
+        registrations.push({ spec, component });
+        return () => {};
+      }
+    },
+    layout: services.layout,
+    uiWorkspace: services.uiWorkspace
+  };
+  return { ctx, translations, registrations, effects };
+}
+
+const SESSION_FIXTURE = {
+  ids: ['s1', 's2', 's3'],
+  byId: {
+    s1: { id: 's1', title: 'Alpha', updatedAt: 3000 },
+    s2: { id: 's2', title: 'Beta', updatedAt: 2000, retainedBy: { mainView: 1 } },
+    s3: { id: 's3', title: 'Gamma', updatedAt: 1000 }
+  }
+};
+
+function keyForCode(code) {
+  if (/^Key[A-Z]$/.test(code)) return code.slice(3).toLowerCase();
+  if (/^Digit[0-9]$/.test(code)) return code.slice(5);
+  if (code === 'Comma') return ',';
+  if (code === 'Period') return '.';
+  if (code === 'Space') return ' ';
+  if (code === 'Enter') return 'Enter';
+  if (code === 'Escape') return 'Escape';
+  if (code === 'ArrowUp') return 'ArrowUp';
+  if (code === 'ArrowDown') return 'ArrowDown';
+  return code;
+}
+
+function comboInit(combo) {
+  const parts = String(combo).split('+');
+  const code = parts.pop();
+  return {
+    key: keyForCode(code),
+    code,
+    altKey: parts.indexOf('alt') >= 0,
+    ctrlKey: parts.indexOf('ctrl') >= 0,
+    metaKey: parts.indexOf('meta') >= 0,
+    shiftKey: parts.indexOf('shift') >= 0
+  };
+}
+
+function createHarness() {
+  const doc = createVirtualDocument();
+  const localStorage = createLocalStorage();
+  const win = createWindowStub(doc, localStorage);
+  const services = createServices();
+  const silentConsole = { log() {}, warn() {}, error() {}, info() {}, debug() {} };
+
+  const sandbox = {
+    window: win,
+    document: doc,
+    localStorage,
+    console: silentConsole,
+    setTimeout: win.setTimeout,
+    clearTimeout: win.clearTimeout,
+    setInterval: win.setInterval,
+    clearInterval: win.clearInterval,
+    requestAnimationFrame: win.requestAnimationFrame,
+    cancelAnimationFrame: win.cancelAnimationFrame,
+    CustomEvent: win.CustomEvent
+  };
+  sandbox.globalThis = sandbox;
+
+  let captured = null;
+  win.__ModuleLoader__ = { load: (spec) => { captured = spec; } };
+  vm.runInNewContext(source, sandbox, { filename: 'client.js' });
+  assert.ok(captured, 'the bundle factory was captured');
+
+  const runtime = createReactRuntime(doc);
+  const module = captured.factory((id) => {
+    if (id === 'react') return runtime.React;
+    throw new Error('unexpected runtime dependency: ' + id);
+  });
+
+  const { ctx, registrations } = createContext(doc, services);
+  module.apply(ctx);
+
+  const paletteEntry = registrations.find((entry) => entry.spec.id === 'project-board-palette');
+  assert.ok(paletteEntry, 'the palette overlay is registered');
+  const injected = paletteEntry.spec.inject();
+  assert.ok(injected && injected.palette && typeof injected.palette.getSnapshot === 'function', 'palette store is injected');
+
+  const paletteStore = injected.palette;
+  const settingsStore = injected.hooks.settings;
+  const hudOrderStore = injected.hooks.hudOrder;
+
+  const spies = {
+    toggleBoard: [],
+    toggleLeftSidebar: [],
+    toggleHud: [],
+    requestRename: [],
+    requestSessionMenu: [],
+    notify: []
+  };
+
+  const props = Object.assign({}, injected, {
+    t: ctx.locale.bind('projectBoard'),
+    useSessions: (selector) => selector(SESSION_FIXTURE),
+    useSessionStatus: (selector) => selector(new Map()),
+    useWorkspaces: (selector) => selector({ items: [], archivedSessionIds: [] }),
+    usePalette: (selector) => selector(paletteStore.getSnapshot()),
+    useSettings: (selector) => selector(settingsStore.getSnapshot()),
+    useHudOrder: (selector) => selector(hudOrderStore.getSnapshot()),
+    toggleBoard: (mode) => { spies.toggleBoard.push(mode); return injected.toggleBoard(mode); },
+    toggleLeftSidebar: () => { spies.toggleLeftSidebar.push(true); return injected.toggleLeftSidebar(); },
+    toggleHud: () => { spies.toggleHud.push(true); return injected.toggleHud(); },
+    requestRename: (id, title) => { spies.requestRename.push([id, title]); return injected.requestRename(id, title); },
+    requestSessionMenu: (id, title) => { spies.requestSessionMenu.push([id, title]); return injected.requestSessionMenu(id, title); },
+    notify: (payload) => { spies.notify.push(payload); return injected.notify(payload); }
+  });
+
+  const instance = runtime.mount(paletteEntry.component, props, (node) => {
+    const snapshot = paletteStore.getSnapshot();
+    const open = Boolean(snapshot && snapshot.open);
+    // Attach the panel only while the store reports the palette open. The real
+    // 180 ms exit animation is deliberately not simulated so the virtual DOM
+    // always reflects the logical open state.
+    doc.__setComponentRoot('palette', node && open ? node : null);
+  });
+  instance.render();
+
+  function render() {
+    return instance.render();
+  }
+
+  function pressRaw(init) {
+    const event = new KeyboardEventShim('keydown', Object.assign({ bubbles: true, cancelable: true }, init));
+    if (!event.target) event.target = doc.activeElement;
+    doc.dispatchEvent(event);
+    // The host subscribes to the plugin stores and re-renders after the update;
+    // mirror that so paletteOpenRef and the mounted panel track the store.
+    render();
+    return event;
+  }
+
+  function pressCombo(combo) {
+    return pressRaw(comboInit(combo));
+  }
+
+  function resetState() {
+    paletteStore.set({ open: false, move: { dir: 0, at: 0 } });
+    render();
+  }
+
+  function clearSpies() {
+    for (const key of Object.keys(spies)) spies[key].length = 0;
+    services.calls.openSession.length = 0;
+    services.calls.sidebarOpenTab.length = 0;
+    services.calls.sidebarToggleExpanded.length = 0;
+    services.calls.layoutToggleSidebar.length = 0;
+    services.calls.setRightbar.length = 0;
+    win.__dispatched.length = 0;
+  }
+
+  function makeEditable(options) {
+    const settings = options || {};
+    const tag = settings.contenteditable ? 'div' : 'textarea';
+    const node = new VirtualNode(tag, settings.contenteditable ? { contenteditable: 'true', 'aria-label': 'composer' } : { 'aria-label': 'composer' }, [], doc);
+    node.ownerDocument = doc;
+    node.value = settings.value || '';
+    node.isContentEditable = Boolean(settings.contenteditable);
+    node.setSelectionRange = (start, end) => { node.selection = [start, end]; };
+    return node;
+  }
+
+  function focusEditable(node) {
+    doc.activeElement = node;
+    return node;
+  }
+
+  return {
+    module,
+    ctx,
+    registrations,
+    doc,
+    window: win,
+    paletteStore,
+    settingsStore,
+    services,
+    spies,
+    instance,
+    render,
+    pressRaw,
+    pressCombo,
+    resetState,
+    clearSpies,
+    makeEditable,
+    focusEditable,
+    timersSince(index) {
+      return win.__timers.slice(index).filter((timer) => !timer.cleared);
+    },
+    timerCount() {
+      return win.__timers.length;
+    },
+    hudEvents() {
+      return win.__dispatched.map((event) => event.type);
+    },
+    paletteOpen() {
+      return Boolean(paletteStore.getSnapshot().open);
+    },
+    paletteMove() {
+      return paletteStore.getSnapshot().move;
+    }
+  };
+}
+
+/* ==================================================================== tests */
+
+test('Alt shortcuts still reach the plugin while an editable element is focused', () => {
+  const harness = createHarness();
+  const textarea = harness.makeEditable();
+  harness.doc.__addRoot(textarea);
+
+  harness.resetState();
+  harness.clearSpies();
+  harness.focusEditable(textarea);
+  assert.equal(harness.doc.activeElement, textarea, 'the composer textarea owns focus');
+
+  // Alt+K: the palette must toggle even though a textarea is focused.
+  const paletteEvent = harness.pressRaw({ key: 'k', code: 'KeyK', altKey: true, bubbles: true });
+  assert.equal(harness.paletteOpen(), true, 'Alt+K opens the palette from a focused textarea');
+  assert.equal(paletteEvent.defaultPrevented, true, 'Alt+K is consumed by the plugin, not swallowed by a typing guard');
+
+  // Alt+I: previous session (palette must be closed again for the session cycle).
+  harness.resetState();
+  harness.clearSpies();
+  harness.focusEditable(textarea);
+  const prevEvent = harness.pressRaw({ key: 'i', code: 'KeyI', altKey: true, bubbles: true });
+  assert.deepEqual(harness.services.calls.openSession, ['s1'], 'Alt+I requests the previous session from a focused textarea');
+  assert.equal(prevEvent.defaultPrevented, true, 'Alt+I is consumed while typing');
+
+  // Alt+D: session menu for the current session.
+  harness.resetState();
+  harness.clearSpies();
+  harness.focusEditable(textarea);
+  const menuEvent = harness.pressRaw({ key: 'd', code: 'KeyD', altKey: true, bubbles: true });
+  assert.deepEqual(harness.spies.requestSessionMenu, [['s2', 'Beta']], 'Alt+D opens the session menu from a focused textarea');
+  assert.equal(menuEvent.defaultPrevented, true, 'Alt+D is consumed while typing');
+
+  // Alt+N: native board, narrow mode.
+  harness.resetState();
+  harness.clearSpies();
+  harness.focusEditable(textarea);
+  const boardEvent = harness.pressRaw({ key: 'n', code: 'KeyN', altKey: true, bubbles: true });
+  assert.deepEqual(harness.spies.toggleBoard, ['narrow'], 'Alt+N toggles the board from a focused textarea');
+  assert.ok(harness.services.calls.sidebarOpenTab.indexOf(BOARD_KIND) >= 0, 'the native board tab was opened');
+  assert.equal(boardEvent.defaultPrevented, true, 'Alt+N is consumed while typing');
+
+  // Alt+B: half-width board.
+  harness.resetState();
+  harness.clearSpies();
+  harness.focusEditable(textarea);
+  const halfEvent = harness.pressRaw({ key: 'b', code: 'KeyB', altKey: true, bubbles: true });
+  assert.deepEqual(harness.spies.toggleBoard, ['half'], 'Alt+B requests the half-width board from a focused textarea');
+  assert.equal(halfEvent.defaultPrevented, true, 'Alt+B is consumed while typing');
+
+  // Alt+E: HUD toggle (dispatched on window by toggleHud).
+  harness.resetState();
+  harness.clearSpies();
+  harness.focusEditable(textarea);
+  const hudEvent = harness.pressRaw({ key: 'e', code: 'KeyE', altKey: true, bubbles: true });
+  assert.ok(harness.hudEvents().indexOf('pbx-hud-toggle') >= 0, 'Alt+E toggles the HUD from a focused textarea');
+  assert.equal(hudEvent.defaultPrevented, true, 'Alt+E is consumed while typing');
+
+  // contenteditable behaves like a textarea.
+  const editable = harness.makeEditable({ contenteditable: true });
+  harness.doc.__addRoot(editable);
+  harness.resetState();
+  harness.clearSpies();
+  harness.focusEditable(editable);
+  harness.pressRaw({ key: 'k', code: 'KeyK', altKey: true, bubbles: true });
+  assert.equal(harness.paletteOpen(), true, 'Alt+K also works from a contenteditable element');
+});
+
+test('a real modal dialog suppresses shortcuts', () => {
+  const harness = createHarness();
+  harness.resetState();
+  harness.clearSpies();
+
+  // A visible aria-modal dialog that is NOT the plugin palette: exactly what a
+  // native DSH dialog (rename, settings, command palette, ...) renders.
+  const modal = new VirtualNode('div', { className: 'native-modal', 'aria-modal': 'true', role: 'dialog' }, [], harness.doc);
+  harness.doc.__addRoot(modal);
+  assert.equal(harness.doc.querySelectorAll('[aria-modal="true"]').length, 1, 'the virtual document contains one real modal');
+
+  const paletteEvent = harness.pressRaw({ key: 'k', code: 'KeyK', altKey: true, bubbles: true });
+  assert.equal(harness.paletteOpen(), false, 'Alt+K does not open the palette behind a real modal');
+  assert.equal(paletteEvent.defaultPrevented, false, 'Alt+K is left to the modal');
+
+  const boardEvent = harness.pressRaw({ key: 'n', code: 'KeyN', altKey: true, bubbles: true });
+  assert.deepEqual(harness.spies.toggleBoard, [], 'Alt+N does not touch the board behind a real modal');
+  assert.equal(boardEvent.defaultPrevented, false, 'Alt+N is left to the modal');
+
+  harness.pressRaw({ key: 'e', code: 'KeyE', altKey: true, bubbles: true });
+  assert.deepEqual(harness.hudEvents(), [], 'Alt+E does not toggle the HUD behind a real modal');
+
+  const prevEvent = harness.pressRaw({ key: 'i', code: 'KeyI', altKey: true, bubbles: true });
+  assert.deepEqual(harness.services.calls.openSession, [], 'Alt+I does not switch sessions behind a real modal');
+  assert.equal(prevEvent.defaultPrevented, false, 'Alt+I is left to the modal');
+
+  // Control: once the modal is gone the same combo works again.
+  harness.doc.__removeRoot(modal);
+  harness.clearSpies();
+  harness.pressRaw({ key: 'k', code: 'KeyK', altKey: true, bubbles: true });
+  assert.equal(harness.paletteOpen(), true, 'Alt+K works again after the real modal closes');
+});
+
+test('palette open: Alt+K closes it, Alt+I and Alt+, still move the selection', () => {
+  const harness = createHarness();
+  harness.resetState();
+  harness.clearSpies();
+
+  // Open the palette through the real store and let the panel mount.
+  harness.paletteStore.set({ open: true, move: { dir: 0, at: 0 } });
+  harness.render();
+  assert.equal(harness.paletteOpen(), true, 'palette store reports open');
+  assert.equal(harness.doc.querySelectorAll('[aria-modal="true"]').length, 1, 'the open palette panel is aria-modal in the virtual document');
+  assert.equal(harness.doc.querySelectorAll('.pbx-palette').length, 1, 'the open palette panel carries .pbx-palette');
+
+  const closeEvent = harness.pressRaw({ key: 'k', code: 'KeyK', altKey: true, bubbles: true });
+  assert.equal(harness.paletteOpen(), false, 'Alt+K toggles the palette closed');
+  assert.equal(closeEvent.defaultPrevented, true, 'Alt+K is handled by the plugin palette');
+
+  // Re-open: the palette must keep owning Alt+I / Alt+, instead of the modal guard.
+  harness.paletteStore.set({ open: true, move: { dir: 0, at: 0 } });
+  harness.render();
+
+  const prevEvent = harness.pressRaw({ key: 'i', code: 'KeyI', altKey: true, bubbles: true });
+  assert.equal(harness.paletteOpen(), true, 'Alt+I keeps the palette open (it is not a modal blocker)');
+  assert.equal(harness.paletteMove().dir, -1, 'Alt+I moves the palette selection up');
+  assert.equal(prevEvent.defaultPrevented, true, 'Alt+I is consumed by the palette');
+
+  const nextEvent = harness.pressRaw({ key: ',', code: 'Comma', altKey: true, bubbles: true });
+  assert.equal(harness.paletteOpen(), true, 'Alt+, keeps the palette open');
+  assert.equal(harness.paletteMove().dir, 1, 'Alt+, moves the palette selection down');
+  assert.equal(nextEvent.defaultPrevented, true, 'Alt+, is consumed by the palette');
+
+  assert.deepEqual(harness.services.calls.openSession, [], 'palette navigation never switches sessions');
+});
+
+test('plain letters without modifiers never trigger actions', () => {
+  const harness = createHarness();
+  harness.resetState();
+  harness.clearSpies();
+
+  const letters = [
+    ['KeyK', 'k'], ['KeyI', 'i'], ['KeyD', 'd'], ['KeyN', 'n'],
+    ['KeyB', 'b'], ['KeyE', 'e'], ['KeyR', 'r'], ['KeyS', 's'],
+    ['KeyU', 'u'], ['KeyM', 'm'], ['KeyV', 'v'], ['KeyW', 'w'],
+    ['Comma', ',']
+  ];
+
+  for (const [code, key] of letters) {
+    const event = harness.pressRaw({ key, code, bubbles: true });
+    assert.equal(event.defaultPrevented, false, 'plain ' + key + ' is not consumed by the plugin');
+  }
+
+  assert.equal(harness.paletteOpen(), false, 'plain letters do not open the palette');
+  assert.deepEqual(harness.services.calls.openSession, [], 'plain letters do not switch sessions');
+  assert.deepEqual(harness.spies.toggleBoard, [], 'plain letters do not toggle the board');
+  assert.deepEqual(harness.spies.toggleLeftSidebar, [], 'plain letters do not toggle the sidebar');
+  assert.deepEqual(harness.spies.toggleHud, [], 'plain letters do not toggle the HUD');
+  assert.deepEqual(harness.spies.requestRename, [], 'plain letters do not request a rename');
+  assert.deepEqual(harness.spies.requestSessionMenu, [], 'plain letters do not open the session menu');
+  assert.deepEqual(harness.hudEvents(), [], 'plain letters emit no window events');
+});
+
+test('every default shortcut combo is wired and produces its side effect', () => {
+  const harness = createHarness();
+  const shortcuts = harness.settingsStore.getSnapshot().shortcuts;
+
+  const expectedIds = [
+    'palette', 'prev', 'next', 'userPrev', 'userNext', 'scrollBottom',
+    'sidebarBoard', 'leftSidebar', 'panelHalf', 'panelFull', 'rename',
+    'interject', 'hud', 'sessionMenu'
+  ];
+  assert.deepEqual(Object.keys(shortcuts).sort(), expectedIds.slice().sort(), 'DEFAULT_SETTINGS.shortcuts exposes the documented actions');
+
+  // A visible composer lets scrollBottom be observed through focusComposerInput().
+  const composer = harness.makeEditable();
+  harness.doc.__addRoot(composer);
+
+  /*
+   * Observable side effects used below:
+   *   palette        -> palette store open
+   *   prev / next    -> uiWorkspace.openSession(sessionId) via the session cycle
+   *   userPrev/Next  -> preventDefault + a 300 ms hold-scroll timer (the keyboard
+   *                     path is observable; the actual scrolling needs a chat view)
+   *   scrollBottom   -> composer textarea receives focus
+   *   sidebarBoard / panelHalf / panelFull -> toggleBoard(mode) and the native
+   *                     sidebar/layout services are invoked
+   *   leftSidebar    -> layout.toggleSidebar()
+   *   rename         -> props.requestRename(currentId, title)
+   *   sessionMenu    -> props.requestSessionMenu(currentId, title)
+   *   interject      -> warn toast when no queued message exists
+   *   hud            -> window 'pbx-hud-toggle' event
+   * No combo is smoke-only: each one is asserted either through a store, a
+   * service call, a spy, or the consumed event.
+   */
+  const checkers = {
+    palette: () => {
+      assert.equal(harness.paletteOpen(), true, 'default palette combo opens the palette');
+    },
+    prev: () => {
+      assert.deepEqual(harness.services.calls.openSession, ['s1'], 'default prev combo opens the previous session');
+    },
+    next: () => {
+      assert.deepEqual(harness.services.calls.openSession, ['s3'], 'default next combo opens the next session');
+    },
+    userPrev: (event, timerStart) => {
+      assert.equal(event.defaultPrevented, true, 'default userPrev combo is consumed');
+      assert.ok(harness.timersSince(timerStart).some((timer) => timer.delay === 300), 'default userPrev combo arms the hold-scroll timer');
+    },
+    userNext: (event, timerStart) => {
+      assert.equal(event.defaultPrevented, true, 'default userNext combo is consumed');
+      assert.ok(harness.timersSince(timerStart).some((timer) => timer.delay === 300), 'default userNext combo arms the hold-scroll timer');
+    },
+    scrollBottom: () => {
+      assert.equal(harness.doc.activeElement, composer, 'default scrollBottom combo focuses the composer');
+    },
+    sidebarBoard: () => {
+      assert.deepEqual(harness.spies.toggleBoard, ['narrow'], 'default sidebarBoard combo asks for the narrow board');
+      assert.ok(harness.services.calls.sidebarOpenTab.indexOf(BOARD_KIND) >= 0, 'default sidebarBoard combo opens the native board tab');
+    },
+    leftSidebar: () => {
+      assert.deepEqual(harness.spies.toggleLeftSidebar, [true], 'default leftSidebar combo toggles the left sidebar');
+      assert.deepEqual(harness.services.calls.layoutToggleSidebar, [true], 'default leftSidebar combo reaches the layout service');
+    },
+    panelHalf: () => {
+      assert.deepEqual(harness.spies.toggleBoard, ['half'], 'default panelHalf combo asks for the half board');
+    },
+    panelFull: () => {
+      assert.deepEqual(harness.spies.toggleBoard, ['full'], 'default panelFull combo asks for the full board');
+    },
+    rename: () => {
+      assert.deepEqual(harness.spies.requestRename, [['s2', 'Beta']], 'default rename combo requests a rename for the current session');
+    },
+    interject: () => {
+      assert.ok(harness.spies.notify.length > 0, 'default interject combo reports that nothing is queued');
+      assert.equal(harness.spies.notify[0].tone, 'warn', 'default interject combo warns when there is no queued message');
+    },
+    hud: () => {
+      assert.ok(harness.hudEvents().indexOf('pbx-hud-toggle') >= 0, 'default hud combo dispatches the HUD toggle event');
+    },
+    sessionMenu: () => {
+      assert.deepEqual(harness.spies.requestSessionMenu, [['s2', 'Beta']], 'default sessionMenu combo opens the menu for the current session');
+    }
+  };
+
+  for (const id of expectedIds) {
+    const combo = shortcuts[id];
+    assert.equal(typeof combo, 'string', 'default combo for ' + id + ' is a string');
+    assert.ok(combo.indexOf('+') > 0, 'default combo for ' + id + ' has a modifier');
+
+    harness.resetState();
+    harness.clearSpies();
+    harness.doc.activeElement = harness.doc.body;
+    const timerStart = harness.timerCount();
+
+    let event;
+    assert.doesNotThrow(() => { event = harness.pressCombo(combo); }, 'pressing ' + combo + ' (' + id + ') does not throw');
+    assert.ok(event, 'an event object was returned for ' + id);
+    assert.equal(event.defaultPrevented, true, 'combo ' + combo + ' (' + id + ') is consumed by the plugin');
+    assert.equal(typeof checkers[id], 'function', 'every default combo has a checker');
+    checkers[id](event, timerStart);
+  }
+});
