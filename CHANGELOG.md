@@ -9,6 +9,11 @@
 
 - 悬浮列表收起后的小胶囊加了图标徽标：有会话在跑时是蓝色并带轻微呼吸光，等待回答时变红色；整体更精致、也更好认。
 
+## [未发布]
+
+- 新增 `Alt+W`：展开/收起 DSH 原生的左侧会话栏（设置页里可以改键）。
+- 悬浮列表的"收起"箭头会跟着贴靠的边换方向：靠下指向下、靠右指向右、靠上指上、靠左指左。
+
 ## [0.1.13] - 2026-11-05
 
 ### 新增
@@ -139,6 +144,7 @@
 [0.1.9]: https://github.com/cgartlab/dsh-project-board/releases/tag/v0.1.9
 [0.1.10]: https://github.com/cgartlab/dsh-project-board/releases/tag/v0.1.10
 [0.1.11]: https://github.com/cgartlab/dsh-project-board/releases/tag/v0.1.11
+
 
 
 

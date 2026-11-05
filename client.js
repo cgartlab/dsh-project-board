@@ -18,6 +18,7 @@ window.__ModuleLoader__.load({
       userNext: 'settings.shortcut.userNext',
       scrollBottom: 'settings.shortcut.scrollBottom',
       sidebarBoard: 'settings.shortcut.sidebarBoard',
+      leftSidebar: 'settings.shortcut.leftSidebar',
       panelHalf: 'settings.shortcut.panelHalf',
       panelFull: 'settings.shortcut.panelFull',
       rename: 'settings.shortcut.rename',
@@ -26,7 +27,7 @@ window.__ModuleLoader__.load({
       sessionMenu: 'settings.shortcut.sessionMenu'
     };
     const DEFAULT_SETTINGS = {
-      shortcuts: { palette: 'alt+KeyK', prev: 'alt+KeyI', next: 'alt+Comma', userPrev: 'alt+KeyU', userNext: 'alt+KeyM', scrollBottom: 'alt+KeyS', sidebarBoard: 'alt+KeyN', panelHalf: 'alt+KeyB', panelFull: 'alt+KeyV', rename: 'alt+KeyR', interject: 'alt+Enter', hud: 'alt+KeyE', sessionMenu: 'alt+KeyD' },
+      shortcuts: { palette: 'alt+KeyK', prev: 'alt+KeyI', next: 'alt+Comma', userPrev: 'alt+KeyU', userNext: 'alt+KeyM', scrollBottom: 'alt+KeyS', sidebarBoard: 'alt+KeyN', leftSidebar: 'alt+KeyW', panelHalf: 'alt+KeyB', panelFull: 'alt+KeyV', rename: 'alt+KeyR', interject: 'alt+Enter', hud: 'alt+KeyE', sessionMenu: 'alt+KeyD' },
       palette: { enabled: true, blur: 15 },
       header: { capsule: true, placement: 'header' },
       hints: { shortcuts: true },
@@ -775,6 +776,7 @@ window.__ModuleLoader__.load({
       'settings.shortcut.userNext': '下一条用户指令（轻按跳转，按住连续向下滚动）',
       'settings.shortcut.scrollBottom': '滚动到底部并激活输入框',
       'settings.shortcut.sidebarBoard': '打开/关闭窄版项目看板（右侧栏 380px）',
+      'settings.shortcut.leftSidebar': '展开/收起原生左侧会话栏',
       'settings.shortcut.panelHalf': '打开/关闭中等宽度项目看板（右侧栏 50%）',
       'settings.shortcut.panelFull': '切换项目看板全屏（右侧栏全屏）',
       'settings.shortcut.rename': '重命名当前会话',
@@ -881,6 +883,7 @@ window.__ModuleLoader__.load({
       'settings.shortcut.userNext': 'Next user message (tap to jump, hold to scroll down)',
       'settings.shortcut.scrollBottom': 'Scroll to bottom and focus input',
       'settings.shortcut.sidebarBoard': 'Toggle narrow board (right sidebar, 380px)',
+      'settings.shortcut.leftSidebar': 'Expand or collapse the native left sidebar',
       'settings.shortcut.panelHalf': 'Toggle medium board (right sidebar, 50%)',
       'settings.shortcut.panelFull': 'Toggle board fullscreen (right sidebar)',
       'settings.shortcut.rename': 'Rename current session',
@@ -1017,7 +1020,8 @@ window.__ModuleLoader__.load({
       close: ['M6 6l12 12', 'M18 6L6 18'],
       up: ['M6 15l6-6 6 6'],
       down: ['M6 9l6 6 6-6'],
-      bottom: ['M12 4v12', 'M7 11l5 5 5-5', 'M5 20h14']
+      bottom: ['M12 4v12', 'M7 11l5 5 5-5', 'M5 20h14'],
+      left: ['M19 12H5', 'M11 6l-6 6 6 6']
     };
     function Icon(props) {
       const name = props.name || 'folder'; const size = props.size || 16; const strokeWidth = props.strokeWidth || 1.7;
@@ -2162,6 +2166,14 @@ window.__ModuleLoader__.load({
             }
             return;
           }
+          if (matchCombo(event, shortcuts.leftSidebar)) {
+            event.preventDefault();
+            event.stopPropagation();
+            stopHoldScroll(false);
+            if (paletteOpenRef.current && palette) palette.set({ open: false });
+            if (typeof props.toggleLeftSidebar === 'function') props.toggleLeftSidebar();
+            return;
+          }
           const isHudToggle = matchCombo(event, shortcuts.hud);
           if (isHudToggle) {
             if (paletteOpenRef.current) return;
@@ -2335,6 +2347,8 @@ window.__ModuleLoader__.load({
       });
       const [mounted, setMounted] = useState(() => config.hud.enabled !== false);
       const [swap, setSwap] = useState('');
+      /* Which way the collapse chevron points: it follows the edge the HUD is anchored to. */
+      const [collapseDir, setCollapseDir] = useState('down');
       const swapTimersRef = useRef([]);
       const [pos, setPos] = useState(() => { const value = loadJson(HUD_POS_KEY, null); return value && typeof value.x === 'number' ? value : null; });
       const [dragging, setDragging] = useState(false);
@@ -2537,6 +2551,13 @@ window.__ModuleLoader__.load({
           }
         }
         prevBoxRef.current = { collapsed: collapsed, width: width, height: height, x: rect.left, y: rect.top };
+        const edge = 26;
+        let direction = 'down';
+        if (rect.bottom >= window.innerHeight - edge) direction = 'down';
+        else if (rect.right >= window.innerWidth - edge) direction = 'right';
+        else if (rect.top <= edge) direction = 'up';
+        else if (rect.left <= edge) direction = 'left';
+        setCollapseDir((previous) => previous === direction ? previous : direction);
       });
 
       const onDragStart = (event) => {
@@ -2709,7 +2730,13 @@ window.__ModuleLoader__.load({
             h('span', { className: 'pbx-hudGrip', 'aria-hidden': 'true' }),
             h('span', { className: 'pbx-hudHeadTitle' }, t('hud.title')),
             h('span', { className: 'pbx-hudCount' }, String(rows.length)),
-            h('button', { type: 'button', className: 'pbx-hudCollapse', title: t('hud.collapse'), onClick: () => { setCollapsed(true); try { window.localStorage.setItem(HUD_COLLAPSE_KEY, '1'); } catch (error) { /* ignore */ } } }, '—')
+            h('button', {
+              type: 'button', className: 'pbx-hudCollapse', title: t('hud.collapse'), 'aria-label': t('hud.collapse'),
+              onClick: () => {
+                setCollapsed(true);
+                try { window.localStorage.setItem(HUD_COLLAPSE_KEY, '1'); } catch (error) { /* ignore */ }
+              }
+            }, h(Icon, { name: collapseDir, size: 13, strokeWidth: 2 }))
           ),
           h('div', { className: 'pbx-hudList', style: Object.assign({ maxHeight: hudListMaxHeight + 'px' }, listHeight > 0 ? { height: listHeight + 'px' } : {}) },
             h('div', { ref: listContentRef, className: 'pbx-hudListInner' },
@@ -3141,6 +3168,7 @@ window.__ModuleLoader__.load({
           shortcutRow('userNext', 'settings.shortcut.userNext'),
           shortcutRow('scrollBottom', 'settings.shortcut.scrollBottom'),
           shortcutRow('sidebarBoard', 'settings.shortcut.sidebarBoard'),
+        shortcutRow('leftSidebar', 'settings.shortcut.leftSidebar'),
           shortcutRow('panelHalf', 'settings.shortcut.panelHalf'),
           shortcutRow('panelFull', 'settings.shortcut.panelFull'),
           shortcutRow('rename', 'settings.shortcut.rename'),
@@ -3375,8 +3403,10 @@ window.__ModuleLoader__.load({
       '.pbx-hudGrip{width:10px;height:14px;background-image:radial-gradient(var(--dsw-alias-label-secondary) 1px,transparent 1px);background-size:3px 3px;opacity:.5;flex:none}',
       '.pbx-hudHeadTitle{font-size:12.5px;font-weight:600;color:var(--dsw-alias-label-primary)}',
       '.pbx-hudCount{margin-left:auto;font-size:11px;color:var(--dsw-alias-label-secondary);background:var(--dsw-alias-bg-layer-2);border-radius:999px;padding:0 7px;line-height:17px}',
-      '.pbx-hudCollapse{width:22px;height:22px;border:none;background:transparent;color:var(--dsw-alias-label-secondary);border-radius:5px;cursor:pointer;font:inherit;line-height:16px}',
-      '.pbx-hudCollapse:hover{background:var(--dsw-alias-interactive-bg-hover);color:var(--dsw-alias-label-primary)}',
+      '.pbx-hudCollapse{width:22px;height:22px;display:inline-flex;align-items:center;justify-content:center;padding:0;border:none;background:transparent;color:var(--dsw-alias-label-secondary);border-radius:6px;cursor:pointer;font:inherit;line-height:1;transition:background .16s ease,color .16s ease,transform .12s ease}',
+      '.pbx-hudCollapse:hover{background:color-mix(in srgb,var(--dsw-alias-label-secondary) 14%,transparent);color:var(--dsw-alias-label-primary)}',
+      '.pbx-hudCollapse:active{transform:scale(.92)}',
+      '.pbx-hudCollapse:focus-visible{outline:2px solid var(--dsw-alias-brand-primary);outline-offset:1px}',
       '.pbx-hudList{max-height:260px;overflow-x:hidden;overflow-y:auto;padding:7px;transition:height .28s cubic-bezier(.2,.8,.2,1);scrollbar-width:none;-ms-overflow-style:none}',
       '.pbx-hudList::-webkit-scrollbar{width:0;height:0}',
       '.pbx-hud:hover .pbx-hudList{scrollbar-width:thin;scrollbar-color:var(--dsw-alias-border-l2) transparent}',
@@ -3745,6 +3775,22 @@ window.__ModuleLoader__.load({
           }, 130);
         } catch (error) { console.warn('project-board: native board failed', error); }
       };
+      /** Expand or collapse DSH's own left sidebar (the session list column). */
+      const toggleNativeLeftSidebar = () => {
+        try {
+          const layout = ctx.layout;
+          if (layout && typeof layout.toggleSidebar === 'function') { layout.toggleSidebar(); return true; }
+        } catch (error) { /* ignore */ }
+        try {
+          const panels = ctx.layout && ctx.layout.panels;
+          if (panels && typeof panels.toggleSidebar === 'function') { panels.toggleSidebar(); return true; }
+        } catch (error) { /* ignore */ }
+        try {
+          const left = ctx.sidebarLeft || (typeof ctx.get === 'function' ? ctx.get('sidebarLeft') : null);
+          if (left && typeof left.toggleExpanded === 'function') { left.toggleExpanded(); return true; }
+        } catch (error) { /* ignore */ }
+        return false;
+      };
       const toggleNativeBoard = (mode) => {
         lastBoardIntentAt = Date.now();
         try {
@@ -3905,7 +3951,7 @@ window.__ModuleLoader__.load({
 
       ctx.slots.inject('shell.overlay', () => ctx.slots.register({
         name: 'shell.overlay', id: 'project-board-palette', order: 40, locale: NS,
-        inject: () => ({ openSession: openSession, palette: paletteStore, focus: focusStore, toggleBoard: toggleNativeBoard, toggleHud: toggleHud, requestRename: requestRename, requestSessionMenu: requestSessionMenu, notify: pushToast, hooks: { palette: paletteStore, settings: settingsStore, focus: focusStore, hudOrder: hudOrderStore } })
+        inject: () => ({ openSession: openSession, palette: paletteStore, focus: focusStore, toggleBoard: toggleNativeBoard, toggleLeftSidebar: toggleNativeLeftSidebar, toggleHud: toggleHud, requestRename: requestRename, requestSessionMenu: requestSessionMenu, notify: pushToast, hooks: { palette: paletteStore, settings: settingsStore, focus: focusStore, hudOrder: hudOrderStore } })
       }, Palette));
 
       ctx.slots.inject('shell.overlay', () => ctx.slots.register({
