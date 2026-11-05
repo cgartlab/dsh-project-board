@@ -742,7 +742,7 @@ window.__ModuleLoader__.load({
       'col.kind': '类型', 'kind.auto': '自动化任务', 'kind.normal': '普通会话', 'filter.kind': '类型', 'stat.auto': '自动化',
       'nav.switch': '切换会话', 'nav.switchLabel': '会话', 'nav.noSession': '未选择会话', 'nav.board': '看板', 'nav.openBoard': '打开项目看板', 'nav.cycle': 'Alt+I 上一个 · Alt+, 下一个',
       'rightTab.title': '项目看板', 'compact.full': '全屏打开',
-      'palette.placeholder': '搜索会话或项目…', 'palette.allProjects': '全部项目', 'palette.empty': '没有匹配的会话', 'palette.hint': '↑↓ / Alt+I / Alt+K 选择 · Enter 打开 · Esc 关闭',
+      'palette.placeholder': '搜索会话或项目…', 'palette.allProjects': '全部项目', 'palette.empty': '没有匹配的会话', 'palette.hint': '↑↓ / Alt+I / Alt+, 选择 · Enter 打开 · Esc 关闭',
       'hud.title': '活跃与最近会话', 'hud.collapsed': '活跃', 'hud.expand': '展开', 'hud.collapse': '收起', 'hud.empty': '当前没有非空闲会话', 'hud.prev': '上一个', 'hud.next': '下一个', 'hud.recent': '最近',
       'hud.groupSession': '会话', 'hud.groupMessage': '指令', 'hud.prevInstruction': '上一条', 'hud.nextInstruction': '下一条', 'hud.toBottom': '到底部', 'hud.auto': '自动化',
       'settings.title': '项目看板设置',
@@ -848,7 +848,7 @@ window.__ModuleLoader__.load({
       'col.kind': 'Type', 'kind.auto': 'Automation', 'kind.normal': 'Session', 'filter.kind': 'Type', 'stat.auto': 'Automation',
       'nav.switch': 'Switch session', 'nav.switchLabel': 'Sessions', 'nav.noSession': 'No session', 'nav.board': 'Board', 'nav.openBoard': 'Open project board', 'nav.cycle': 'Alt+I previous · Alt+, next',
       'rightTab.title': 'Project Board', 'compact.full': 'Open full screen',
-      'palette.placeholder': 'Search sessions or projects…', 'palette.allProjects': 'All projects', 'palette.empty': 'No matching sessions', 'palette.hint': '↑↓ or Alt+I / Alt+K select · Enter open · Esc close',
+      'palette.placeholder': 'Search sessions or projects…', 'palette.allProjects': 'All projects', 'palette.empty': 'No matching sessions', 'palette.hint': '↑↓ or Alt+I / Alt+, select · Enter open · Esc close',
       'hud.title': 'Active & recent', 'hud.collapsed': 'Active', 'hud.expand': 'Expand', 'hud.collapse': 'Collapse', 'hud.empty': 'No active sessions', 'hud.prev': 'Previous', 'hud.next': 'Next', 'hud.recent': 'Recent',
       'hud.groupSession': 'Session', 'hud.groupMessage': 'Instruction', 'hud.prevInstruction': 'Previous', 'hud.nextInstruction': 'Next', 'hud.toBottom': 'Bottom', 'hud.auto': 'Auto',
       'settings.title': 'Project Board settings',
@@ -2097,6 +2097,13 @@ window.__ModuleLoader__.load({
             event.stopPropagation();
             stopHoldScroll(false);
             if (palette) palette.set({ move: { dir: -1, at: Date.now() } });
+            return;
+          }
+          if (paletteOpenRef.current && matchCombo(event, shortcuts.next)) {
+            event.preventDefault();
+            event.stopPropagation();
+            stopHoldScroll(false);
+            if (palette) palette.set({ move: { dir: 1, at: Date.now() } });
             return;
           }
           const isSidebarBoard = matchCombo(event, shortcuts.sidebarBoard);

@@ -4,6 +4,13 @@ All notable changes to this project are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the project uses
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.0.6] - 2026-11-05
+
+### Changed
+
+- In the session search, `Alt+,` (the next-session key) now moves the selection down,
+  matching `Alt+I` (up) and the arrow keys. The panel footer lists the keys.
+
 ## [1.0.5] - 2026-11-05
 
 ### Changed
