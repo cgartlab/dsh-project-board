@@ -19,7 +19,7 @@ jobs:
       - name: i18n parity
         run: node scripts/check-i18n.cjs
       - name: Load test
-        run: node --test test/load.test.cjs
+        run: node --test test/load.test.cjs test/shortcuts.test.cjs
       - name: Syntax
         run: |
           node --check client.js
