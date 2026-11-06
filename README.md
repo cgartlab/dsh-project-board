@@ -14,7 +14,10 @@ reading, and desktop-class task notifications.
 
 - **Project board** — session and project database views with search, status/type/project
   filters, grouping, multi-column sorting, archive-aware rows, and per-project color and
-  icon. Opens at narrow (380 px), medium (50 vw) or native fullscreen; the same key closes it.
+  icon. The project view has 6 attribute columns (session count / Open Issue / Open PR /
+  local version / latest release / last activity). **Click a project row to expand its
+  session list inline below** (accordion-style, no page flip). Opens at narrow (380 px),
+  medium (50 vw) or native fullscreen; the same key closes it.
   The pane's open state and size belong to the workspace, not to each conversation:
   switching sessions only switches the conversation and never re-opens, closes or resizes
   the board.
