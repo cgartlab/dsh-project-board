@@ -63,6 +63,11 @@
 - 失误：日志级别停在默认档时，`Alt+W` 的 info 记录看不到 → 规则：排查前先把「日志与排查」级别调到「常规」，或直接读 localStorage 里的 `entries`
 - 失误：只写"修好了"而没有可复现的判断依据，下一轮又是猜 → 规则：每次行为修复配一条回归测试（两个测试文件共 13 条就是地基），并在 `docs/architecture.md` 留判定口径
 
+## 本机网络与工具
+
+- 失误：本机 `git` 全局配了 `http.proxy = http://127.0.0.1:7900`，本地代理没启动时 `git fetch/push` 直接失败（`Failed to connect to github.com port 443 via 127.0.0.1`），而 `gh` 走 API 一切正常，很容易误判成"仓库/权限坏了" → 规则：先看 `git config --get http.proxy` 与端口是否有监听；绕过用 `git -c http.proxy= -c https.proxy= …`，大 pack 传输再叠加 `-c http.version=HTTP/1.1`（2026-11-06 实测：HTTP/2 直连会被 reset，HTTP/1.1 能过）
+- 失误：`git pull` 会在网络阶段再 fetch 一次，网络抖动时明明已经 `fetch` 成功却 pull 失败 → 规则：已经 `git fetch` 到本地后，用 `git merge --ff-only origin/main` 完成快进，不重复走网络
+
 ## 文案、设置与迁移
 
 - 失误：新增设置段没 bump 对应的迁移版本，老配置读不出来（`boardProjVersion` 就漏过一次）→ 规则：加/改设置段必须 bump `*Version` 并在 `mergeSettings` 写迁移，保存统一走 `writeSettings`（0.1.14 补）
