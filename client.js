@@ -69,7 +69,8 @@
     notify: { enabled: true, sound: true },
     log: { enabled: true, level: "info", max: 200 },
     board: { enabled: true, wideThreshold: 520, defaultView: "projects" },
-    projectColumns: { total: true, running: true, attention: true, done: true, idle: true, auto: true, lastUpdated: true, presets: false }
+    projectColumnsVersion: 1,
+    projectColumns: { total: true, issues: true, prs: true, localVersion: true, latestVersion: true, lastUpdated: true }
   };
 
   // src/core/json.ts
@@ -242,6 +243,13 @@
         out.board.defaultView = "projects";
         out.boardProjVersion = 1;
       }
+      const columnKeys = Object.keys(DEFAULT_SETTINGS.projectColumns);
+      for (const key of Object.keys(out.projectColumns)) {
+        if (!columnKeys.includes(key)) delete out.projectColumns[key];
+      }
+      if (stored.projectColumnsVersion !== 1) {
+        out.projectColumnsVersion = 1;
+      }
       for (const key of Object.keys(DEFAULT_SETTINGS.shortcuts)) {
         if (!comboHasModifier(out.shortcuts[key])) out.shortcuts[key] = DEFAULT_SETTINGS.shortcuts[key];
       }
@@ -275,7 +283,7 @@
   function loadSettings() {
     const raw = loadJson(SETTINGS_KEY, null);
     const merged = mergeSettings(DEFAULT_SETTINGS, raw);
-    if (raw && typeof raw === "object" && (raw.headerButtonsVersion !== 3 || raw.hintsVersion !== 1 || raw.shortcutsVersion !== 1 || raw.boardProjVersion !== 1)) {
+    if (raw && typeof raw === "object" && (raw.headerButtonsVersion !== 3 || raw.hintsVersion !== 1 || raw.shortcutsVersion !== 1 || raw.boardProjVersion !== 1 || raw.projectColumnsVersion !== 1)) {
       try {
         persistSettings(merged);
       } catch (error) {
@@ -1092,6 +1100,8 @@
     ".pbx-tr td{padding:7px 10px;border-bottom:1px solid var(--dsw-alias-border-l1);font-size:13px;color:var(--dsw-alias-label-primary);vertical-align:middle}",
     ".pbx-tr-current td{background:color-mix(in srgb,var(--dsw-alias-brand-primary) 8%,transparent)}",
     ".pbx-tr-live td{background:color-mix(in srgb,var(--dsw-alias-brand-primary) 5%,transparent)}",
+    ".pbx-tr-selected td{background:color-mix(in srgb,var(--dsw-alias-brand-primary) 14%,transparent);box-shadow:inset 2px 0 0 var(--dsw-alias-brand-primary)}",
+    ".pbx-tr-selected:hover td{background:color-mix(in srgb,var(--dsw-alias-brand-primary) 18%,var(--dsw-alias-interactive-bg-hover))}",
     ".pbx-tr-current:hover td{background:color-mix(in srgb,var(--dsw-alias-brand-primary) 11%,var(--dsw-alias-interactive-bg-hover))}",
     ".pbx-tr-live:hover td{background:color-mix(in srgb,var(--dsw-alias-brand-primary) 8%,var(--dsw-alias-interactive-bg-hover))}",
     ".pbx-titleCell{display:flex;align-items:center;gap:8px;min-width:0}",
@@ -1129,6 +1139,12 @@
     ".pbx-autoGlyph{display:inline-flex;color:var(--dsw-alias-state-warn-primary);flex:none}",
     ".pbx-num{text-align:right;font-variant-numeric:tabular-nums;color:var(--dsw-alias-label-secondary)}",
     ".pbx-num.pbx-strong{color:var(--dsw-alias-label-primary);font-weight:600}",
+    ".pbx-num.pbx-numZero{color:var(--dsw-alias-label-secondary);opacity:.65}",
+    ".pbx-num.pbx-numHot{color:var(--dsw-alias-label-primary);font-weight:600}",
+    ".pbx-num.pbx-na{color:var(--dsw-alias-label-secondary);opacity:.5}",
+    ".pbx-num.pbx-ver{font-family:var(--dsw-font-mono,ui-monospace,SFMono-Regular,Menlo,Consolas,monospace);font-size:12px}",
+    ".pbx-num.pbx-ver.pbx-verLag{color:var(--dsw-alias-state-warn-primary);font-weight:600}",
+    ".pbx-num.pbx-time{color:var(--dsw-alias-label-secondary)}",
     ".pbx-center{text-align:center}",
     ".pbx-openBtn{display:inline-flex;align-items:center;justify-content:center;width:26px;height:26px;border:none;background:transparent;color:var(--dsw-alias-label-secondary);border-radius:6px;cursor:pointer;opacity:0;transition:opacity var(--pbx-dur-micro) var(--pbx-ease-standard)}",
     ".pbx-tr:hover .pbx-openBtn{opacity:1}",
@@ -1484,6 +1500,16 @@
     "col.total": "Sessions",
     "col.presets": "Presets",
     "col.path": "Path",
+    "col.na": "—",
+    "col.naHint": "The host does not expose this yet (reserved for a future capability)",
+    "col.localBehind": "Local {local}, behind latest {latest}",
+    "col.hint.name": "Project name, icon and color",
+    "col.hint.total": "Total sessions under this project",
+    "col.hint.issues": "Open issues in the repository",
+    "col.hint.prs": "Open pull requests in the repository",
+    "col.hint.localVersion": "Local internal version",
+    "col.hint.latestVersion": "Latest published GitHub version",
+    "col.hint.lastUpdated": "Most recent activity time for this project",
     "compact.allProjects": "All projects",
     "status.archived": "Archived",
     "col.kind": "Type",
@@ -1638,12 +1664,10 @@
     "settings.projectColumns": "Project board · visible attributes",
     "settings.projectColumnsHint": "Choose which project attributes appear as columns; name and icon/color always show.",
     "settings.pc.total": "Sessions",
-    "settings.pc.running": "Running",
-    "settings.pc.attention": "Pending",
-    "settings.pc.done": "Done",
-    "settings.pc.idle": "Idle",
-    "settings.pc.auto": "Automation",
-    "settings.pc.presets": "Presets used",
+    "settings.pc.issues": "Open Issues",
+    "settings.pc.prs": "Open PRs",
+    "settings.pc.localVersion": "Local version",
+    "settings.pc.latestVersion": "Latest release",
     "settings.pc.lastUpdated": "Last activity",
     "settings.blur": "Search panel blur strength (px)",
     "settings.logging": "Logs & diagnostics",
@@ -1728,6 +1752,16 @@
     "col.total": "会话",
     "col.presets": "模式数",
     "col.path": "路径",
+    "col.na": "—",
+    "col.naHint": "宿主尚未提供此数据（预留待接入）",
+    "col.localBehind": "本地 {local}，落后于最新 {latest}",
+    "col.hint.name": "项目名称、图标与颜色",
+    "col.hint.total": "该项目下的会话总数",
+    "col.hint.issues": "仓库当前未关闭的 issue 数量",
+    "col.hint.prs": "仓库当前未合并的 PR 数量",
+    "col.hint.localVersion": "本地的内部版本号",
+    "col.hint.latestVersion": "GitHub 最新发布版本号",
+    "col.hint.lastUpdated": "项目最近一次活动时间",
     "compact.allProjects": "全部项目",
     "status.archived": "已归档",
     "col.kind": "类型",
@@ -1882,13 +1916,11 @@
     "settings.projectColumns": "项目看板 · 显示哪些项目属性",
     "settings.projectColumnsHint": "勾选要在项目表格里显示的项目属性；名称和图标/颜色始终显示。",
     "settings.pc.total": "会话总数",
-    "settings.pc.running": "运行中",
-    "settings.pc.attention": "待处理",
-    "settings.pc.done": "已完成",
-    "settings.pc.idle": "空闲",
-    "settings.pc.auto": "自动化任务",
-    "settings.pc.presets": "用到的模式数",
-    "settings.pc.lastUpdated": "最近活动",
+    "settings.pc.issues": "未关闭问题",
+    "settings.pc.prs": "未合并 PR",
+    "settings.pc.localVersion": "本地内部版本",
+    "settings.pc.latestVersion": "最新上线版本",
+    "settings.pc.lastUpdated": "最近活动时间",
     "settings.blur": "搜索面板模糊强度（px）",
     "settings.logging": "日志与排查",
     "settings.logEnabled": "记录日志",
@@ -2207,15 +2239,34 @@
     return t("time.day", { n: Math.floor(hours / 24) });
   }
   var PROJECT_COLUMNS = [
-    { key: "total", labelKey: "settings.pc.total", type: "#" },
-    { key: "running", labelKey: "settings.pc.running", type: "#" },
-    { key: "attention", labelKey: "settings.pc.attention", type: "#" },
-    { key: "done", labelKey: "settings.pc.done", type: "#" },
-    { key: "idle", labelKey: "settings.pc.idle", type: "#" },
-    { key: "auto", labelKey: "settings.pc.auto", type: "#" },
-    { key: "presets", labelKey: "settings.pc.presets", type: "#" },
-    { key: "lastUpdated", labelKey: "settings.pc.lastUpdated", type: "◷" }
+    { key: "total", labelKey: "settings.pc.total", type: "#", hintKey: "col.hint.total" },
+    { key: "issues", labelKey: "settings.pc.issues", type: "#", hintKey: "col.hint.issues" },
+    { key: "prs", labelKey: "settings.pc.prs", type: "#", hintKey: "col.hint.prs" },
+    { key: "localVersion", labelKey: "settings.pc.localVersion", type: "#", hintKey: "col.hint.localVersion" },
+    { key: "latestVersion", labelKey: "settings.pc.latestVersion", type: "#", hintKey: "col.hint.latestVersion" },
+    { key: "lastUpdated", labelKey: "settings.pc.lastUpdated", type: "◷", hintKey: "col.hint.lastUpdated" }
   ];
+  function compareVersions(a, b) {
+    const aParts = parseVersion(a);
+    const bParts = parseVersion(b);
+    if (aParts === null && bParts === null) return 0;
+    if (aParts === null) return 1;
+    if (bParts === null) return -1;
+    const len = Math.max(aParts.length, bParts.length);
+    for (let i = 0; i < len; i += 1) {
+      const x = aParts[i] || 0;
+      const y = bParts[i] || 0;
+      if (x < y) return -1;
+      if (x > y) return 1;
+    }
+    return 0;
+  }
+  function parseVersion(value) {
+    if (!value) return null;
+    const match = /^[vV]?(\d+(?:\.\d+)*)/.exec(value.trim());
+    if (!match) return null;
+    return match[1].split(".").map((part) => Number(part) || 0);
+  }
   var SORT_DIR_DEFAULT = {
     title: "asc",
     project: "asc",
@@ -2228,10 +2279,10 @@
     name: "asc",
     appearance: "asc",
     total: "desc",
-    auto: "desc",
-    attention: "desc",
-    done: "desc",
-    idle: "desc",
+    issues: "desc",
+    prs: "desc",
+    localVersion: "desc",
+    latestVersion: "desc",
     lastUpdated: "desc"
   };
 
@@ -2242,6 +2293,13 @@
     minimal: "preset.minimal",
     cordis: "preset.cordis"
   };
+  function versionSortKey(value) {
+    const parts = parseVersion(value);
+    if (!parts) return -1;
+    let key = 0;
+    for (let i = 0; i < 6; i += 1) key = key * 1e3 + (parts[i] || 0);
+    return key;
+  }
   var NO_AUTO2 = /* @__PURE__ */ new Set();
   function ProjectBoard(props) {
     const { useWorkspaces, useSessions, useSessionStatus, openSession, t } = props;
@@ -2373,6 +2431,7 @@
           last = Math.max(last, row.updatedAt);
         }
         if (!last) last = Date.parse(workspace.updatedAt || "") || 0;
+        const repo = workspace;
         const model = {
           workspaceId: workspace.workspaceId,
           name: workspaceLabel(workspace.title, t),
@@ -2380,7 +2439,11 @@
           counts,
           presets,
           hasCurrent,
-          lastUpdated: last
+          lastUpdated: last,
+          issues: typeof repo.openIssues === "number" ? repo.openIssues : void 0,
+          prs: typeof repo.openPRs === "number" ? repo.openPRs : void 0,
+          localVersion: repo.localVersion,
+          latestVersion: repo.latestVersion
         };
         return model;
       });
@@ -2449,6 +2512,10 @@
     const projectSortValue = (project, key) => {
       if (key === "name") return project.name.toLowerCase();
       if (key === "lastUpdated") return project.lastUpdated;
+      if (key === "issues") return project.issues ?? -1;
+      if (key === "prs") return project.prs ?? -1;
+      if (key === "localVersion") return versionSortKey(project.localVersion);
+      if (key === "latestVersion") return versionSortKey(project.latestVersion);
       if (key === "presets") return project.presets ? project.presets.size : 0;
       return project.counts[key] !== void 0 ? project.counts[key] : 0;
     };
@@ -2564,11 +2631,12 @@
       const position = sorts.findIndex((entry) => entry.key === key);
       const active = position >= 0;
       const direction = active ? sorts[position].dir : null;
+      const title = opts.sortable === false ? opts.hint : opts.hint ? opts.hint + " · " + t("sort.hint") : t("sort.hint");
       return h(
         "th",
         {
           className: "pbx-th" + (opts.sortable === false ? "" : " sortable") + (active ? " active" : "") + (opts.num ? " num" : ""),
-          title: opts.sortable === false ? void 0 : t("sort.hint"),
+          title,
           "aria-sort": opts.sortable === false ? void 0 : active ? direction === "asc" ? "ascending" : "descending" : "none",
           tabIndex: opts.sortable === false ? void 0 : 0,
           onClick: opts.sortable === false ? void 0 : (event) => sortBy(key, Boolean(event.shiftKey)),
@@ -2580,7 +2648,7 @@
         },
         h("span", { className: "pbx-thType", "aria-hidden": "true" }, type || ""),
         h("span", { className: "pbx-thLabel" }, label),
-        active ? h("span", { className: "pbx-sortMark" }, (sorts.length > 1 ? String(position + 1) : "") + (direction === "asc" ? "↑" : "↓")) : null
+        active ? h("span", { className: "pbx-sortMark", "aria-hidden": "true" }, direction === "asc" ? "↑" : "↓") : null
       );
     };
     const renderSessionRow = (row) => h(
@@ -2667,11 +2735,30 @@
     };
     const projectCols = PROJECT_COLUMNS.filter((def) => !config.projectColumns || config.projectColumns[def.key] !== false);
     const projectCell = (project, def) => {
-      if (def.key === "lastUpdated") return relTime(project.lastUpdated, t);
-      if (def.key === "presets") return String(project.presets ? project.presets.size : 0);
+      if (def.key === "lastUpdated") {
+        const absolute = project.lastUpdated ? new Date(project.lastUpdated).toLocaleString() : "";
+        return h("td", { className: "pbx-num pbx-time", title: absolute }, relTime(project.lastUpdated, t));
+      }
+      if (def.key === "issues" || def.key === "prs") {
+        const value2 = def.key === "issues" ? project.issues : project.prs;
+        if (value2 === void 0) {
+          return h("td", { className: "pbx-num pbx-na", title: t("col.naHint") }, t("col.na"));
+        }
+        const cls2 = "pbx-num" + (value2 > 0 ? " pbx-numHot" : " pbx-numZero");
+        return h("td", { className: cls2 }, String(value2));
+      }
+      if (def.key === "localVersion" || def.key === "latestVersion") {
+        const value2 = def.key === "localVersion" ? project.localVersion : project.latestVersion;
+        if (!value2) return h("td", { className: "pbx-num pbx-ver pbx-na", title: t("col.naHint") }, t("col.na"));
+        const latest = project.latestVersion;
+        const lagging = def.key === "localVersion" && !!latest && compareVersions(value2, latest) < 0;
+        const cls2 = "pbx-num pbx-ver" + (lagging ? " pbx-verLag" : "");
+        const title = lagging ? t("col.localBehind", { local: value2, latest: latest || "" }) : value2;
+        return h("td", { className: cls2, title }, h("span", null, value2));
+      }
       const value = project.counts[def.key] ?? 0;
-      const style = def.key === "running" ? { color: value > 0 ? "var(--dsw-alias-brand-primary)" : void 0 } : def.key === "attention" ? { color: value > 0 ? "var(--dsw-alias-state-warn-primary)" : void 0 } : def.key === "auto" ? { color: value > 0 ? "var(--dsw-alias-state-warn-primary)" : void 0 } : void 0;
-      return h("td", { className: "pbx-num" + (def.key === "total" ? " pbx-strong" : ""), style }, String(value));
+      const cls = "pbx-num" + (def.key === "total" ? " pbx-strong" : "");
+      return h("td", { className: cls }, String(value));
     };
     const renderProjectRow = (project) => {
       const spec = specOf(project.workspaceId);
@@ -2680,7 +2767,8 @@
         "tr",
         {
           key: project.workspaceId,
-          className: "pbx-tr",
+          className: "pbx-tr" + (projectFilter === project.workspaceId ? " pbx-tr-selected" : ""),
+          "aria-current": projectFilter === project.workspaceId ? "true" : void 0,
           tabIndex: 0,
           onClick: () => {
             setProjectFilter(project.workspaceId);
@@ -2898,7 +2986,7 @@
           h(
             "thead",
             null,
-            h("tr", null, th("name", t("col.project"), "Aa"), projectCols.map((def) => th(def.key, t(def.labelKey), def.type, { num: true })))
+            h("tr", null, th("name", t("col.project"), "Aa", { hint: t("col.hint.name") }), projectCols.map((def) => th(def.key, t(def.labelKey), def.type, { num: true, hint: t(def.hintKey) })))
           ),
           h(
             "tbody",
