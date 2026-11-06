@@ -42,6 +42,7 @@
 - 失误：全屏看板盖住整个框架，`Alt+W` 确实切了侧栏但被挡住，表现成"按了没反应" → 规则：先退出 fullscreen 再 toggle，并在日志里记 `leave-fullscreen`（0.2.4）
 - 失误：客户端插件热重载会留下旧监听器，同一次按键被两个 listener 各 toggle 一次，互相抵消 → 规则：在事件对象上打 `pbxSidebarActed` 标记，只有真正生效的 listener 占有这次按键，后来者记 `leftSidebar:duplicate`（0.2.4）
 - 失误：`layout.toggleSidebar` 失败时静默跳过，"接口不存在 / 调了没生效 / 键没到"三种情况分不清 → 规则：开关按 `layout.toggleSidebar` → `layout.panels.toggleSidebar` → `sidebarLeft.toggleExpanded` 兜底并记录实际路径；260ms 后核对布局，记 `applied` / `no-change` / `unverified`（0.2.1、0.2.3）
+- 失误：`pbxSidebarActed` 重复检测只加给了 `Alt+W`（leftSidebar），`Alt+N/B/V`（board）没有 → 热重载后 leaked 监听器让 Alt+N toggle 两次互相取消，用户看到"没反应" → 规则：给一个快捷键加重复检测时，检查**所有同类快捷键**是否都需要；board 快捷键用 `pbxBoardActed` 标记，与 sidebar 同模式（0.4.0）
 
 ## 原生侧栏、看板与 HUD 状态
 
@@ -56,6 +57,9 @@
 - 失误：`FloatingStatus` 把 `if (rows.length === 0) return null` 写在 hooks 之前，会话行数 0↔>0 时 hooks 数量变化 → 崩溃（0.1.14 修）→ 规则：所有 hooks 在条件返回之前；需要多挂一帧做退场时用 `present` 状态，不提前 return
 - 失误：外观浮层的 outside-click 把触发它的图标也算"外部"，点开即被自己关掉 → 规则：opener 排除在 outside 判定之外，或延迟一帧再绑定监听（0.1.14 修）
 - 失误：拖拽结束后的 click 被 drag-moved 标志吞掉，点胶囊没反应 → 规则：抑制只作用于紧随的一次 click，并在 220ms 后复位标志（0.1.14 修）
+- 失误：用普通可变对象 `boardViewRef` 作为 prop 传给 React 组件，`requestBoardView` 原地 mutate `seq` 但对象引用不变 → React 不重渲染 → viewRequest effect 不触发 → Alt+N 打开看板时视图不切换 → 规则：跨组件传递可变状态用 `createUiStore`（`.set()` 产生新快照 + emit 订阅者），不用裸对象；组件内用 `useEffect` + `useState` 订阅 store（0.4.0）
+- 失误：GitHub fetch effect 依赖 `githubRepos` 对象引用，而 `mergeSettings` 每次保存都 `cloneJson` 产生新引用 → 改任意设置都重新 fetch 所有仓库 → 规则：effect 依赖用**稳定指纹**（JSON.stringify 关键字段），不用对象引用（0.4.0）
+- 失误：`fetchRepoStats` 的 pulls 请求失败时静默返回 `prs=0`，用户看到"0 个 PR"而不是错误 → 规则：partial success 也报错（pulls !ok → `errorFor`），只有 releases 404（无发布）合法留 `undefined`（0.4.0）
 
 ## 验证与调试
 
@@ -76,3 +80,5 @@
 - 失误：`headerButtons` 迁移先逐 id 叠加用户 `side/hidden/order`，紧接着又 `cloneJson(DEFAULT_SETTINGS.headerButtons)` 整组替换，用户改过的按钮全被清掉（审阅：0.4.0）→ 规则：迁移只做**增量叠加**，绝不整组重置；特殊 legacy 信号（如 `header.capsule===false`）在叠加之上单独应用
 - 失误：通知 / Toast 层级一度盖在模态背板之上 → 规则：新增浮层先决定它属于"模态背板之下"（Toast、通知 dock）还是"之上"（命令面板、弹窗），层级在 `src/styles.ts` 里成组管理，不临时加 z-index（0.1.14 修）
 - 失误：README 里写死的快捷键说明与实际默认值漂移 → 规则：改快捷键默认值必须同步 `README.md` / `README.zh.md` 的快捷键表与设置页文案，以及 `docs/architecture.md` 里点名的具体键（如 `Alt+U` / `Alt+M`）
+- 失误：用户在 GitHub token 输入框填了 DSH 密钥引用 `{{API_KEY_...}}`（不是真实 PAT），插件把它当 token 发给 GitHub API → 401 → 规则：接受凭据的输入框检测框架占位符模式（`{{...}}`），显示警告提示用户填真实值（0.4.0）
+- 失误：fallback 模式（无 workspace）下 path 输入用受控 `value` + row `key` 随 path 变 → 每次击键 row 重建、input 失焦 → 规则：path 输入用 `defaultValue` + `onBlur`（非受控，失焦时提交），不用 path 做 row key（0.4.0）
