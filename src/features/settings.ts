@@ -193,9 +193,15 @@ export function SettingsPage(props: SettingsPageProps): unknown {
     const next = cloneJson(config);
     const repos = { ...(next.githubRepos || {}) };
     const candidate = ghWorkspaces.find((item) => item.path && !repos[item.path]);
-    const path = candidate ? candidate.path : '';
-    if (path) repos[path] = { owner: '', repo: repoNameFromPath(path) };
-    else repos[''] = { owner: '', repo: '' };
+    if (candidate && candidate.path) {
+      repos[candidate.path] = { owner: '', repo: repoNameFromPath(candidate.path) };
+    } else if (!repos['']) {
+      // No unmapped workspace available — allow one manual entry with an empty path
+      // (the user types the path in fallback mode), but never duplicate it.
+      repos[''] = { owner: '', repo: '' };
+    } else {
+      return;
+    }
     next.githubRepos = repos;
     saveSettings(next);
   };
