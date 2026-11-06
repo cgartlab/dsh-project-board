@@ -171,6 +171,7 @@ export function ProjectBoard(props: ProjectBoardProps): unknown {
     return () => window.removeEventListener('pbx-appearance-reset', handler);
   }, []);
   const [editingProject, setEditingProject] = useState<string | null>(null);
+  const [expandedProject, setExpandedProject] = useState<string | null>(null);
   const popRef = useRef<HTMLElement | null>(null);
   const [view, setView] = useState<'projects' | 'sessions'>(() =>
     config.board.defaultView === 'projects' ? 'projects' : 'sessions'
@@ -729,26 +730,69 @@ export function ProjectBoard(props: ProjectBoardProps): unknown {
     const cls = 'pbx-num' + (def.key === 'total' ? ' pbx-strong' : '');
     return h('td', { className: cls }, String(value));
   };
+  const renderInlineSessionRow = (row: SessionRow): unknown =>
+    h(
+      'tr',
+      {
+        key: 's-' + row.id,
+        className: 'pbx-tr pbx-tr-inline' + (row.running ? ' pbx-tr-live' : '') + (row.current ? ' pbx-tr-current' : ''),
+        onClick: () => open(row.id),
+        tabIndex: 0,
+        onKeyDown: (e: KeyboardEvent) => {
+          if (e.key === 'Enter' || e.key === ' ') {
+            e.preventDefault();
+            open(row.id);
+          }
+        }
+      },
+      h(
+        'td',
+        { colSpan: 1 + projectCols.length, className: 'pbx-inlineSession' },
+        h(
+          'div',
+          { className: 'pbx-inlineRow' },
+          row.info.tone === 'running' ? h(RunRing, { size: 9 }) : h('span', { className: 'pbx-rdot', 'data-tone': row.info.tone }),
+          h('span', { className: 'pbx-titleText' }, row.title),
+          row.current ? h('span', { className: 'pbx-curTag' }, t('card.current')) : null,
+          h('span', { className: 'pbx-inlineTime' }, relTime(row.updatedAt, t)),
+          h(
+            'button',
+            {
+              type: 'button',
+              className: 'pbx-openBtn',
+              title: t('open'),
+              'aria-label': t('open'),
+              onClick: (e: Event) => {
+                e.stopPropagation();
+                open(row.id);
+              }
+            },
+            h(Icon, { name: 'arrow', size: 14 })
+          )
+        )
+      )
+    );
+
   const renderProjectRow = (project: ProjectModel): unknown => {
     const spec = specOf(project.workspaceId);
     const isEditing = editingProject === project.workspaceId;
-    return h(
+    const isExpanded = expandedProject === project.workspaceId;
+    const projectRow = h(
       'tr',
       {
         key: project.workspaceId,
-        className: 'pbx-tr' + (projectFilter === project.workspaceId ? ' pbx-tr-selected' : ''),
+        className: 'pbx-tr' + (isExpanded ? ' pbx-tr-expanded' : '') + (projectFilter === project.workspaceId ? ' pbx-tr-selected' : ''),
         'aria-current': projectFilter === project.workspaceId ? 'true' : undefined,
         'aria-selected': projectFilter === project.workspaceId ? 'true' : 'false',
+        'aria-expanded': isExpanded ? 'true' : 'false',
         tabIndex: 0,
         onClick: () => {
-          setProjectFilter(project.workspaceId);
-          setView('sessions');
-          setStatusFilter('all');
+          setExpandedProject(isExpanded ? null : project.workspaceId);
         },
         onKeyDown: (e: KeyboardEvent) => {
-          if (e.key === 'Enter') {
-            setProjectFilter(project.workspaceId);
-            setView('sessions');
+          if (e.key === 'Enter' || e.key === ' ') {
+            e.preventDefault();
+            setExpandedProject(isExpanded ? null : project.workspaceId);
           }
         }
       },
@@ -758,6 +802,7 @@ export function ProjectBoard(props: ProjectBoardProps): unknown {
         h(
           'div',
           { className: 'pbx-titleCell' },
+          h('span', { className: 'pbx-chevron' + (isExpanded ? ' open' : '') }, h(Icon, { name: 'chevron', size: 13 })),
           h(
             'span',
             { className: 'pbx-iconField', style: { position: 'relative' } },
@@ -798,6 +843,12 @@ export function ProjectBoard(props: ProjectBoardProps): unknown {
       ),
       projectCols.map((def) => projectCell(project, def))
     );
+    if (!isExpanded) return projectRow;
+    const projectSessions = allSessions
+      .filter((s) => s.workspaceId === project.workspaceId)
+      .sort((a, b) => b.updatedAt - a.updatedAt);
+    if (projectSessions.length === 0) return projectRow;
+    return [projectRow, ...projectSessions.map(renderInlineSessionRow)];
   };
 
   const header = h(
@@ -978,7 +1029,7 @@ export function ProjectBoard(props: ProjectBoardProps): unknown {
           null,
           filteredProjects.length === 0
             ? h('tr', null, h('td', { colSpan: 1 + projectCols.length, className: 'pbx-emptyCell' }, t('empty.filtered')))
-            : filteredProjects.map(renderProjectRow)
+            : filteredProjects.map(renderProjectRow).flat()
         )
       ),
       h('div', { className: 'pbx-dbFoot' }, t('count.rows', { n: filteredProjects.length }))
