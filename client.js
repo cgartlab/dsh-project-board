@@ -2473,10 +2473,18 @@
     const [view, setView] = useState(
       () => config.board.defaultView === "projects" ? "projects" : "sessions"
     );
-    const viewRequestSeq = props.viewRequest ? props.viewRequest.seq : 0;
+    const [viewReqSeq, setViewReqSeq] = useState(0);
     useEffect(() => {
-      if (viewRequestSeq > 0 && props.viewRequest) setView(props.viewRequest.view);
-    }, [viewRequestSeq]);
+      const store = props.viewRequestStore;
+      if (!store) return void 0;
+      setViewReqSeq(store.getSnapshot().seq);
+      return store.subscribe(() => setViewReqSeq(store.getSnapshot().seq));
+    }, [props.viewRequestStore]);
+    useEffect(() => {
+      if (viewReqSeq > 0 && props.viewRequestStore) {
+        setView(props.viewRequestStore.getSnapshot().view);
+      }
+    }, [viewReqSeq]);
     const [sessionSorts, setSessionSorts] = useState([{ key: "updatedAt", dir: "desc" }]);
     const [projectSorts, setProjectSorts] = useState([{ key: "lastUpdated", dir: "desc" }]);
     const sorts = view === "sessions" ? sessionSorts : projectSorts;
@@ -6549,10 +6557,10 @@
       } catch (error) {
       }
     };
-    const boardViewRef = { seq: 0, view: "projects" };
+    const boardViewStore = createUiStore({ seq: 0, view: "projects" });
     const requestBoardView = (view) => {
-      boardViewRef.seq += 1;
-      boardViewRef.view = view;
+      const snap = boardViewStore.getSnapshot();
+      boardViewStore.set({ seq: snap.seq + 1, view });
     };
     const boardStateNow = () => {
       try {
@@ -6729,7 +6737,7 @@
         return { ok: false, error: { message: String(error && error.message || error) } };
       }
     };
-    const boardInject = () => ({ openSession, openBoard, openFullBoard, hooks: boardHooks(), viewRequest: boardViewRef });
+    const boardInject = () => ({ openSession, openBoard, openFullBoard, hooks: boardHooks(), viewRequestStore: boardViewStore });
     const sessionMenuStore = createUiStore({ sessionId: null, title: "", at: 0 });
     const requestSessionMenu = (sessionId, title) => {
       if (sessionId) sessionMenuStore.set({ sessionId, title: title || "", at: Date.now() });
@@ -6874,7 +6882,7 @@
     ctx.slots.inject(
       "main",
       () => ctx.slots.register(
-        { name: "main", key: "project-board", locale: NS, inject: () => ({ openSession, hooks: boardHooks(), viewRequest: boardViewRef }) },
+        { name: "main", key: "project-board", locale: NS, inject: () => ({ openSession, hooks: boardHooks(), viewRequestStore: boardViewStore }) },
         ProjectBoard
       )
     );
