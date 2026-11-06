@@ -10,6 +10,10 @@
 
 - 暂无
 
+## [0.2.5] - 2026-11-06
+
+- 启动诊断信息补全：`plugin ready` 现在一并记下**当前生效的 `Alt+W` 组合**、窗口宽度、原生框架宽度，以及启动瞬间的侧栏状态。窗口宽度决定侧栏是"整列 / 图标栏 / 抽屉"三种形态中的哪一种，`Alt+W` 的问题往往只发生在其中一种里；组合被改过也能一眼看出来。
+
 ## [0.2.4] - 2026-11-06
 
 - `Alt+W` 在看板全屏时**先退出全屏再切侧栏**：全屏看板会盖住整个框架（侧栏也在后面），过去按下去侧栏确实在动、但被看板挡住，看起来就是"按了没反应"。
@@ -230,6 +234,7 @@
 [0.2.2]: https://github.com/cgartlab/dsh-tac/releases/tag/v0.2.2
 [0.2.3]: https://github.com/cgartlab/dsh-tac/releases/tag/v0.2.3
 [0.2.4]: https://github.com/cgartlab/dsh-tac/releases/tag/v0.2.4
+[0.2.5]: https://github.com/cgartlab/dsh-tac/releases/tag/v0.2.5
 
 
 

@@ -4526,7 +4526,19 @@ window.__ModuleLoader__.load({
       window.setTimeout(() => {
         try {
           const snapshot = settingsStore.getSnapshot();
-          logEvent('info', 'init', 'plugin ready', { shortcuts: Object.keys(snapshot.shortcuts || {}).length, hud: Boolean(snapshot.hud && snapshot.hud.enabled), board: Boolean(snapshot.board && snapshot.board.enabled) });
+          const frame = document.querySelector('[class*="_frame"][style*="grid-template-columns"]') || document.querySelector('[data-sidebar-collapsed]');
+          /* Record the environment a shortcut has to work in: the effective Alt+W binding (it may
+             have been remapped), the window width that decides between the column, the rail and the
+             drawer sidebar, and the sidebar state at startup. */
+          logEvent('info', 'init', 'plugin ready', {
+            shortcuts: Object.keys(snapshot.shortcuts || {}).length,
+            hud: Boolean(snapshot.hud && snapshot.hud.enabled),
+            board: Boolean(snapshot.board && snapshot.board.enabled),
+            leftSidebar: snapshot.shortcuts && snapshot.shortcuts.leftSidebar,
+            windowWidth: window.innerWidth || 0,
+            frameWidth: frame ? Math.round(frame.getBoundingClientRect().width) : null,
+            sidebar: sidebarSignature()
+          });
           for (const key of Object.keys(snapshot.shortcuts || {})) {
             const conflict = findBuiltinConflict(snapshot.shortcuts[key]);
             if (conflict) logEvent('warn', 'shortcuts', 'also used by a built-in command', { key: key, combo: snapshot.shortcuts[key], builtin: conflict.label });
