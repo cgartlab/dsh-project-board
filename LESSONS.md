@@ -84,3 +84,8 @@
 - 失误：README 里写死的快捷键说明与实际默认值漂移 → 规则：改快捷键默认值必须同步 `README.md` / `README.zh.md` 的快捷键表与设置页文案，以及 `docs/architecture.md` 里点名的具体键（如 `Alt+U` / `Alt+M`）
 - 失误：用户在 GitHub token 输入框填了 DSH 密钥引用 `{{API_KEY_...}}`（不是真实 PAT），插件把它当 token 发给 GitHub API → 401 → 规则：接受凭据的输入框检测框架占位符模式（`{{...}}`），显示警告提示用户填真实值（0.4.0）
 - 失误：fallback 模式（无 workspace）下 path 输入用受控 `value` + row `key` 随 path 变 → 每次击键 row 重建、input 失焦 → 规则：path 输入用 `defaultValue` + `onBlur`（非受控，失焦时提交），不用 path 做 row key（0.4.0）
+
+## 平台检测与修饰键文案
+
+- 失误：`IS_MAC` 在 platform 非空时直接 return，只拿 platform 字符串排除 iphone/ipad/ipod；iPadOS Safari 请求桌面网站时是 `platform='MacIntel'` + UA 含 `iPad`，于是被当成 macOS、界面显示 ⌥/⌘ → 规则：平台判定无条件先查 UA 的 iOS 标记（`iphone|ipad|ipod`，忽略大小写）并立即返回 false，再走 `userAgentData.platform > navigator.platform > UA` 优先级；改检测必须给 `test/load.test.cjs` 的 `loadModule` 传 UA / userAgentData 变体做回归 → 证据：a6e314c，`src/core/combos.ts`、`test/load.test.cjs`
+- 失误：`zh` / `en` 字典把 macOS 与 Windows 两套修饰键术语塞进同一句（「Option（⌥，Windows 为 Alt）」），字典拿不到当前平台，macOS 用户看到「Windows 为 Alt」、Windows 用户看到 ⌥/⌘ → 规则：用户可见的修饰键名一律用 `{ctrl}/{alt}/{meta}/{shift}` 占位符，渲染处传 `src/core/combos.ts` 导出的 `MODIFIER_LABELS`（与 `comboDisplay` 同一张 IS_MAC 派生的表），zh/en 同步，不写死 ⌥/⌘ 或 `Alt on Windows` → 证据：a6e314c，`src/i18n/zh.ts`、`src/i18n/en.ts`、`src/features/settings.ts`、`src/features/board.ts`
