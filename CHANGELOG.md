@@ -10,6 +10,11 @@
 
 - 暂无
 
+## [0.2.4] - 2026-11-06
+
+- `Alt+W` 在看板全屏时**先退出全屏再切侧栏**：全屏看板会盖住整个框架（侧栏也在后面），过去按下去侧栏确实在动、但被看板挡住，看起来就是"按了没反应"。
+- 同一次按键被**重复投递**时只切一次：客户端插件热重载可能留下旧监听器，两个监听器各切一次就会"开了又关、等于没反应"。现在第一个真正生效的监听器占有这次按键，后面的直接跳过并记一条 `leftSidebar:duplicate`。
+
 ## [0.2.3] - 2026-11-06
 
 - `Alt+W` 现在会**核对结果**：调完开关接口后 260ms 再看一眼原生侧栏的网格轨道与收起标记。真的变了记 `applied`，接口调了但布局没动记 `no-change`（警告级），读不到状态记 `unverified`。这样"按键到了、接口也调了、界面却没动"这种最难复现的情况，会在「日志与排查」里留下明确证据，而不是只能靠回忆。
@@ -224,6 +229,7 @@
 [0.2.1]: https://github.com/cgartlab/dsh-tac/releases/tag/v0.2.1
 [0.2.2]: https://github.com/cgartlab/dsh-tac/releases/tag/v0.2.2
 [0.2.3]: https://github.com/cgartlab/dsh-tac/releases/tag/v0.2.3
+[0.2.4]: https://github.com/cgartlab/dsh-tac/releases/tag/v0.2.4
 
 
 

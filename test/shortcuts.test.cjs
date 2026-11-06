@@ -1010,6 +1010,41 @@ test('the native sidebar drawer does not block the shortcut that closes it', () 
   harness.doc.__removeRoot(drawer);
 });
 
+test('Alt+W leaves a fullscreen board first, so the sidebar it opens is visible', () => {
+  const harness = createHarness();
+  harness.resetState();
+  harness.clearSpies();
+
+  const calls = [];
+  harness.services.sidebarRight.commandTarget = () => 'board';
+  harness.services.sidebarRight.toggleFullscreen = (target) => { calls.push(target); };
+
+  // A fullscreen right panel covers the whole frame, sidebar column included: toggling the
+  // sidebar underneath it would look like a dead key.
+  const full = new VirtualNode('div', { 'data-rightbar-fullscreen': 'true' }, [], harness.doc);
+  harness.doc.__addRoot(full);
+
+  harness.pressRaw({ key: 'w', code: 'KeyW', altKey: true, bubbles: true });
+  assert.deepEqual(calls, ['board'], 'the fullscreen board leaves fullscreen before the sidebar toggles');
+  assert.deepEqual(harness.services.calls.layoutToggleSidebar, [true], 'the sidebar still toggles afterwards');
+
+  harness.doc.__removeRoot(full);
+});
+
+test('one Alt+W press toggles the sidebar once even if it is delivered twice', () => {
+  const harness = createHarness();
+  harness.resetState();
+  harness.clearSpies();
+
+  // A leaked listener from a client-plugin hot reload would receive the same event object and
+  // toggle the panel a second time, cancelling the press out.
+  const event = new KeyboardEventShim('keydown', { key: 'w', code: 'KeyW', altKey: true, bubbles: true, cancelable: true });
+  harness.doc.dispatchEvent(event);
+  harness.doc.dispatchEvent(event);
+  harness.render();
+  assert.deepEqual(harness.services.calls.layoutToggleSidebar, [true], 'the duplicated delivery toggles the panel once, not twice');
+});
+
 test('the floating list docks and comes back with the native sidebar on the same frame', () => {
   const harness = createHarness();
   harness.resetState();

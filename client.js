@@ -2623,7 +2623,15 @@ window.__ModuleLoader__.load({
             event.stopPropagation();
             stopHoldScroll(false);
             if (paletteOpenRef.current && palette) palette.set({ open: false });
+            /* A second live listener (a leaked instance after a client-plugin hot reload) would
+               toggle the same panel twice and cancel itself out. The listener that really acted
+               owns the press. */
+            if (event.pbxSidebarActed === true) {
+              logEvent('info', 'shortcut', 'leftSidebar:duplicate', {});
+              return;
+            }
             const acted = typeof props.toggleLeftSidebar === 'function' ? props.toggleLeftSidebar() : false;
+            if (acted) { try { event.pbxSidebarActed = true; } catch (error) { /* frozen event */ } }
             logEvent('info', 'shortcut', 'leftSidebar:acted', { acted: Boolean(acted), combo: eventCombo });
             return;
           }
@@ -4763,6 +4771,12 @@ window.__ModuleLoader__.load({
       };
       /** Expand or collapse DSH's own left sidebar (the session list column). */
       const toggleNativeLeftSidebar = () => {
+        /* A fullscreen board covers the whole frame, sidebar included, so toggling the sidebar
+           under it looks like a dead key. Leave fullscreen first, then toggle. */
+        if (rightbarFullscreen()) {
+          toggleRightbarFullscreen();
+          logEvent('info', 'sidebar', 'leave-fullscreen', {});
+        }
         /* A toggle that returns without changing the layout is the failure mode that looks like
            "the key did nothing": the API ran, the store did not move. Compare the frame's own
            signature before and after so the log can tell the two apart. */
