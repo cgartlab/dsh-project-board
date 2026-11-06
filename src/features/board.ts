@@ -59,6 +59,10 @@ export interface ProjectBoardProps {
   openFullBoard?: () => void;
   t: Translate;
   compact?: boolean;
+  /** External request to switch the board to a view (e.g. opening it via a shortcut
+   *  should land on "projects"). `seq` increments on each request; the board reacts to
+   *  the change so it can force a view even when the component stays mounted. */
+  viewRequest?: { seq: number; view: 'projects' | 'sessions' };
 }
 
 interface SortEntry {
@@ -170,6 +174,14 @@ export function ProjectBoard(props: ProjectBoardProps): unknown {
   const [view, setView] = useState<'projects' | 'sessions'>(() =>
     config.board.defaultView === 'projects' ? 'projects' : 'sessions'
   );
+  // React to an external request (e.g. a shortcut opening the board) to switch the view,
+  // even though the component stays mounted across open/close.
+  const viewRequestSeq = props.viewRequest ? props.viewRequest.seq : 0;
+  useEffect(() => {
+    // seq === 0 is the untouched initial value: do not override the configured default
+    // view on mount. Only an actual open request (seq >= 1) forces the project view.
+    if (viewRequestSeq > 0 && props.viewRequest) setView(props.viewRequest.view);
+  }, [viewRequestSeq]);
   const [sessionSorts, setSessionSorts] = useState<SortEntry[]>([{ key: 'updatedAt', dir: 'desc' }]);
   const [projectSorts, setProjectSorts] = useState<SortEntry[]>([{ key: 'lastUpdated', dir: 'desc' }]);
   const sorts = view === 'sessions' ? sessionSorts : projectSorts;

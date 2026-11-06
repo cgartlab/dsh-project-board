@@ -2473,6 +2473,10 @@
     const [view, setView] = useState(
       () => config.board.defaultView === "projects" ? "projects" : "sessions"
     );
+    const viewRequestSeq = props.viewRequest ? props.viewRequest.seq : 0;
+    useEffect(() => {
+      if (viewRequestSeq > 0 && props.viewRequest) setView(props.viewRequest.view);
+    }, [viewRequestSeq]);
     const [sessionSorts, setSessionSorts] = useState([{ key: "updatedAt", dir: "desc" }]);
     const [projectSorts, setProjectSorts] = useState([{ key: "lastUpdated", dir: "desc" }]);
     const sorts = view === "sessions" ? sessionSorts : projectSorts;
@@ -6545,6 +6549,11 @@
       } catch (error) {
       }
     };
+    const boardViewRef = { seq: 0, view: "projects" };
+    const requestBoardView = (view) => {
+      boardViewRef.seq += 1;
+      boardViewRef.view = view;
+    };
     const boardStateNow = () => {
       try {
         if (!boardOpenNow()) return { open: false, mode: null };
@@ -6581,6 +6590,7 @@
       }
     };
     const showNativeBoard = (mode) => {
+      requestBoardView("projects");
       try {
         const sidebarRight = ctx.sidebarRight;
         if (!sidebarRight) return;
@@ -6679,6 +6689,7 @@
       }
     };
     const openBoard = () => {
+      requestBoardView("projects");
       try {
         const sidebarRight = ctx.sidebarRight;
         if (!sidebarRight) return;
@@ -6695,6 +6706,7 @@
       }
     };
     const openFullBoard = () => {
+      requestBoardView("projects");
       collapseRightBoard();
       try {
         ctx.layout.selectPanel("project-board");
@@ -6717,7 +6729,7 @@
         return { ok: false, error: { message: String(error && error.message || error) } };
       }
     };
-    const boardInject = () => ({ openSession, openBoard, openFullBoard, hooks: boardHooks() });
+    const boardInject = () => ({ openSession, openBoard, openFullBoard, hooks: boardHooks(), viewRequest: boardViewRef });
     const sessionMenuStore = createUiStore({ sessionId: null, title: "", at: 0 });
     const requestSessionMenu = (sessionId, title) => {
       if (sessionId) sessionMenuStore.set({ sessionId, title: title || "", at: Date.now() });
@@ -6862,7 +6874,7 @@
     ctx.slots.inject(
       "main",
       () => ctx.slots.register(
-        { name: "main", key: "project-board", locale: NS, inject: () => ({ openSession, hooks: boardHooks() }) },
+        { name: "main", key: "project-board", locale: NS, inject: () => ({ openSession, hooks: boardHooks(), viewRequest: boardViewRef }) },
         ProjectBoard
       )
     );
