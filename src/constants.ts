@@ -72,5 +72,8 @@ export const DEFAULT_SETTINGS: Settings = {
   log: { enabled: true, level: 'info', max: 200 },
   board: { enabled: true, wideThreshold: 520, defaultView: 'projects' },
   projectColumnsVersion: 1,
-  projectColumns: { total: true, issues: true, prs: true, localVersion: true, latestVersion: true, lastUpdated: true }
+  projectColumns: { total: true, issues: true, prs: true, localVersion: true, latestVersion: true, lastUpdated: true },
+  githubVersion: 1,
+  githubToken: undefined,
+  githubRepos: {}
 };

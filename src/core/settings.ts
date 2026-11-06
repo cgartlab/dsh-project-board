@@ -51,6 +51,15 @@ export function mergeSettings(base: Settings, raw: unknown): Settings {
       // "columns" object only overrides keys it actually wrote.
       out.projectColumnsVersion = 1;
     }
+    // GitHub data source: the token is a sensitive scalar (copy as-is), and githubRepos is
+    // the user's authoritative mapping — replace it wholesale so a deleted path is actually
+    // removed (a shallow Object.assign would leave stale entries). githubVersion is only a
+    // one-time migration marker.
+    if (typeof stored.githubToken === 'string') out.githubToken = stored.githubToken;
+    if (stored.githubRepos && typeof stored.githubRepos === 'object') {
+      out.githubRepos = cloneJson(stored.githubRepos as Record<string, unknown>) as Settings['githubRepos'];
+    }
+    if (stored.githubVersion !== 1) out.githubVersion = 1;
     for (const key of Object.keys(DEFAULT_SETTINGS.shortcuts) as (keyof ShortcutMap)[]) {
       if (!comboHasModifier(out.shortcuts[key])) out.shortcuts[key] = DEFAULT_SETTINGS.shortcuts[key];
     }
@@ -91,7 +100,7 @@ export function loadSettings(): Settings {
   if (
     raw &&
     typeof raw === 'object' &&
-    (raw.headerButtonsVersion !== 3 || raw.hintsVersion !== 1 || raw.shortcutsVersion !== 1 || raw.boardProjVersion !== 1 || raw.projectColumnsVersion !== 1)
+    (raw.headerButtonsVersion !== 3 || raw.hintsVersion !== 1 || raw.shortcutsVersion !== 1 || raw.boardProjVersion !== 1 || raw.projectColumnsVersion !== 1 || raw.githubVersion !== 1)
   ) {
     try {
       persistSettings(merged);

@@ -81,6 +81,16 @@ export interface ProjectColumnsSettings {
   lastUpdated: boolean;
 }
 
+/** GitHub repository metadata for one project. Keyed by the workspace path in `Settings.githubRepos`. */
+export interface GithubRepoSetting {
+  /** GitHub owner, e.g. `cgartlab`. */
+  owner: string;
+  /** Repository name, e.g. `dsh-tac`. */
+  repo: string;
+  /** Local package version the user knows the checkout is on; optional. */
+  localVersion?: string;
+}
+
 export interface Settings {
   shortcuts: ShortcutMap;
   palette: PaletteSettings;
@@ -93,12 +103,18 @@ export interface Settings {
   boardProjVersion?: number;
   /** Migration marker for the project-column visibility set (column keys changed over time). */
   projectColumnsVersion?: number;
+  /** Migration marker for the GitHub data source settings. */
+  githubVersion?: number;
   headerButtons: Record<string, HeaderButtonSetting>;
   hud: HudSettings;
   notify: NotifySettings;
   log: LogConfig;
   board: BoardSettings;
   projectColumns: ProjectColumnsSettings;
+  /** GitHub Personal Access Token (stored locally, never sent anywhere but api.github.com). */
+  githubToken?: string;
+  /** Per-workspace GitHub repository mapping, keyed by workspace path. */
+  githubRepos?: Record<string, GithubRepoSetting>;
 }
 
 /** Minimal observable store used for the plugin's own UI state. */

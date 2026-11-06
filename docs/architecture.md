@@ -18,7 +18,7 @@ by `scripts/build.mjs` (esbuild) and must not be edited by hand.
 | `src/host.ts` | typed host contract (`HostContext` and the services it exposes) |
 | `src/constants.ts` | plugin id, storage keys, default settings |
 | `src/types.ts` | domain types (settings, log entries, stores) |
-| `src/core/` | settings + migration, logging, combos, stores, DOM probes, schedule/preset sources |
+| `src/core/` | settings + migration, logging, combos, stores, DOM probes, schedule/preset sources, GitHub data source |
 | `src/i18n/` | zh/en dictionaries; `en` is typed against `zh` so parity is a compile error |
 | `src/styles.ts` | every CSS rule, injected once into a `<style>` tag |
 | `src/ui/` | icon geometry/components, project appearance helpers |
