@@ -1,70 +1,90 @@
-# 每日维护：固定 Agent 团队与工作流
+# 每日维护：定时任务、判定清单与协作工作流
 
-> 本文是「每天定时同步 main + 巡检 + 修复 + 推补丁」的可重建说明。定时任务与团队成员
-> 都绑定在**当前 Agent 会话**内；会话关闭后，按本文重建即可，不依赖对话记忆。
+> 每天定时检查 `cgartlab/dsh-tac` 的 open PR：没问题就合并；有问题先在 PR 分支上修好再合并；
+> 发版 PR 合并后按发布流程打 tag 与 release。本文是这套流程的可重建说明，不依赖任何对话记忆。
 
-## 定时任务
+## 定时任务（当前生效）
 
-- 时间：每天 **09:00（Asia/Shanghai）**。
-- 类型：当前会话的每日提醒，到期把维护 prompt 作为一轮任务投递。
-- 标题：同步 main 分支并巡检修复插件。
-- 完整 prompt 见会话中的 schedule（id `schedule-acac5041-2e65-4873-ad03-1c7ab5d5f6f0`）；
-  本文的「工作流」一节与它一致，改流程时两边一起改。
-- ⚠️ 会话级限制：会话结束提醒可能失效。需要真正长期无人值守时，用系统级调度
-  （launchd / cron）触发一个能启动 Agent 会话的命令，或在新会话里按本文重建。
+| 项 | 值 |
+| --- | --- |
+| 时间 | 每天 **09:00（Asia/Shanghai）** |
+| 标题 | 每日检查并合并 dsh-tac 的 open PR |
+| 任务 id | `schedule-86a33a92-6bbd-4b6b-ab71-b20ad7ec0138` |
+| 投递目标 | 新会话（`new`），cwd `D:\github-repos\dsh-tac`，preset `cordis` |
+| 授权范围 | 检查、在 PR 分支修复并推回、合并通过判定的 PR、按发布流程发版、给 `[未发布]` 补条目 |
 
-## 固定团队（4 人）
+重建方法：`schedule_create` 一次，`rrule` 用
 
-用 `spawn_teammate` 创建，`context: fresh`，prompt 自包含；`target` 用于 `send_message`。
+```
+DTSTART;TZID=Asia/Shanghai:YYYYMMDDT090000
+RRULE:FREQ=DAILY;BYHOUR=9;BYMINUTE=0
+```
 
-| 成员 | 职责 | 写范围 |
-| --- | --- | --- |
-| `main-sync` | `git fetch` / rebase 或 ff-only 同步、ahead/behind、版本与 CHANGELOG 一致性 | 无（只读 + git refs） |
-| `macos-compat` | macOS 兼容性只读检查：IS_MAC、⌥ 标签与规范顺序、安全区与全屏、Option/Command 物理键、真实 GUI 0 错误 | 无 |
-| `feature-audit` | 全功能回归只读检查：四项自检、功能矩阵、i18n、文档一致性、真实 GUI、远程外部足迹 | 无（可跑命令） |
-| `patch-delivery` | 汇总去重定级、修复、bump patch、重建产物、提交、推送准备 | `src/`、`package*.json`、`CHANGELOG.md`、`README*.md`、`test/*`、`docs/*`、`client.js`、`index.js` |
+`target` 选 `new`，prompt 直接复用本文「判定清单」「处理流程」「版本发布流程」三节——它们是
+任务 prompt 的权威副本，改流程时两边一起改。
 
-**为什么只有一个写者**：`src/` 里多个模块会一起改（combos / styles / i18n / apply / features），
-并发写同一批文件必然冲突。三名检查员只读 + 产出问题清单，由 `patch-delivery` 串行修复。
+## 判定清单（全过才算「没问题」）
 
-用 `team_task_create` 建任务、在 `write_scopes` 声明范围、按依赖顺序派发；检查员的
-`send_message` 结果作为修复依据，Lead 不重做它们的检查。
+a) CI：`headRefOid` 那个 commit 上的 `check` workflow 为 SUCCESS（别拿旧 commit 的绿充数）。
+b) 可合并：`mergeable: MERGEABLE` 且 `mergeStateStatus: CLEAN`（无冲突、无待处理 review）。
+c) 改动面：`gh pr diff <n> --name-only` 落在插件范围内；无密钥 / 真实 token / 私钥；无无关的全仓格式化。
+d) 产物一致：改了 `src/`、`scripts/` 或 `package.json` 就必须带重建后的 `client.js`（`index.js` 同理）；
+   本地复算 `npm run build` 后 `git diff --exit-code client.js index.js` 必须干净。
+e) 工程规则：只改 `src/`、不手改产物；快捷键五处同步；用户可见文案 zh + en 齐全；主题 token；不新增运行时依赖。
+f) 文档与版本：`CHANGELOG.md` 有条目；改快捷键 / 设置 / 界面要同步 `README(.zh).md`、`docs/`；
+   改 `version` 时 `package-lock.json` 同步、有对应版本小节、产物 banner 版本一致、PR 写明 tag 计划。
+g) 测试：`npm test` 全绿；新行为有回归测试；不得为变绿删测试或放宽断言。
 
-## 工作流
+## 处理流程
 
-1. **同步**（`main-sync`）
-   - `git fetch origin`，失败最多重试 2 次；仍失败写「没查成」+ 原始错误，**禁止写成「无更新」**。
-   - 当前分支相对 `origin/main` 有独有提交（日常补丁分支）→ `git rebase origin/main`；
-     冲突立即停止上报，绝不 merge、绝不 force。无独有提交 → `git pull --ff-only`。
-   - 报告 ahead/behind 与 `package.json` / `package-lock.json` / `CHANGELOG.md` 版本一致性。
-2. **并行只读检查**（`macos-compat` + `feature-audit`）
-   - macOS 域：IS_MAC 检测优先级、`⌥/⌃/⇧/⌘` 与规范顺序、`--dsh-frame-top-clearance`
-     （48px + 20px，全屏 20px）、HUD 120px 设计位置、Option/Command 键、无硬编码 `Alt+`。
-   - 功能域：`npm run typecheck` / `build` / `check` / `npm test`、快捷键全套、看板/HUD/
-     通知/设置、双语键数量、文档与代码一致性、真实 GUI 挂载与 0 控制台错误、远程 tag/Release/CI 是否真跑。
-   - 每份清单明确区分「已验证 / 没查成 / 未验证」。
-3. **修复与补丁**（`patch-delivery`）
-   - 只修有真实证据的问题；**改动必须落在 `src/`**，`client.js` / `index.js` 是生成物，
-     改了会被下次 build 覆盖且 CI 报产物不一致。
-   - 改完 `npm run build`；有用户可见改动时 bump patch 版本
-     （`package.json` + `package-lock.json` + `CHANGELOG.md`），重建产物并一起提交。
-   - 四项自检全绿，且重建产物字节一致（CI 的 `git diff --exit-code client.js index.js`）；
-     绿不了如实报告阻塞，不硬提交、不删测试绕过检查。
-   - 一次一个意图提交，Conventional Commits，身份 `a-pc-dsh`。
-4. **推送**（用户已授权无人值守执行）
-   - 推到独立分支，名字用 `fix/` `feat/` `docs/` `chore/` 前缀（工作区 hooks 会校验），
-     例如 `fix/daily-YYYYMMDD`。
-   - `gh pr create` 开 PR 到 `main`，正文含动机 / 改动 / 验证 / 文档与版本一致性 / 关联。
-   - 开 PR 前查同 head 是否已有开放 PR，避免重复；远程失败最多重试 2 次，仍失败写「没查成」。
-   - **不直接 push 到 main、不自动合并任何 PR**。
-5. **收尾报告**：同步到哪个 commit、发现/修复了什么、自检结果、PR 编号、未验证项、待人工处理项。
+1. 没有 open PR → 报告「今天没有 PR」，不动任何东西；Draft PR 跳过并列出。
+2. 有问题 → `gh pr checkout <n>`，在分支上修（只改 `src/`）→ `npm run build` →
+   `npm run typecheck && npm run check && npm test` 全绿 → 提交（身份 `a-pc-dsh`）→ 推回同一分支，**绝不 force push**。
+3. 修不了（需求不清 / 需产品决策 / 涉及权限或密钥）→ 不动 PR，报告卡点并跳过。
+4. 合并：`gh pr merge <n> --squash --delete-branch`；随后 `git checkout main && git pull --ff-only`，
+   确认 `git log -1` 是这次 squash 的提交、CI 在 main 最新 commit 上跑绿。
+5. 报告：PR 列表与判定、修了什么、main HEAD 与 CI 结论、是否发版、「需要人决定的事」。
+   **「没查成」不得写成「没有」**：查不到、权限不足、CI 未出结果都要写明原因。
+
+## 版本发布流程
+
+- **发版 PR**（改了 version + 有 `[<version>]` CHANGELOG 小节 + 已重建产物）合并后：
+  `git tag v<version> && git push origin v<version>`；
+  `gh release create v<version> --title "v<version> — <一句话>" --notes "<CHANGELOG 该版本条目>"`。
+  发版后核对：tag 指向 main 的 merge commit、`gh release list --limit 1` 正确、产物 banner 版本与 tag 一致。
+- **普通 PR**：不 bump 版本、不打 tag；只确认 `CHANGELOG.md` 的 `[未发布]` 里有该改动
+  （缺就补一条，单独一次 `docs:` 提交推到 main），并在报告里写「该发版了」。
+- 发版前四项自检必须全绿：`npm run typecheck` / `npm run build` / `npm run check` / `npm test`。
 
 ## 安全边界
 
-- 不改写远程历史、不 force push、不删分支、不改 `~/.dsh/profiles/desktop`、不自动合并 PR。
-- 远程不可逆动作只在「用户明确授权 + 执行点确认」后执行；定时任务的授权范围仅限
-  「推独立分支 + 开 PR」。
+- 禁止：force push、改写远程历史、改 PR 的 base 分支、关闭或改写他人在审的 PR、在 `main` 上直接改代码
+  （唯一例外：给 `[未发布]` 补一条 CHANGELOG 的 `docs:` 提交）。
+- 允许：推 PR 分支、squash 合并通过判定的 PR（含 `--delete-branch`）、发版 PR 的 tag 与 release。
 - 网络 / CI / 凭据查询失败必须写明「没查成」及原始错误，不得写成「没有」。
+
+## 本机网络注意（2026-11-06 实测）
+
+- 本机 `git` 配了 `http.proxy = http://127.0.0.1:7900`；本地代理没起时 `git fetch` / `git push` 直接失败：
+  `Failed to connect to github.com port 443 via 127.0.0.1`。`gh`（走 API）不受影响。
+- 绕过：`git -c http.proxy= -c https.proxy= fetch origin`（push 同理）。大 pack 传输仍可能被重置，
+  此时改用 `gh api` 读写文件（在服务端产生提交），不要用 reset / force 硬来。
+
+## 可选：四人并行巡检（手动，非定时）
+
+需要比日常更重的检查时（跨平台适配、发版前全量回归），可用 `spawn_teammate`（`context: fresh`）
+临时组队；日常定时任务不需要团队，单会话足够。
+
+| 成员 | 职责 | 写范围 |
+| --- | --- | --- |
+| `main-sync` | 同步、ahead/behind、版本与 CHANGELOG 一致性 | 无（只读 + git refs） |
+| `macos-compat` | macOS 兼容：IS_MAC、`⌥` 标签与规范顺序、安全区与全屏、真实 GUI 0 错误 | 无 |
+| `feature-audit` | 全功能回归：四项自检、功能矩阵、i18n、文档一致、真实 GUI、远程足迹 | 无（可跑命令） |
+| `patch-delivery` | 汇总去重定级、修复、重建产物、提交、推分支 + 开 PR | `src/`、`package*.json`、`CHANGELOG.md`、`README*.md`、`test/*`、`docs/*`、`client.js`、`index.js` |
+
+**为什么只有一个写者**：`src/` 里多个模块会一起改（combos / styles / i18n / apply / features），
+并发写同一批文件必然冲突；三名检查员只读并产出问题清单，由 `patch-delivery` 串行修复。
+合并由每日定时任务（或人）在判定通过后执行，`patch-delivery` 只负责把 PR 准备好。
 
 ## 仓库规则速查（0.3.0 起）
 
