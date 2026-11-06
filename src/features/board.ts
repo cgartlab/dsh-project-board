@@ -11,7 +11,7 @@ import type { AppearanceMap } from '../ui/appearance';
 import { ICONS, PALETTE, hexToRgba, loadAppearance, paletteFor, saveAppearance } from '../ui/appearance';
 import { Icon, RunRing } from '../ui/icons';
 import { fallbackHook, type PresetSnapshot, type ScheduleSnapshot } from '../core/schedule';
-import { PROJECT_COLUMNS, SORT_DIR_DEFAULT, type ProjectColumn, relTime, sessionTitleOf, statusInfo, workspaceLabel, type SessionStatusLike, type StatusInfo } from './format';
+import { PROJECT_COLUMNS, SORT_DIR_DEFAULT, compareVersions, parseVersion, relTime, sessionTitleOf, statusInfo, workspaceLabel, type ProjectColumn, type SessionStatusLike, type StatusInfo } from './format';
 
 export interface WorkspaceView {
   workspaceId: string;
@@ -86,6 +86,14 @@ interface ProjectModel {
   presets: Set<string>;
   hasCurrent: boolean;
   lastUpdated: number;
+  /** Open issue count; `undefined` means the host does not expose it yet (renders `—`). */
+  issues?: number;
+  /** Open pull-request count; `undefined` means not yet wired up (renders `—`). */
+  prs?: number;
+  /** Local package version; `undefined` when unknown (renders `—`). */
+  localVersion?: string;
+  /** Latest published version; `undefined` when unknown (renders `—`). */
+  latestVersion?: string;
 }
 
 const BUILTIN_PRESET_COPY: Record<string, string> = {
@@ -94,6 +102,18 @@ const BUILTIN_PRESET_COPY: Record<string, string> = {
   minimal: 'preset.minimal',
   cordis: 'preset.cordis'
 };
+
+/** Numeric sort key for a dotted version string, so `1.10` sorts after `1.9` (a plain
+ *  string comparison would not). Segments are padded to a fixed count so different-length
+ *  versions compare numerically (missing segments count as 0, matching compareVersions).
+ *  Unknown/`—` maps to -1 and sinks to the bottom. Pre-release suffixes are ignored. */
+function versionSortKey(value: string | undefined): number {
+  const parts = parseVersion(value);
+  if (!parts) return -1;
+  let key = 0;
+  for (let i = 0; i < 6; i += 1) key = key * 1000 + (parts[i] || 0);
+  return key;
+}
 
 const NO_AUTO = new Set<string>();
 
@@ -251,6 +271,15 @@ export function ProjectBoard(props: ProjectBoardProps): unknown {
         last = Math.max(last, row.updatedAt);
       }
       if (!last) last = Date.parse(workspace.updatedAt || '') || 0;
+      // Repo-meta fields are a forward-compatibility seam: the host does not expose them
+      // yet, so they stay `undefined` and the table renders `—`. When a future host
+      // capability adds them to the workspace snapshot they flow through here untouched.
+      const repo = workspace as unknown as {
+        openIssues?: number;
+        openPRs?: number;
+        localVersion?: string;
+        latestVersion?: string;
+      };
       const model: ProjectModel = {
         workspaceId: workspace.workspaceId,
         name: workspaceLabel(workspace.title, t),
@@ -258,7 +287,11 @@ export function ProjectBoard(props: ProjectBoardProps): unknown {
         counts: counts,
         presets: presets,
         hasCurrent: hasCurrent,
-        lastUpdated: last
+        lastUpdated: last,
+        issues: typeof repo.openIssues === 'number' ? repo.openIssues : undefined,
+        prs: typeof repo.openPRs === 'number' ? repo.openPRs : undefined,
+        localVersion: repo.localVersion,
+        latestVersion: repo.latestVersion
       };
       return model;
     });
@@ -334,6 +367,10 @@ export function ProjectBoard(props: ProjectBoardProps): unknown {
   const projectSortValue = (project: ProjectModel, key: string): string | number => {
     if (key === 'name') return project.name.toLowerCase();
     if (key === 'lastUpdated') return project.lastUpdated;
+    if (key === 'issues') return project.issues ?? -1;
+    if (key === 'prs') return project.prs ?? -1;
+    if (key === 'localVersion') return versionSortKey(project.localVersion);
+    if (key === 'latestVersion') return versionSortKey(project.latestVersion);
     if (key === 'presets') return project.presets ? project.presets.size : 0;
     return project.counts[key] !== undefined ? project.counts[key] : 0;
   };
@@ -453,16 +490,17 @@ export function ProjectBoard(props: ProjectBoardProps): unknown {
       t(info.labelKey)
     );
 
-  const th = (key: string, label: string, type: string, options?: { num?: boolean; sortable?: boolean }): unknown => {
+  const th = (key: string, label: string, type: string, options?: { num?: boolean; sortable?: boolean; hint?: string }): unknown => {
     const opts = options || {};
     const position = sorts.findIndex((entry) => entry.key === key);
     const active = position >= 0;
     const direction = active ? sorts[position].dir : null;
+    const title = opts.sortable === false ? opts.hint : opts.hint ? opts.hint + ' · ' + t('sort.hint') : t('sort.hint');
     return h(
       'th',
       {
         className: 'pbx-th' + (opts.sortable === false ? '' : ' sortable') + (active ? ' active' : '') + (opts.num ? ' num' : ''),
-        title: opts.sortable === false ? undefined : t('sort.hint'),
+        title: title,
         'aria-sort': opts.sortable === false ? undefined : active ? (direction === 'asc' ? 'ascending' : 'descending') : 'none',
         tabIndex: opts.sortable === false ? undefined : 0,
         onClick: opts.sortable === false ? undefined : (event: MouseEvent) => sortBy(key, Boolean(event.shiftKey)),
@@ -477,7 +515,7 @@ export function ProjectBoard(props: ProjectBoardProps): unknown {
       },
       h('span', { className: 'pbx-thType', 'aria-hidden': 'true' }, type || ''),
       h('span', { className: 'pbx-thLabel' }, label),
-      active ? h('span', { className: 'pbx-sortMark' }, (sorts.length > 1 ? String(position + 1) : '') + (direction === 'asc' ? '↑' : '↓')) : null
+      active ? h('span', { className: 'pbx-sortMark', 'aria-hidden': 'true' }, direction === 'asc' ? '↑' : '↓') : null
     );
   };
 
@@ -571,18 +609,31 @@ export function ProjectBoard(props: ProjectBoardProps): unknown {
 
   const projectCols: ProjectColumn[] = PROJECT_COLUMNS.filter((def) => !config.projectColumns || (config.projectColumns as unknown as Record<string, boolean>)[def.key] !== false);
   const projectCell = (project: ProjectModel, def: ProjectColumn): unknown => {
-    if (def.key === 'lastUpdated') return relTime(project.lastUpdated, t);
-    if (def.key === 'presets') return String(project.presets ? project.presets.size : 0);
+    if (def.key === 'lastUpdated') {
+      const absolute = project.lastUpdated ? new Date(project.lastUpdated).toLocaleString() : '';
+      return h('td', { className: 'pbx-num pbx-time', title: absolute }, relTime(project.lastUpdated, t));
+    }
+    if (def.key === 'issues' || def.key === 'prs') {
+      const value = def.key === 'issues' ? project.issues : project.prs;
+      if (value === undefined) {
+        return h('td', { className: 'pbx-num pbx-na', title: t('col.naHint') }, t('col.na'));
+      }
+      const cls = 'pbx-num' + (value > 0 ? ' pbx-numHot' : ' pbx-numZero');
+      return h('td', { className: cls }, String(value));
+    }
+    if (def.key === 'localVersion' || def.key === 'latestVersion') {
+      const value = def.key === 'localVersion' ? project.localVersion : project.latestVersion;
+      if (!value) return h('td', { className: 'pbx-num pbx-ver pbx-na', title: t('col.naHint') }, t('col.na'));
+      const latest = project.latestVersion;
+      const lagging = def.key === 'localVersion' && !!latest && compareVersions(value, latest) < 0;
+      const cls = 'pbx-num pbx-ver' + (lagging ? ' pbx-verLag' : '');
+      const title = lagging ? t('col.localBehind', { local: value, latest: latest || '' }) : value;
+      return h('td', { className: cls, title: title }, h('span', null, value));
+    }
+    // `total` and any future numeric count column.
     const value = project.counts[def.key] ?? 0;
-    const style =
-      def.key === 'running'
-        ? { color: value > 0 ? 'var(--dsw-alias-brand-primary)' : undefined }
-        : def.key === 'attention'
-          ? { color: value > 0 ? 'var(--dsw-alias-state-warn-primary)' : undefined }
-          : def.key === 'auto'
-            ? { color: value > 0 ? 'var(--dsw-alias-state-warn-primary)' : undefined }
-            : undefined;
-    return h('td', { className: 'pbx-num' + (def.key === 'total' ? ' pbx-strong' : ''), style: style }, String(value));
+    const cls = 'pbx-num' + (def.key === 'total' ? ' pbx-strong' : '');
+    return h('td', { className: cls }, String(value));
   };
   const renderProjectRow = (project: ProjectModel): unknown => {
     const spec = specOf(project.workspaceId);
@@ -591,7 +642,8 @@ export function ProjectBoard(props: ProjectBoardProps): unknown {
       'tr',
       {
         key: project.workspaceId,
-        className: 'pbx-tr',
+        className: 'pbx-tr' + (projectFilter === project.workspaceId ? ' pbx-tr-selected' : ''),
+        'aria-current': projectFilter === project.workspaceId ? 'true' : undefined,
         tabIndex: 0,
         onClick: () => {
           setProjectFilter(project.workspaceId);
@@ -824,7 +876,7 @@ export function ProjectBoard(props: ProjectBoardProps): unknown {
         h(
           'thead',
           null,
-          h('tr', null, th('name', t('col.project'), 'Aa'), projectCols.map((def) => th(def.key, t(def.labelKey), def.type, { num: true })))
+          h('tr', null, th('name', t('col.project'), 'Aa', { hint: t('col.hint.name') }), projectCols.map((def) => th(def.key, t(def.labelKey), def.type, { num: true, hint: t(def.hintKey) })))
         ),
         h(
           'tbody',
