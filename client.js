@@ -6330,6 +6330,7 @@
       stateRef.current = { id: currentId, state: want, settleUntil: Date.now() + 3e3 };
       if (previous.id === null) return void 0;
       let attempts = 0;
+      let enforceTimer = 0;
       const enforce = () => {
         const live = propsRef.current;
         if (typeof live.intentRecent === "function" && live.intentRecent()) {
@@ -6343,10 +6344,10 @@
         attempts += 1;
         if (attempts === 1) logEvent("info", "board", "restore after switch", want);
         live.setBoardState(want);
-        if (attempts < 20) window.setTimeout(enforce, 120);
+        if (attempts < 20) enforceTimer = window.setTimeout(enforce, 120);
       };
-      const timer = window.setTimeout(enforce, 60);
-      return () => window.clearTimeout(timer);
+      enforceTimer = window.setTimeout(enforce, 60);
+      return () => window.clearTimeout(enforceTimer);
     }, [currentId]);
     useEffect(() => {
       const timer = window.setInterval(() => {
