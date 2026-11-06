@@ -1706,6 +1706,7 @@
     "settings.githubDesc": 'Enter a token and map each project to a repo to show real Open Issue / Open PR / version data; unmapped projects still show a "—" placeholder.',
     "settings.githubToken": "GitHub Personal Access Token",
     "settings.githubTokenDesc": "Optional: public repos work without it; fill it for private repos or a higher rate limit. Used only to call api.github.com; the token stays on this machine, never syncs with the workspace and is never uploaded — clear it anytime.",
+    "settings.githubTokenPlaceholderWarn": "This looks like a DSH secret reference ({{...}}), not a GitHub PAT. The GitHub API needs a real ghp_... token — paste the PAT directly.",
     "settings.githubTest": "Test connection",
     "settings.githubTesting": "Testing…",
     "settings.githubTestOk": "Connected, token valid",
@@ -1981,6 +1982,7 @@
     "settings.githubDesc": "填入 token 并为每个项目配置仓库，就能在看板显示真实的 Open Issue / Open PR / 版本数据；未配置的项目仍显示「—」占位。",
     "settings.githubToken": "GitHub Personal Access Token",
     "settings.githubTokenDesc": "可选：公开仓库可不填；私有仓库或需要更高速率限制时填写。仅用于调用 api.github.com；token 只保存在本机，不随工作区同步，也不会上传，随时可清除。",
+    "settings.githubTokenPlaceholderWarn": "当前值看起来是 DSH 密钥引用（{{...}}），不是 GitHub PAT。GitHub API 需要真实的 ghp_... 格式 token，请直接粘贴 PAT。",
     "settings.githubTest": "测试连接",
     "settings.githubTesting": "测试中…",
     "settings.githubTestOk": "连接成功，token 有效",
@@ -5971,6 +5973,7 @@
           )
         ),
         ghTest ? h("div", { role: "status", className: "pbx-setHint" + (ghTest.ok ? " pbx-githubOk" : " pbx-setError") }, ghTest.text) : null,
+        config.githubToken && config.githubToken.startsWith("{{") && config.githubToken.endsWith("}}") ? h("div", { className: "pbx-setHint pbx-setError" }, t("settings.githubTokenPlaceholderWarn")) : null,
         h("div", { className: "pbx-setSubTitle" }, t("settings.githubReposTitle")),
         h("div", { className: "pbx-setHint" }, t("settings.githubReposHint")),
         ...renderGithubRepos(),

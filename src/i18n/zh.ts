@@ -130,6 +130,7 @@ export const zh = {
       'settings.githubDesc': '填入 token 并为每个项目配置仓库，就能在看板显示真实的 Open Issue / Open PR / 版本数据；未配置的项目仍显示「—」占位。',
       'settings.githubToken': 'GitHub Personal Access Token',
       'settings.githubTokenDesc': '可选：公开仓库可不填；私有仓库或需要更高速率限制时填写。仅用于调用 api.github.com；token 只保存在本机，不随工作区同步，也不会上传，随时可清除。',
+      'settings.githubTokenPlaceholderWarn': '当前值看起来是 DSH 密钥引用（{{...}}），不是 GitHub PAT。GitHub API 需要真实的 ghp_... 格式 token，请直接粘贴 PAT。',
       'settings.githubTest': '测试连接', 'settings.githubTesting': '测试中…',
       'settings.githubTestOk': '连接成功，token 有效', 'settings.githubTestFail': '连接失败',
       'settings.githubReposTitle': '项目仓库映射',

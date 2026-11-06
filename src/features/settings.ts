@@ -587,6 +587,7 @@ export function SettingsPage(props: SettingsPageProps): unknown {
         )
       ),
       ghTest ? h('div', { role: 'status', className: 'pbx-setHint' + (ghTest.ok ? ' pbx-githubOk' : ' pbx-setError') }, ghTest.text) : null,
+      config.githubToken && config.githubToken.startsWith('{{') && config.githubToken.endsWith('}}') ? h('div', { className: 'pbx-setHint pbx-setError' }, t('settings.githubTokenPlaceholderWarn')) : null,
       h('div', { className: 'pbx-setSubTitle' }, t('settings.githubReposTitle')),
       h('div', { className: 'pbx-setHint' }, t('settings.githubReposHint')),
       ...renderGithubRepos(),
