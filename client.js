@@ -1710,6 +1710,7 @@
     "settings.githubTest": "Test connection",
     "settings.githubTesting": "Testing…",
     "settings.githubTestOk": "Connected, token valid",
+    "settings.githubTestOkNoToken": "Connected (public repos need no token)",
     "settings.githubTestFail": "Connection failed",
     "settings.githubReposTitle": "Project repository mapping",
     "settings.githubReposHint": "For each project path, set the GitHub repo (owner/repo) and the local version; columns with owner and repo filled show real data, local version is filled separately.",
@@ -1986,6 +1987,7 @@
     "settings.githubTest": "测试连接",
     "settings.githubTesting": "测试中…",
     "settings.githubTestOk": "连接成功，token 有效",
+    "settings.githubTestOkNoToken": "连接成功（公开仓库无需 token）",
     "settings.githubTestFail": "连接失败",
     "settings.githubReposTitle": "项目仓库映射",
     "settings.githubReposHint": "按项目路径为每个项目指定 GitHub 仓库（owner/repo）与本地版本；填了 owner 和 repo 的列会显示真实数据，本地版本单独填写。",
@@ -5624,7 +5626,7 @@
       setGhTest(null);
       try {
         const stats = await fetchRepoStats("octocat", "hello-world", config.githubToken);
-        setGhTest(stats.status === "ok" ? { ok: true, text: t("settings.githubTestOk") } : { ok: false, text: githubErrorText(stats.error) });
+        setGhTest(stats.status === "ok" ? { ok: true, text: config.githubToken ? t("settings.githubTestOk") : t("settings.githubTestOkNoToken") } : { ok: false, text: githubErrorText(stats.error) });
       } catch (error) {
         setGhTest({ ok: false, text: t("settings.githubTestFail") });
       } finally {
