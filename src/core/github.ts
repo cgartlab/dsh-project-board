@@ -67,8 +67,17 @@ export async function fetchRepoStats(
       fetchImpl(`${base}/pulls?state=open&per_page=1`, { headers }),
       fetchImpl(`${base}/releases/latest`, { headers })
     ]);
-    if (!repoRes.ok) return errorFor(repoRes.status);
-    if (!pullsRes.ok) return errorFor(pullsRes.status);
+    if (!repoRes.ok) {
+      // Drain the other two responses so their connections are released, not leaked.
+      pullsRes.json().catch((): void => undefined);
+      releaseRes.json().catch((): void => undefined);
+      return errorFor(repoRes.status);
+    }
+    if (!pullsRes.ok) {
+      repoRes.json().catch((): void => undefined);
+      releaseRes.json().catch((): void => undefined);
+      return errorFor(pullsRes.status);
+    }
     const repoData = (await repoRes.json()) as { open_issues_count?: number };
     let prs = 0;
     // per_page=1 with a Link header gives the exact open-PR count (last page number),
