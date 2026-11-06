@@ -1,0 +1,69 @@
+# LESSONS — dsh-tac
+
+> DeepSeek Harness 客户端插件（项目看板 / 悬浮会话列表 / 命令面板）；TypeScript 源码 + esbuild 产物（`client.js` / `index.js`），运行时零依赖。
+> 本仓库从真实失误沉淀的「教训→规则」清单。**会话开始先全文阅读并遵循其中所有规则**；出现新失误按 §维护 追加。
+> 权威依据：Anthropic Claude Code memory/best practices（<200 行、具体可验证、第二次犯同样错即写入）；社区 lessons.md 惯例（Boris Cherny，Anthropic）。
+> 来源：本仓库 `CHANGELOG.md` 记录的真实修复（0.1.12、0.1.14、0.2.1–0.2.5）+ 0.3.0 TypeScript 重写过程中踩到的坑；预填为种子，后续由 Agent 在真实工作中增长。
+
+## 维护
+
+- **触发**：用户纠正 / Agent 自查到的失误 / 非显而易见的 gotcha。
+- **格式**：`### <主题>` 下，每条 = 失误（具体场景）→ 规则（最小可执行指令），一行可验证。
+- **只记项目特有、不可从代码推断的**；通用最佳实践不写；含糊措辞（"小心""注意"）删掉。
+- **重复出现** → 升级进 `AGENTS.md` 硬规则；**月度审阅**裁剪过期项；目标 < 200 行。
+
+## 源码与产物
+
+- 失误：0.3.0 之前 `client.js` 既是源码又是产物，手改能"生效"，重构时无从下手 → 规则：只改 `src/`；`client.js` / `index.js` 由 `npm run build` 生成，手改必被覆盖（0.3.0）
+- 失误：两个测试文件都 `readFileSync('client.js')`，只跑 `npm test` 验证的是**上一次构建**的结果 —— 改完源码不 build 就等于没验证 → 规则：验证顺序固定为 `build` → `test`；提交前跑 `npm run check`（它会校验产物与源码一致）
+- 失误：产物 banner 里带 `package.json` 的 version，只改版本号不重建，产物版本与实际不符 → 规则：改版本必须 `npm run build` 并把产物一起提交；CI 用 `git diff --exit-code client.js index.js` 断言两者一致（0.3.0）
+
+## 构建与检查脚本
+
+- 失误：`check-bundle.cjs` 曾用正则从 `client.js` 里读 `__ModuleLoader__.load({ id: '…' })`；esbuild 把 id 编成变量引用（`id: MODULE_ID`），正则永远匹配不到 → 规则：产物只校验"能自洽的事实"（含包名字面量、存在 loader 调用），id 一致性读 `src/constants.ts`
+- 失误：i18n 检查只数源码里的键，产物漏打包也发现不了 → 规则：`check-i18n.cjs` 读 `src/i18n/*.ts` 的字典，并额外断言产物里包含全部键（0.3.0）
+- 失误：`en` 与 `zh` 靠人工对齐，删/加一个键只会在界面上显示缺字 → 规则：`en: Record<keyof typeof zh, string>`，键不一致是编译错误（0.3.0）
+- 失误：`node --check` 只证明"能解析"，0.3.0 切换产物时要靠 `npm test` 的加载测试和本机热重载才确认真的挂载成功 → 规则：产物必须过一次真实运行（加载测试或本机热重载），不以语法检查代替
+
+## 宿主客户端契约
+
+- 失误：bundle 里 `import React` 会打出一份自己的 React，与宿主各持一份状态、hooks 直接报错 → 规则：不 import React；`src/runtime.ts` 在 `factory(require)` 里绑定宿主的 React，其它模块只用活绑定的 `h` / hooks（0.3.0）
+- 失误：用 `display: contents` 的插槽锚点量宽度做头部折叠，`clientWidth` 恒为 0，折叠逻辑从未生效 → 规则：量原生中列 `[class*="_centerCol"]` 的 `getBoundingClientRect()`，并用它的 `ResizeObserver` 触发重算（0.1.14 修）
+- 失误：`sidebarRight.isExpanded()` 在某个版本不可靠，按它判断"面板开着"导致 `Alt+N/B/V` 只能关不能开 → 规则：可见性用 DOM 判（`[class*="_panel"][data-sidebar-right-open]` + `sidebarRight.active().kind`），不依赖 `isExpanded()`
+- 失误：曾把"有 `role=dialog`"一律当阻塞弹窗，窄窗口下侧栏会渲染成模态抽屉，于是 `Alt+W` 能开不能关 → 规则：`data-shortcut-modal="sidebar"` 的抽屉放行；只有真正的模态层抑制快捷键（0.2.1）
+- 失误：假设宿主有"移动主列"的接口，实际只有左栏宽度与右栏轨道 → 规则：让位只在能改的地方改（对话滚动区 padding），改不了的不硬造，并在 `docs/architecture.md` 写明依据
+
+## 快捷键
+
+- 失误：曾用"焦点在输入框就跳过快捷键"，而输入框几乎总是聚焦 → 所有 Alt 组合被一刀切掉（0.1.14 修）→ 规则：不按焦点判断，只按"真模态"判断；测试必须覆盖"输入框内 Alt 仍生效"
+- 失误：`Alt+K` 面板把自己当作阻塞弹窗 → 面板打开时方向键与 `Alt+I` / `Alt+,` 全部失效 → 规则：面板自己处理的组合放行，其余吞掉（同时避免 macOS Option 字符泄漏到输入框）
+- 失误：全屏看板盖住整个框架，`Alt+W` 确实切了侧栏但被挡住，表现成"按了没反应" → 规则：先退出 fullscreen 再 toggle，并在日志里记 `leave-fullscreen`（0.2.4）
+- 失误：客户端插件热重载会留下旧监听器，同一次按键被两个 listener 各 toggle 一次，互相抵消 → 规则：在事件对象上打 `pbxSidebarActed` 标记，只有真正生效的 listener 占有这次按键，后来者记 `leftSidebar:duplicate`（0.2.4）
+- 失误：`layout.toggleSidebar` 失败时静默跳过，"接口不存在 / 调了没生效 / 键没到"三种情况分不清 → 规则：开关按 `layout.toggleSidebar` → `layout.panels.toggleSidebar` → `sidebarLeft.toggleExpanded` 兜底并记录实际路径；260ms 后核对布局，记 `applied` / `no-change` / `unverified`（0.2.1、0.2.3）
+
+## 原生侧栏、看板与 HUD 状态
+
+- 失误：用侧栏列宽判断"开没开"，读到的是宽度动画的中途值，HUD 让位滞后半秒或落错位置 → 规则：读帧的 `grid-template-columns` 第一轨 + `data-sidebar-collapsed`；只有读不到网格才退回测量宽度，且要求连续两次读数一致（0.2.2）
+- 失误：dock 的跟随定时器（80ms / 320ms）在侧栏已经关闭后仍在跑，把胶囊挪到旧的贴边位置 → 规则：dock/restore 之间所有定时器集中 `clear`，并用 `autoDock` 标志短路后续定位
+- 失误：把"看板全屏"误判成"原生侧栏展开"，打开看板时 HUD 被无故收起 → 规则：全屏看板 ≠ 侧栏展开，判定口径见 `docs/architecture.md` 的诊断表（0.1.14 修）
+- 失误：往输入框加 margin 给 HUD 让位，窄窗口下溢出到面板外 → 规则：只给对话滚动区加 padding（单一机制），记住被垫节点、按会话中心判左右、剩余宽度不足约 360px 时不做（0.1.14）
+- 失误：贴边吸附后自动收起再展开，胶囊"浮"到上面去 → 规则：收起/展开时按旧盒子的右/下贴边重新计算坐标，而不是复用左上角（0.1.12）
+
+## React 组件纪律
+
+- 失误：`FloatingStatus` 把 `if (rows.length === 0) return null` 写在 hooks 之前，会话行数 0↔>0 时 hooks 数量变化 → 崩溃（0.1.14 修）→ 规则：所有 hooks 在条件返回之前；需要多挂一帧做退场时用 `present` 状态，不提前 return
+- 失误：外观浮层的 outside-click 把触发它的图标也算"外部"，点开即被自己关掉 → 规则：opener 排除在 outside 判定之外，或延迟一帧再绑定监听（0.1.14 修）
+- 失误：拖拽结束后的 click 被 drag-moved 标志吞掉，点胶囊没反应 → 规则：抑制只作用于紧随的一次 click，并在 220ms 后复位标志（0.1.14 修）
+
+## 验证与调试
+
+- 失误：想用 SendKeys / AppActivate / PostMessage 往 DSH 窗口注入快捷键来验证，Windows 前台锁 + 无地址化的 Chromium 子窗口，全部失败 → 规则：快捷键只能由人按，Agent 只读插件日志验证；日志必须有 scope 粒度（`shortcut` / `sidebar` / `hud`）
+- 失误：想用浏览器客户端 `?token=` 连 `127.0.0.1` 验证，桌面端 token 是启动时临时签发 → 401 → 规则：不用 web 客户端代跑验证，走桌面端插件日志
+- 失误：日志级别停在默认档时，`Alt+W` 的 info 记录看不到 → 规则：排查前先把「日志与排查」级别调到「常规」，或直接读 localStorage 里的 `entries`
+- 失误：只写"修好了"而没有可复现的判断依据，下一轮又是猜 → 规则：每次行为修复配一条回归测试（两个测试文件共 13 条就是地基），并在 `docs/architecture.md` 留判定口径
+
+## 文案、设置与迁移
+
+- 失误：新增设置段没 bump 对应的迁移版本，老配置读不出来（`boardProjVersion` 就漏过一次）→ 规则：加/改设置段必须 bump `*Version` 并在 `mergeSettings` 写迁移，保存统一走 `writeSettings`（0.1.14 补）
+- 失误：通知 / Toast 层级一度盖在模态背板之上 → 规则：新增浮层先决定它属于"模态背板之下"（Toast、通知 dock）还是"之上"（命令面板、弹窗），层级在 `src/styles.ts` 里成组管理，不临时加 z-index（0.1.14 修）
+- 失误：README 里写死的快捷键说明与实际默认值漂移 → 规则：改快捷键默认值必须同步 `README.md` / `README.zh.md` 的快捷键表与设置页文案，以及 `docs/architecture.md` 里点名的具体键（如 `Alt+U` / `Alt+M`）
