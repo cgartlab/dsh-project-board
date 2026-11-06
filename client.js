@@ -3997,8 +3997,16 @@
           event.stopPropagation();
           stopHoldScroll(false);
           if (paletteOpenRef.current && palette) palette.set({ open: false });
+          if (event.pbxBoardActed === true) {
+            logEvent("info", "shortcut", "board:duplicate", {});
+            return;
+          }
           if (typeof props.toggleBoard === "function") {
             props.toggleBoard(isSidebarBoard ? "narrow" : isPanelHalf ? "half" : "full");
+          }
+          try {
+            event.pbxBoardActed = true;
+          } catch (error) {
           }
           return;
         }
