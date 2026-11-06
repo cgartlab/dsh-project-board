@@ -1,16 +1,5 @@
 /** DOM-level questions the plugin asks the native shell: dialogs, the sidebar frame, pointers. */
 
-/** Any visible `aria-modal` layer is on screen (the plugin's own palette included). */
-export function hasOpenDialog(): boolean {
-  try {
-    const nodes = document.querySelectorAll('[aria-modal="true"]');
-    for (const node of nodes) if (node.getClientRects().length > 0) return true;
-  } catch (error) {
-    /* ignore */
-  }
-  return false;
-}
-
 /* The plugin's own palette is aria-modal too, but it owns its keys: it must not suppress
    Alt+K (close) or Alt+I / Alt+, (move). Only real dialogs block shortcuts. */
 export function hasBlockingDialog(): boolean {

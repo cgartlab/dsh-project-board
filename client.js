@@ -2381,8 +2381,16 @@
         fetchImpl(`${base}/pulls?state=open&per_page=1`, { headers }),
         fetchImpl(`${base}/releases/latest`, { headers })
       ]);
-      if (!repoRes.ok) return errorFor(repoRes.status);
-      if (!pullsRes.ok) return errorFor(pullsRes.status);
+      if (!repoRes.ok) {
+        pullsRes.json().catch(() => void 0);
+        releaseRes.json().catch(() => void 0);
+        return errorFor(repoRes.status);
+      }
+      if (!pullsRes.ok) {
+        repoRes.json().catch(() => void 0);
+        releaseRes.json().catch(() => void 0);
+        return errorFor(pullsRes.status);
+      }
       const repoData = await repoRes.json();
       let prs = 0;
       const lastPage = countFromLink(pullsRes.headers ? pullsRes.headers.get("link") : null);
