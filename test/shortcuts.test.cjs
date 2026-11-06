@@ -1085,6 +1085,33 @@ test('the floating list docks and comes back with the native sidebar on the same
   harness.doc.__removeRoot(frame);
 });
 
+test('a list that docked at startup comes back when the sidebar closes', () => {
+  const harness = createHarness();
+  harness.resetState();
+  harness.clearSpies();
+
+  // The app opens with the native sidebar already expanded (its layout store starts at 280px),
+  // so the floating list docks on mount. Closing the sidebar must bring it back.
+  const opened = 'grid-template-columns: 280px minmax(400px, 1fr) minmax(0px, 800px)';
+  const closed = 'grid-template-columns: 0px minmax(400px, 1fr) minmax(0px, 800px)';
+  const frame = new VirtualNode('div', { className: 'AppFrame_frame', style: { gridTemplateColumns: opened } }, [], harness.doc);
+  frame.attributes.style = opened;
+  harness.doc.__addRoot(frame);
+
+  const hud = harness.mountHud();
+  hud.render();
+  assert.equal(/collapsed/.test(hud.node.className), true, 'the list starts as a pill when the app opens with the sidebar expanded');
+
+  frame.style.gridTemplateColumns = closed;
+  frame.attributes.style = closed;
+  frame.setAttribute('data-sidebar-collapsed', 'true');
+  harness.runIntervals();
+  hud.render();
+  assert.equal(/collapsed/.test(hud.node.className), false, 'closing the sidebar brings the list back');
+
+  harness.doc.__removeRoot(frame);
+});
+
 test('a sidebar width sampled mid-animation does not move the floating list', () => {
   const harness = createHarness();
   harness.resetState();
