@@ -935,11 +935,45 @@ test('a real modal dialog suppresses shortcuts', () => {
   assert.deepEqual(harness.services.calls.openSession, [], 'Alt+I does not switch sessions behind a real modal');
   assert.equal(prevEvent.defaultPrevented, false, 'Alt+I is left to the modal');
 
+  const sidebarEvent = harness.pressRaw({ key: 'w', code: 'KeyW', altKey: true, bubbles: true });
+  assert.deepEqual(harness.services.calls.layoutToggleSidebar, [], 'Alt+W does not toggle the native sidebar behind a real modal');
+  assert.equal(sidebarEvent.defaultPrevented, false, 'Alt+W is left to the modal');
+
   // Control: once the modal is gone the same combo works again.
   harness.doc.__removeRoot(modal);
   harness.clearSpies();
   harness.pressRaw({ key: 'k', code: 'KeyK', altKey: true, bubbles: true });
   assert.equal(harness.paletteOpen(), true, 'Alt+K works again after the real modal closes');
+});
+
+test('the native sidebar drawer does not block the shortcut that closes it', () => {
+  const harness = createHarness();
+  harness.resetState();
+  harness.clearSpies();
+
+  // Below its LG breakpoint DSH renders the left sidebar as a modal drawer: role=dialog,
+  // aria-modal and data-shortcut-modal="sidebar". DSH keeps its own toggle alive for that
+  // state, so the plugin must keep Alt+W alive too — otherwise Alt+W opens the sidebar and
+  // can never close it again.
+  const drawer = new VirtualNode('div', {
+    className: 'native-sidebar',
+    role: 'dialog',
+    'aria-modal': 'true',
+    'data-shortcut-modal': 'sidebar'
+  }, [], harness.doc);
+  harness.doc.__addRoot(drawer);
+  assert.equal(harness.doc.querySelectorAll('[aria-modal="true"]').length, 1, 'the virtual document contains the sidebar drawer');
+
+  const event = harness.pressRaw({ key: 'w', code: 'KeyW', altKey: true, bubbles: true });
+  assert.deepEqual(harness.services.calls.layoutToggleSidebar, [true], 'Alt+W still reaches the layout service while the sidebar drawer is open');
+  assert.equal(event.defaultPrevented, true, 'Alt+W is consumed by the plugin, not left to the drawer');
+
+  // The drawer stays out of the way of the other shortcuts as well.
+  harness.clearSpies();
+  harness.pressRaw({ key: 'n', code: 'KeyN', altKey: true, bubbles: true });
+  assert.deepEqual(harness.spies.toggleBoard, ['narrow'], 'Alt+N still toggles the board while the sidebar drawer is open');
+
+  harness.doc.__removeRoot(drawer);
 });
 
 test('palette open: Alt+K closes it, Alt+I and Alt+, still move the selection', () => {

@@ -212,6 +212,10 @@ window.__ModuleLoader__.load({
           if (node.getClientRects().length === 0) continue;
           if (node.getAttribute('data-pbx-overlay') === 'palette') continue;
           if (node.closest && node.closest('.pbx-paletteBackdrop')) continue;
+          /* Below ~768px DSH renders the native left sidebar as a modal drawer and keeps its own
+             toggle alive for exactly that state (`modals: ["sidebar"]` in its shortcut registry).
+             Mirror that: the shortcut that opens the sidebar must be able to close it again. */
+          if (node.getAttribute('data-shortcut-modal') === 'sidebar') continue;
           return true;
         }
       } catch (error) { /* ignore */ }
@@ -2530,11 +2534,19 @@ window.__ModuleLoader__.load({
       }, [state.open, config.palette.enabled]);
       useEffect(() => {
         const onShortcut = (event) => {
-          if (event.isComposing || event.repeat || shortcutSuppressed) return;
           const eventCombo = comboFromEvent(event);
           if (!eventCombo || !comboHasModifier(eventCombo)) return;
           const shortcuts = (settingsRef.current && settingsRef.current.shortcuts) || DEFAULT_SETTINGS.shortcuts;
-          if (hasBlockingDialog()) return;
+          /* Alt+W is the shortcut people reach for when the layout surprises them, so record every
+             stage of it: a press missing from the log never reached this listener (focus sat in a
+             webview/IME/native menu), while a logged press names the gate that swallowed it. */
+          const traceLeftSidebar = eventCombo === shortcuts.leftSidebar;
+          if (traceLeftSidebar) logEvent('info', 'shortcut', 'leftSidebar:key', { repeat: Boolean(event.repeat), composing: isComposingEvent(event), suppressed: shortcutSuppressed });
+          if (isComposingEvent(event) || event.repeat || shortcutSuppressed) return;
+          if (hasBlockingDialog()) {
+            if (traceLeftSidebar) logEvent('info', 'shortcut', 'leftSidebar:blocked', { reason: 'dialog' });
+            return;
+          }
           if (matchCombo(event, shortcuts.palette)) {
             event.preventDefault();
             event.stopPropagation();
@@ -2596,7 +2608,8 @@ window.__ModuleLoader__.load({
             event.stopPropagation();
             stopHoldScroll(false);
             if (paletteOpenRef.current && palette) palette.set({ open: false });
-            if (typeof props.toggleLeftSidebar === 'function') props.toggleLeftSidebar();
+            const acted = typeof props.toggleLeftSidebar === 'function' ? props.toggleLeftSidebar() : false;
+            logEvent('info', 'shortcut', 'leftSidebar:acted', { acted: Boolean(acted), combo: eventCombo });
             return;
           }
           const isHudToggle = matchCombo(event, shortcuts.hud);
@@ -3101,21 +3114,38 @@ window.__ModuleLoader__.load({
           const y = Math.min(Math.max(minTop, anchorY), Math.max(minTop, window.innerHeight - height - 8));
           return { x: x, y: y };
         };
+        /* Timers owned by the dock/restore dance. A pending reposition must never run after the
+           sidebar closed again, or the pill lands at the old docked spot while nothing is there. */
+        let dockTimer = 0;
+        let followTimer = 0;
+        let settleTimer = 0;
+        const clearDockTimers = () => {
+          window.clearTimeout(dockTimer);
+          window.clearTimeout(followTimer);
+          dockTimer = 0;
+          followTimer = 0;
+        };
+        const applyDockPos = () => {
+          const saved = sidebarSavedRef.current;
+          const next = dockPos(saved && saved.pos);
+          posRef.current = next;
+          setPos(next);
+        };
         const dock = () => {
           if (autoDockRef.current) return;
           autoDockRef.current = true;
           sidebarSavedRef.current = { pos: posRef.current ? Object.assign({}, posRef.current) : null, collapsed: collapsedStateRef.current };
           setCollapsed(true);
-          window.setTimeout(() => {
-            const saved = sidebarSavedRef.current;
-            const next = dockPos(saved && saved.pos);
-            posRef.current = next;
-            setPos(next);
-          }, 80);
+          clearDockTimers();
+          dockTimer = window.setTimeout(() => { dockTimer = 0; applyDockPos(); }, 80);
+          /* The column animates to its new width, so measure twice: once as the list collapses and
+             once after the transition, otherwise the pill stops halfway across the screen. */
+          followTimer = window.setTimeout(() => { followTimer = 0; if (autoDockRef.current) applyDockPos(); }, 320);
         };
         const restore = () => {
           if (!autoDockRef.current) return;
           autoDockRef.current = false;
+          clearDockTimers();
           const saved = sidebarSavedRef.current;
           sidebarSavedRef.current = null;
           if (saved) {
@@ -3123,9 +3153,19 @@ window.__ModuleLoader__.load({
             if (saved.pos) { posRef.current = Object.assign({}, saved.pos); setPos(Object.assign({}, saved.pos)); }
           }
         };
+        /* The column transitions between widths and its halfway widths read as "collapsed" or as the
+           rail. Only trust a reading that survives the transition: sample, then confirm ~160ms later,
+           so a dock/restore never fires on a transient width. */
+        let sample = null;
         const tick = () => {
           const expanded = readExpanded();
           if (expanded === null) return;
+          if (expanded !== sample) {
+            sample = expanded;
+            window.clearTimeout(settleTimer);
+            settleTimer = window.setTimeout(() => { settleTimer = 0; tick(); }, 160);
+            return;
+          }
           if (last === null) { last = expanded; if (expanded) dock(); return; }
           if (expanded === last) return;
           last = expanded;
@@ -3133,10 +3173,7 @@ window.__ModuleLoader__.load({
         };
         const onResize = () => {
           if (!autoDockRef.current) return;
-          const saved = sidebarSavedRef.current;
-          const next = dockPos(saved && saved.pos);
-          posRef.current = next;
-          setPos(next);
+          applyDockPos();
         };
         let raf = 0;
         const schedule = () => { if (raf) return; raf = window.requestAnimationFrame(() => { raf = 0; tick(); }); };
@@ -3150,6 +3187,8 @@ window.__ModuleLoader__.load({
         return () => {
           if (observer) observer.disconnect();
           window.clearInterval(timer);
+          window.clearTimeout(settleTimer);
+          clearDockTimers();
           window.removeEventListener('resize', onResize);
           if (raf) window.cancelAnimationFrame(raf);
         };
@@ -4694,18 +4733,27 @@ window.__ModuleLoader__.load({
       };
       /** Expand or collapse DSH's own left sidebar (the session list column). */
       const toggleNativeLeftSidebar = () => {
-        try {
-          const layout = ctx.layout;
-          if (layout && typeof layout.toggleSidebar === 'function') { layout.toggleSidebar(); return true; }
-        } catch (error) { /* ignore */ }
-        try {
-          const panels = ctx.layout && ctx.layout.panels;
-          if (panels && typeof panels.toggleSidebar === 'function') { panels.toggleSidebar(); return true; }
-        } catch (error) { /* ignore */ }
-        try {
-          const left = ctx.sidebarLeft || (typeof ctx.get === 'function' ? ctx.get('sidebarLeft') : null);
-          if (left && typeof left.toggleExpanded === 'function') { left.toggleExpanded(); return true; }
-        } catch (error) { /* ignore */ }
+        const attempt = (path, run) => {
+          try {
+            const result = run();
+            if (result === false) return false;
+            logEvent('info', 'sidebar', 'toggle', { path: path, viewport: window.innerWidth || 0 });
+            return true;
+          } catch (error) {
+            logEvent('warn', 'sidebar', 'toggle-failed', { path: path, message: String((error && error.message) || error) });
+            return false;
+          }
+        };
+        const service = (name) => {
+          if (ctx[name]) return ctx[name];
+          try { return typeof ctx.get === 'function' ? ctx.get(name) : null; } catch (error) { return null; }
+        };
+        const layout = service('layout');
+        if (layout && typeof layout.toggleSidebar === 'function' && attempt('layout.toggleSidebar', () => layout.toggleSidebar())) return true;
+        if (layout && layout.panels && typeof layout.panels.toggleSidebar === 'function' && attempt('layout.panels.toggleSidebar', () => layout.panels.toggleSidebar())) return true;
+        const left = service('sidebarLeft');
+        if (left && typeof left.toggleExpanded === 'function' && attempt('sidebarLeft.toggleExpanded', () => left.toggleExpanded())) return true;
+        logEvent('warn', 'sidebar', 'toggle-unavailable', { hasLayout: Boolean(layout) });
         return false;
       };
       const toggleNativeBoard = (mode) => {

@@ -10,6 +10,14 @@
 
 - 暂无
 
+## [0.2.1] - 2026-11-06
+
+- 修 `Alt+W` 不稳的三处原因：
+  - 窄窗口下 DSH 会把原生左侧会话栏渲染成一个模态抽屉（`role="dialog"` + `aria-modal` + `data-shortcut-modal="sidebar"`）。插件过去见到"有模态"就把所有快捷键一起屏蔽，于是 `Alt+W` 能打开侧栏、却再也没法关掉。现在这个抽屉按 DSH 自己的规则放行：它能挡住别的快捷键，但挡不住 `Alt+W`。
+  - 侧栏开关接口加了兜底顺序（`layout.toggleSidebar` → `layout.panels.toggleSidebar` → `sidebarLeft.toggleExpanded`），并记录实际走的哪一条；以前只是静默尝试，失败时没有痕迹。
+  - 悬浮列表的贴边收起/复位现在会收掉未执行的定位定时器，并等侧栏宽度过渡结束再确认状态：连按 `Alt+W` 时不再出现"胶囊停在半路"或"侧栏关了列表还留在贴边位置"。
+- `Alt+W` 加上了排查日志（记级别为「常规」即可）：每次按键会记下键盘是否到达、是否被弹窗拦住、走哪个接口、是否成功。以后遇到"某次按了没反应"，直接看「日志与排查」就能定位是没收到键、被挡，还是接口没生效。
+
 ## [0.2.0] - 2026-11-06
 
 - **插件改名**：`dsh-project-board` 正式改名为 **dsh-tac**。仓库地址变更为
@@ -204,6 +212,7 @@
 [0.1.13]: https://github.com/cgartlab/dsh-tac/releases/tag/v0.1.13
 [0.1.14]: https://github.com/cgartlab/dsh-tac/releases/tag/v0.1.14
 [0.2.0]: https://github.com/cgartlab/dsh-tac/releases/tag/v0.2.0
+[0.2.1]: https://github.com/cgartlab/dsh-tac/releases/tag/v0.2.1
 
 
 
