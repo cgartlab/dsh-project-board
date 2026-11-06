@@ -3132,7 +3132,10 @@
             role: "tab",
             "aria-selected": view === "sessions" ? "true" : "false",
             className: "pbx-tab" + (view === "sessions" ? " active" : ""),
-            onClick: () => setView("sessions")
+            onClick: () => {
+              setView("sessions");
+              setExpandedProject(null);
+            }
           },
           t("view.sessions"),
           h("span", { className: "pbx-tabCount" }, String(allSessions.length))
