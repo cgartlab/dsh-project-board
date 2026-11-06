@@ -6,7 +6,7 @@
 import { DEFAULT_SETTINGS } from '../constants';
 import type { Translate, UseHook } from '../host';
 import { h, useEffect, useMemo, useRef, useState } from '../runtime';
-import type { Settings } from '../types';
+import type { Settings, UiStore } from '../types';
 import type { AppearanceMap } from '../ui/appearance';
 import { ICONS, PALETTE, hexToRgba, loadAppearance, paletteFor, saveAppearance } from '../ui/appearance';
 import { Icon, RunRing } from '../ui/icons';
@@ -60,9 +60,10 @@ export interface ProjectBoardProps {
   t: Translate;
   compact?: boolean;
   /** External request to switch the board to a view (e.g. opening it via a shortcut
-   *  should land on "projects"). `seq` increments on each request; the board reacts to
-   *  the change so it can force a view even when the component stays mounted. */
-  viewRequest?: { seq: number; view: 'projects' | 'sessions' };
+   *  should land on "projects"). The board subscribes to this store; when `seq` changes
+   *  it switches the view — reliable even when the component stays mounted, because a
+   *  store `set()` produces a new snapshot that triggers the subscription. */
+  viewRequestStore?: UiStore<{ seq: number; view: 'projects' | 'sessions' }>;
 }
 
 interface SortEntry {
@@ -174,14 +175,23 @@ export function ProjectBoard(props: ProjectBoardProps): unknown {
   const [view, setView] = useState<'projects' | 'sessions'>(() =>
     config.board.defaultView === 'projects' ? 'projects' : 'sessions'
   );
-  // React to an external request (e.g. a shortcut opening the board) to switch the view,
-  // even though the component stays mounted across open/close.
-  const viewRequestSeq = props.viewRequest ? props.viewRequest.seq : 0;
+  // Subscribe to an external view-request store. When the board is opened via a
+  // shortcut, requestBoardView() calls store.set() which produces a new snapshot and
+  // fires the subscriber — reliably re-rendering even though the component stays mounted.
+  const [viewReqSeq, setViewReqSeq] = useState(0);
+  useEffect(() => {
+    const store = props.viewRequestStore;
+    if (!store) return undefined;
+    setViewReqSeq(store.getSnapshot().seq);
+    return store.subscribe(() => setViewReqSeq(store.getSnapshot().seq));
+  }, [props.viewRequestStore]);
   useEffect(() => {
     // seq === 0 is the untouched initial value: do not override the configured default
     // view on mount. Only an actual open request (seq >= 1) forces the project view.
-    if (viewRequestSeq > 0 && props.viewRequest) setView(props.viewRequest.view);
-  }, [viewRequestSeq]);
+    if (viewReqSeq > 0 && props.viewRequestStore) {
+      setView(props.viewRequestStore.getSnapshot().view);
+    }
+  }, [viewReqSeq]);
   const [sessionSorts, setSessionSorts] = useState<SortEntry[]>([{ key: 'updatedAt', dir: 'desc' }]);
   const [projectSorts, setProjectSorts] = useState<SortEntry[]>([{ key: 'lastUpdated', dir: 'desc' }]);
   const sorts = view === 'sessions' ? sessionSorts : projectSorts;
