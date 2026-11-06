@@ -227,6 +227,21 @@ window.__ModuleLoader__.load({
     let userJumpLastAt = 0;
     let suppressHeaderClickUntil = 0;
 
+    /* The native frame's own view of the left sidebar: the first grid track (its column width)
+       plus the collapsed flag. Used to prove a toggle actually moved the layout. */
+    function sidebarSignature() {
+      try {
+        const frame = document.querySelector('[class*="_frame"][style*="grid-template-columns"]') || document.querySelector('[data-sidebar-collapsed]');
+        if (!frame) return null;
+        const template = (frame.style && frame.style.gridTemplateColumns) || '';
+        const first = parseFloat(template);
+        return {
+          track: Number.isFinite(first) ? Math.round(first) : null,
+          collapsed: frame.hasAttribute('data-sidebar-collapsed')
+        };
+      } catch (error) { return null; }
+    }
+
     function pointerViewX(event) {
       const screenX = typeof event.screenX === 'number' && event.screenX !== 0 ? event.screenX : event.clientX + window.screenX;
       return screenX - window.screenX;
@@ -4748,6 +4763,17 @@ window.__ModuleLoader__.load({
       };
       /** Expand or collapse DSH's own left sidebar (the session list column). */
       const toggleNativeLeftSidebar = () => {
+        /* A toggle that returns without changing the layout is the failure mode that looks like
+           "the key did nothing": the API ran, the store did not move. Compare the frame's own
+           signature before and after so the log can tell the two apart. */
+        const before = sidebarSignature();
+        const verify = () => {
+          const after = sidebarSignature();
+          const comparable = Boolean(before && after);
+          const changed = comparable && (before.collapsed !== after.collapsed || before.track !== after.track);
+          logEvent(comparable && !changed ? 'warn' : 'info', 'sidebar', !comparable ? 'unverified' : (changed ? 'applied' : 'no-change'), { before: before, after: after });
+        };
+        const settled = () => { window.setTimeout(verify, 260); return true; };
         const attempt = (path, run) => {
           try {
             const result = run();
@@ -4764,10 +4790,10 @@ window.__ModuleLoader__.load({
           try { return typeof ctx.get === 'function' ? ctx.get(name) : null; } catch (error) { return null; }
         };
         const layout = service('layout');
-        if (layout && typeof layout.toggleSidebar === 'function' && attempt('layout.toggleSidebar', () => layout.toggleSidebar())) return true;
-        if (layout && layout.panels && typeof layout.panels.toggleSidebar === 'function' && attempt('layout.panels.toggleSidebar', () => layout.panels.toggleSidebar())) return true;
+        if (layout && typeof layout.toggleSidebar === 'function' && attempt('layout.toggleSidebar', () => layout.toggleSidebar())) return settled();
+        if (layout && layout.panels && typeof layout.panels.toggleSidebar === 'function' && attempt('layout.panels.toggleSidebar', () => layout.panels.toggleSidebar())) return settled();
         const left = service('sidebarLeft');
-        if (left && typeof left.toggleExpanded === 'function' && attempt('sidebarLeft.toggleExpanded', () => left.toggleExpanded())) return true;
+        if (left && typeof left.toggleExpanded === 'function' && attempt('sidebarLeft.toggleExpanded', () => left.toggleExpanded())) return settled();
         logEvent('warn', 'sidebar', 'toggle-unavailable', { hasLayout: Boolean(layout) });
         return false;
       };
