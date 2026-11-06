@@ -285,6 +285,15 @@ export const CSS: string = [
       '.pbx-menuFoot{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-top:2px}',
       '.pbx-menuFootHint{font-size:11px;color:var(--dsw-alias-label-tertiary)}',
       '.pbx-toasts{position:fixed;top:calc(var(--dsh-windows-titlebar-height,0px) + 12px);left:50%;transform:translateX(-50%);z-index:1260;display:flex;flex-direction:column;align-items:center;gap:8px;pointer-events:none}',
+      /* macOS reserves 48px under the menu bar / window controls. The host publishes it as
+         --dsh-frame-top-clearance; fall back to 48px when the web UI does not set it.
+         The HUD keeps its 120px design position (already below the clearance) and only
+         follows a larger clearance; the toast stack and modal backdrops follow it fully. */
+      'html[data-pbx-platform="darwin"] .pbx-toasts{top:calc(var(--dsh-frame-top-clearance,48px) + 20px)}',
+      'html[data-pbx-platform="darwin"][data-fullscreen] .pbx-toasts{top:20px}',
+      'html[data-pbx-platform="darwin"] .pbx-hud.default{top:max(120px,calc(var(--dsh-frame-top-clearance,48px) + 20px))}',
+      'html[data-pbx-platform="darwin"] .pbx-paletteBackdrop{padding-top:max(12vh,calc(var(--dsh-frame-top-clearance,48px) + 20px))}',
+      'html[data-pbx-platform="darwin"] .pbx-renameBackdrop{padding-top:max(16vh,calc(var(--dsh-frame-top-clearance,48px) + 20px))}',
       '.pbx-toast{pointer-events:auto;display:flex;align-items:flex-start;gap:10px;min-width:260px;max-width:min(520px,calc(100vw - 32px));box-sizing:border-box;padding:10px 12px;background:var(--dsw-alias-bg-layer-2);border:1px solid var(--dsw-alias-border-l2);border-radius:var(--dsw-radius-md);box-shadow:0 12px 32px rgba(0,0,0,.28);animation:pbxToastIn var(--pbx-dur-small) var(--pbx-ease-decelerate) both}',
       '.pbx-toast[data-tone=warn]{border-color:color-mix(in srgb,var(--dsw-alias-state-warn-primary) 55%,var(--dsw-alias-border-l2))}',
       '.pbx-toastIcon{display:inline-flex;color:var(--dsw-alias-state-warn-primary);flex:none;padding-top:1px}',

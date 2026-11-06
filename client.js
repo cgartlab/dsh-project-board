@@ -1,4 +1,4 @@
-/*! @local/dsh-tac 0.3.0 — generated from src/ by scripts/build.mjs; do not edit */
+/*! @local/dsh-tac 0.3.1 — generated from src/ by scripts/build.mjs; do not edit */
 "use strict";
 (() => {
   // src/constants.ts
@@ -162,6 +162,19 @@
   }
 
   // src/core/combos.ts
+  var IS_MAC = (() => {
+    try {
+      const nav = window.navigator || {};
+      const platform = nav.userAgentData && nav.userAgentData.platform || nav.platform || "";
+      if (platform) return /mac/i.test(String(platform)) && !/iphone|ipad|ipod/i.test(String(platform));
+      const ua = nav.userAgent || "";
+      return /mac/i.test(ua) && !/iphone|ipad|ipod/i.test(ua);
+    } catch {
+      return false;
+    }
+  })();
+  var MODIFIER_LABELS = IS_MAC ? { ctrl: "⌃", meta: "⌘", alt: "⌥", shift: "⇧" } : { ctrl: "Ctrl", meta: "Meta", alt: "Alt", shift: "Shift" };
+  var MODIFIER_ORDER = ["ctrl", "alt", "shift", "meta"];
   function comboFromEvent(event) {
     const parts = [];
     if (event.ctrlKey) parts.push("ctrl");
@@ -185,7 +198,7 @@
     else if (code === "Space") label = "Space";
     else if (code === "ArrowUp") label = "↑";
     else if (code === "ArrowDown") label = "↓";
-    const mods = parts.map((part) => part === "ctrl" ? "Ctrl" : part === "meta" ? "Meta" : part === "alt" ? "Alt" : "Shift");
+    const mods = parts.slice().sort((left, right) => MODIFIER_ORDER.indexOf(left) - MODIFIER_ORDER.indexOf(right)).map((part) => MODIFIER_LABELS[part] || part);
     return mods.concat(label).join("+");
   }
   function comboHasModifier(combo) {
@@ -1340,6 +1353,15 @@
     ".pbx-menuFoot{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-top:2px}",
     ".pbx-menuFootHint{font-size:11px;color:var(--dsw-alias-label-tertiary)}",
     ".pbx-toasts{position:fixed;top:calc(var(--dsh-windows-titlebar-height,0px) + 12px);left:50%;transform:translateX(-50%);z-index:1260;display:flex;flex-direction:column;align-items:center;gap:8px;pointer-events:none}",
+    /* macOS reserves 48px under the menu bar / window controls. The host publishes it as
+       --dsh-frame-top-clearance; fall back to 48px when the web UI does not set it.
+       The HUD keeps its 120px design position (already below the clearance) and only
+       follows a larger clearance; the toast stack and modal backdrops follow it fully. */
+    'html[data-pbx-platform="darwin"] .pbx-toasts{top:calc(var(--dsh-frame-top-clearance,48px) + 20px)}',
+    'html[data-pbx-platform="darwin"][data-fullscreen] .pbx-toasts{top:20px}',
+    'html[data-pbx-platform="darwin"] .pbx-hud.default{top:max(120px,calc(var(--dsh-frame-top-clearance,48px) + 20px))}',
+    'html[data-pbx-platform="darwin"] .pbx-paletteBackdrop{padding-top:max(12vh,calc(var(--dsh-frame-top-clearance,48px) + 20px))}',
+    'html[data-pbx-platform="darwin"] .pbx-renameBackdrop{padding-top:max(16vh,calc(var(--dsh-frame-top-clearance,48px) + 20px))}',
     ".pbx-toast{pointer-events:auto;display:flex;align-items:flex-start;gap:10px;min-width:260px;max-width:min(520px,calc(100vw - 32px));box-sizing:border-box;padding:10px 12px;background:var(--dsw-alias-bg-layer-2);border:1px solid var(--dsw-alias-border-l2);border-radius:var(--dsw-radius-md);box-shadow:0 12px 32px rgba(0,0,0,.28);animation:pbxToastIn var(--pbx-dur-small) var(--pbx-ease-decelerate) both}",
     ".pbx-toast[data-tone=warn]{border-color:color-mix(in srgb,var(--dsw-alias-state-warn-primary) 55%,var(--dsw-alias-border-l2))}",
     ".pbx-toastIcon{display:inline-flex;color:var(--dsw-alias-state-warn-primary);flex:none;padding-top:1px}",
@@ -1499,13 +1521,13 @@
     "nav.board": "Board",
     "nav.openBoard": "Open project board",
     "nav.more": "More controls",
-    "nav.cycle": "Alt+I previous · Alt+, next",
+    "nav.cycle": "Previous / next session",
     "rightTab.title": "Project Board",
     "compact.full": "Open full screen",
     "palette.placeholder": "Search sessions or projects…",
     "palette.allProjects": "All projects",
     "palette.empty": "No matching sessions",
-    "palette.hint": "↑↓ or Alt+I / Alt+, select · Enter open · Alt+K/Esc close",
+    "palette.hint": "↑↓ or {prev} / {next} select · Enter open · {palette}/Esc close",
     "hud.title": "Active & recent",
     "hud.collapsed": "Active",
     "hud.running": "running",
@@ -1576,8 +1598,8 @@
     "menu.deleteUnavailable": "This DSH client does not expose session deletion yet. Use archive instead.",
     "menu.failed": "Failed: {message}",
     "menu.busy": "Working…",
-    "settings.shortcut.hint": "Click a keycap, then press the new combination; Ctrl / Alt / Meta is required; Esc cancels. Combinations that clash with built-in DSH commands are rejected with a notice.",
-    "settings.shortcutNeedModifier": "A shortcut must include Ctrl, Alt, or Meta; bare keys are not allowed.",
+    "settings.shortcut.hint": "Click a keycap, then press the new combination; Ctrl / Option (⌥; Alt on Windows) / Command (⌘; Meta on Windows) is required; Esc cancels. Combinations that clash with built-in DSH commands are rejected with a notice.",
+    "settings.shortcutNeedModifier": "A shortcut must include Ctrl / Option (⌥) / Command (⌘); bare keys are not allowed.",
     "settings.shortcutConflict": "That combination is already used by another action.",
     "settings.shortcutResetHint": "Click to record, double-click to reset",
     "settings.recording": "Press keys…",
@@ -1742,14 +1764,14 @@
     "nav.noSession": "未选择会话",
     "nav.board": "看板",
     "nav.openBoard": "打开项目看板",
-    "nav.cycle": "Alt+I 上一个 · Alt+, 下一个",
+    "nav.cycle": "上一个 / 下一个会话",
     "nav.more": "更多操作",
     "rightTab.title": "项目看板",
     "compact.full": "全屏打开",
     "palette.placeholder": "搜索会话或项目…",
     "palette.allProjects": "全部项目",
     "palette.empty": "没有匹配的会话",
-    "palette.hint": "↑↓ / Alt+I / Alt+, 选择 · Enter 打开 · Alt+K/Esc 关闭",
+    "palette.hint": "↑↓ / {prev} / {next} 选择 · Enter 打开 · {palette}/Esc 关闭",
     "hud.title": "活跃与最近会话",
     "hud.collapsed": "活跃",
     "hud.running": "进行中",
@@ -1820,14 +1842,14 @@
     "menu.deleteUnavailable": "当前 DSH 客户端未开放会话删除接口，请使用归档。",
     "menu.failed": "操作失败：{message}",
     "menu.busy": "处理中…",
-    "settings.shortcut.hint": "点击键帽后按下新的组合键；必须包含 Ctrl / Alt / Meta，Esc 取消。与 DSH 内置命令冲突时会拒绝录制并弹出提示。",
-    "settings.shortcutNeedModifier": "快捷键必须包含 Ctrl、Alt 或 Meta，不能使用裸键。",
+    "settings.shortcut.hint": "点击键帽后按下新的组合键；必须包含 Ctrl / Option（⌥，Windows 为 Alt）/ Command（⌘，Windows 为 Meta），Esc 取消。与 DSH 内置命令冲突时会拒绝录制并弹出提示。",
+    "settings.shortcutNeedModifier": "快捷键必须包含 Ctrl / Option（⌥，Windows 为 Alt）/ Command（⌘，Windows 为 Meta），不能使用裸键。",
     "settings.shortcutConflict": "该组合键已被其他功能占用，请换一个。",
     "settings.shortcutResetHint": "点击录制，双击恢复默认",
     "settings.recording": "按下按键…",
     "settings.behavior": "界面与行为",
     "settings.paletteEnabled": "启用命令面板",
-    "settings.paletteEnabledDesc": "Alt+K 等快捷键与搜索面板",
+    "settings.paletteEnabledDesc": "搜索面板与快捷键",
     "settings.capsuleEnabled": "启用顶部状态胶囊",
     "settings.capsuleEnabledDesc": "标题栏显示运行中/待处理数量",
     "settings.headerButtons": "顶部功能按钮",
@@ -3268,14 +3290,14 @@
         {
           type: "button",
           className: "pbx-navSwitch" + (open ? " active" : ""),
-          title: t("nav.switch") + " (" + (comboDisplay(config.shortcuts.palette) || "Alt+K") + ")" + (title ? " · " + title : ""),
+          title: t("nav.switch") + " (" + comboDisplay(config.shortcuts.palette || DEFAULT_SETTINGS.shortcuts.palette) + ")" + (title ? " · " + title : ""),
           onClick: () => {
             if (palette) palette.set({ open: true });
           }
         },
         h(Icon, { name: "search", size: 14 }),
         h("span", { className: "pbx-navTitle" }, t("nav.switchLabel")),
-        h("kbd", { className: "pbx-kbd" }, comboDisplay(config.shortcuts.palette) || "Alt+K")
+        h("kbd", { className: "pbx-kbd" }, comboDisplay(config.shortcuts.palette || DEFAULT_SETTINGS.shortcuts.palette))
       ) : null,
       historyNav: h(
         "div",
@@ -3895,7 +3917,11 @@
             )
           )
         ),
-        h("div", { className: "pbx-paletteFoot" }, t("palette.hint"))
+        h("div", { className: "pbx-paletteFoot" }, t("palette.hint", {
+          prev: comboDisplay(config.shortcuts.prev),
+          next: comboDisplay(config.shortcuts.next),
+          palette: comboDisplay(config.shortcuts.palette)
+        }))
       )
     );
   }
@@ -5833,6 +5859,13 @@
   var INJECT = ["slots", "locale", "uiWorkspace", "remote", "remote.session", "remote.schedule", "remote.agentPresets", "sidebarRight", "sidebarRightTabs", "layout"];
   function apply(ctx) {
     ctx.effect(() => ctx.locale.register(NS, { zh, en }), "project-board: dictionaries");
+    ctx.effect(() => {
+      const root = document.documentElement;
+      root.setAttribute("data-pbx-platform", IS_MAC ? "darwin" : "other");
+      return () => {
+        root.removeAttribute("data-pbx-platform");
+      };
+    }, "project-board: platform marker");
     ctx.effect(() => {
       const tag = document.createElement("style");
       tag.dataset.plugin = "@dsh-tac";

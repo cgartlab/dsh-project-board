@@ -22,8 +22,8 @@ function createElementStub() {
     textContent: '',
     style: {},
     dataset: {},
-    setAttribute() {},
-    removeAttribute() {},
+    setAttribute(name, value) { (this._attrs || (this._attrs = {}))[name] = value; },
+    removeAttribute(name) { if (this._attrs) delete this._attrs[name]; },
     appendChild() {},
     remove() {},
     addEventListener() {},
@@ -64,7 +64,7 @@ function createReactStub() {
   };
 }
 
-function loadModule() {
+function loadModule(platform = 'test') {
   let captured = null;
   const localStorage = createLocalStorage();
   const document = createDocumentStub();
@@ -74,7 +74,7 @@ function loadModule() {
     innerWidth: 1440,
     innerHeight: 900,
     devicePixelRatio: 1,
-    navigator: { platform: 'test' },
+    navigator: { platform },
     matchMedia: () => ({ matches: false, addEventListener() {}, removeEventListener() {} }),
     addEventListener() {},
     removeEventListener() {},
@@ -166,4 +166,33 @@ test('zh and en dictionaries expose the same keys', () => {
   const zh = Object.keys(translations.projectBoard.zh).sort();
   const en = Object.keys(translations.projectBoard.en).sort();
   assert.deepEqual(zh, en);
+});
+
+test('the plugin marks the platform itself (Electron injects it only in the native window)', () => {
+  const mac = loadModule('MacIntel');
+  const macCtx = createContext(mac.window, mac.document).ctx;
+  mac.module.apply(macCtx);
+  assert.equal(mac.document.documentElement._attrs['data-pbx-platform'], 'darwin');
+
+  const win = loadModule('Win32');
+  const winCtx = createContext(win.window, win.document).ctx;
+  win.module.apply(winCtx);
+  assert.equal(win.document.documentElement._attrs['data-pbx-platform'], 'other');
+});
+
+test('built bundle carries macOS labels, clearance rules and platform-neutral bindings', () => {
+  // The checks read client.js (the build artifact) so a src/ edit without `npm run build` fails here.
+  const built = fs.readFileSync(path.join(root, 'client.js'), 'utf8');
+  assert.match(built, /data-pbx-platform/);
+  assert.match(built, /⌥/);
+  assert.match(built, /--dsh-frame-top-clearance,48px/);
+  assert.match(built, /\[data-fullscreen\] \.pbx-toasts\{top:20px\}/);
+  assert.match(built, /html\[data-pbx-platform="darwin"\] \.pbx-hud\.default/);
+  // Saved shortcuts keep the platform-neutral "alt" (the physical Option key).
+  assert.match(built, /alt\+KeyK/);
+  assert.match(built, /event\.altKey/);
+  // The palette hint is rendered from the live combos, not a hard-coded Alt+ string.
+  assert.match(built, /\{prev\}/);
+  assert.match(built, /\{palette\}/);
+  assert.doesNotMatch(built, /Alt\+K\/Esc close/);
 });

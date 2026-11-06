@@ -22,13 +22,13 @@ reading, and desktop-class task notifications.
   automation markers, drag-to-move, and an animated pill ⇄ list collapse; while the native
   left sidebar is open it tucks into the bottom-right corner and returns when that closes. One stable order:
   active sessions first, most recent activity first within a group; switching sessions
-  highlights the new row without reshuffling the list, and `Alt+I` / `Alt+,` cycle in
+  highlights the new row without reshuffling the list, and `⌥+I` / `⌥+,` cycle in
   exactly that order.
 - **Search palette** — fuzzy session search, project scoping, keyboard navigation and
   jump-to-session.
 - **Hold-to-scroll reading** — the conversation scrolls smoothly while the key is held,
   loads older history automatically before reaching the boundary, and falls back to anchor
-  stepping if the chat view reverts a position write. Holding `Alt+M` down to the end
+  stepping if the chat view reverts a position write. Holding `⌥+M` down to the end
   activates the composer so a reply can be typed immediately.
 - **Task notifications** — a session finishing a turn, waiting for an answer, or asking
   for permission raises an in-app card at the bottom-right of the conversation with a
@@ -43,17 +43,21 @@ reading, and desktop-class task notifications.
 
 Every shortcut is configurable in **Settings → 项目看板设置**. Defaults:
 
+On macOS these use `⌥` (Option), `⌃` (Control), `⇧` (Shift) and `⌘` (Command); `⌥` is the
+physical Option key. On Windows and Linux the same combinations are shown as `Alt+…` /
+`Meta+…`. Stored bindings stay platform-neutral, so saved shortcuts need no migration.
+
 | Shortcut | Action |
 | --- | --- |
-| `Alt+K` | Open / close session search — inside, `Alt+I` / `Alt+,` / `↑` / `↓` move the selection, `Enter` opens it |
-| `Alt+I` / `Alt+,` | Previous / next session |
-| `Alt+U` / `Alt+M` | Previous / next user instruction (tap to jump, hold to scroll) |
-| `Alt+S` | Scroll to bottom and focus the composer |
-| `Alt+D` | Session actions dialog (archive, cancel a running turn, delete where supported) |
-| `Alt+N` / `Alt+B` / `Alt+V` | Board at narrow / medium / fullscreen; same key closes |
-| `Alt+R` | Rename the current session |
-| `Alt+E` | Collapse / expand the floating session list |
-| `Alt+Enter` | Steer the earliest queued message into the running turn |
+| `⌥+K` | Open / close session search — inside, `⌥+I` / `⌥+,` / `↑` / `↓` move the selection, `Enter` opens it |
+| `⌥+I` / `⌥+,` | Previous / next session |
+| `⌥+U` / `⌥+M` | Previous / next user instruction (tap to jump, hold to scroll) |
+| `⌥+S` | Scroll to bottom and focus the composer |
+| `⌥+D` | Session actions dialog (archive, cancel a running turn, delete where supported) |
+| `⌥+N` / `⌥+B` / `⌥+V` | Board at narrow / medium / fullscreen; same key closes |
+| `⌥+R` | Rename the current session |
+| `⌥+E` | Collapse / expand the floating session list |
+| `⌥+Enter` | Steer the earliest queued message into the running turn |
 
 ## Requirements
 
