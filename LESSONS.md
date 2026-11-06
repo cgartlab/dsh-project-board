@@ -17,6 +17,7 @@
 - 失误：0.3.0 之前 `client.js` 既是源码又是产物，手改能"生效"，重构时无从下手 → 规则：只改 `src/`；`client.js` / `index.js` 由 `npm run build` 生成，手改必被覆盖（0.3.0）
 - 失误：两个测试文件都 `readFileSync('client.js')`，只跑 `npm test` 验证的是**上一次构建**的结果 —— 改完源码不 build 就等于没验证 → 规则：验证顺序固定为 `build` → `test`；提交前跑 `npm run check`（它会校验产物与源码一致）
 - 失误：产物 banner 里带 `package.json` 的 version，只改版本号不重建，产物版本与实际不符 → 规则：改版本必须 `npm run build` 并把产物一起提交；CI 用 `git diff --exit-code client.js index.js` 断言两者一致（0.3.0）
+- 失误：0.3.0 TypeScript 重写后，之前直接改 `client.js` 的 macOS 适配随旧产物一起失效；若把那个旧提交 rebase 到重写后的 main，改动仍落在生成文件里、下次 build 被覆盖且 CI 报产物不一致 → 规则：同步上游重写后，把改动重新落到 `src/` 的对应模块（combos / styles / i18n / apply / features）再 `npm run build`，不 rebase 改产物的提交（0.3.1）
 
 ## 构建与检查脚本
 

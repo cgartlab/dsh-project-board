@@ -9,7 +9,7 @@ import { logConfigNow, logEvent, setLogConfigGetter, setLogSink } from './core/l
 import { mergeSettings, loadSettings, persistSettings } from './core/settings';
 import { createPresetSource, createScheduleSource, type ObservableSnapshot, type PresetSnapshot, type ScheduleSnapshot } from './core/schedule';
 import { createUiStore } from './core/store';
-import { bindingsOverlap, comboBindingOf, comboDisplay } from './core/combos';
+import { bindingsOverlap, comboBindingOf, comboDisplay, IS_MAC } from './core/combos';
 import { sidebarSignature } from './core/dom';
 import { moveCaretToEnd } from './features/interject';
 import { installChatScrollListeners } from './features/chat-scroll';
@@ -45,6 +45,16 @@ interface CatalogRow {
 
 export function apply(ctx: HostContext): void {
   ctx.effect(() => ctx.locale.register(NS, { zh: zh as unknown as Record<string, string>, en }), 'project-board: dictionaries');
+  /* Electron injects data-platform only in the native window; mark it ourselves so
+     fixed-position UI honours the macOS menu bar / window-control clearance in
+     both the desktop app and the web UI. */
+  ctx.effect(() => {
+    const root = document.documentElement;
+    root.setAttribute('data-pbx-platform', IS_MAC ? 'darwin' : 'other');
+    return () => {
+      root.removeAttribute('data-pbx-platform');
+    };
+  }, 'project-board: platform marker');
   ctx.effect(() => {
     const tag = document.createElement('style');
     tag.dataset.plugin = '@dsh-tac';

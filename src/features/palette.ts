@@ -6,7 +6,7 @@ import { DEFAULT_SETTINGS } from '../constants';
 import type { Translate, UseHook } from '../host';
 import { h, useEffect, useRef, useState } from '../runtime';
 import type { Settings } from '../types';
-import { comboFromEvent, comboHasModifier, isComposingEvent, matchCombo, type KeyEventLike } from '../core/combos';
+import { comboDisplay, comboFromEvent, comboHasModifier, isComposingEvent, matchCombo, type KeyEventLike } from '../core/combos';
 import { hasBlockingDialog } from '../core/dom';
 import { logEvent } from '../core/log';
 import { fallbackHook } from '../core/schedule';
@@ -568,7 +568,11 @@ export function Palette(props: PaletteProps): unknown {
               )
             )
       ),
-      h('div', { className: 'pbx-paletteFoot' }, t('palette.hint'))
+      h('div', { className: 'pbx-paletteFoot' }, t('palette.hint', {
+        prev: comboDisplay(config.shortcuts.prev),
+        next: comboDisplay(config.shortcuts.next),
+        palette: comboDisplay(config.shortcuts.palette)
+      }))
     )
   );
 }

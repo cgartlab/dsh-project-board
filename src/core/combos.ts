@@ -3,6 +3,28 @@
  * modifier flags, so shortcuts survive layouts and IME state.
  */
 
+/** macOS shows Option (⌥) / Control (⌃) / Shift (⇧) / Command (⌘) in shortcut UI.
+ *  Stored bindings stay platform-neutral: the physical Option key reports `altKey`, and
+ *  the host shortcut catalog uses "alt" on every platform. */
+export const IS_MAC = (() => {
+  try {
+    const nav = (window.navigator || ({} as Navigator)) as Navigator & { userAgentData?: { platform?: string } };
+    const platform = (nav.userAgentData && nav.userAgentData.platform) || nav.platform || '';
+    if (platform) return /mac/i.test(String(platform)) && !/iphone|ipad|ipod/i.test(String(platform));
+    const ua = nav.userAgent || '';
+    return /mac/i.test(ua) && !/iphone|ipad|ipod/i.test(ua);
+  } catch {
+    return false;
+  }
+})();
+
+const MODIFIER_LABELS: Record<string, string> = IS_MAC
+  ? { ctrl: '⌃', meta: '⌘', alt: '⌥', shift: '⇧' }
+  : { ctrl: 'Ctrl', meta: 'Meta', alt: 'Alt', shift: 'Shift' };
+
+/** The host renders modifiers control → alt → shift → meta; show the same canonical order. */
+const MODIFIER_ORDER = ['ctrl', 'alt', 'shift', 'meta'];
+
 /** Structural event shape: native KeyboardEvent, React synthetic event and the test shim all fit. */
 export interface KeyEventLike {
   ctrlKey?: boolean;
@@ -47,7 +69,10 @@ export function comboDisplay(combo: string | undefined): string {
   else if (code === 'Space') label = 'Space';
   else if (code === 'ArrowUp') label = '↑';
   else if (code === 'ArrowDown') label = '↓';
-  const mods: string[] = parts.map((part) => (part === 'ctrl' ? 'Ctrl' : part === 'meta' ? 'Meta' : part === 'alt' ? 'Alt' : 'Shift'));
+  const mods: string[] = parts
+    .slice()
+    .sort((left, right) => MODIFIER_ORDER.indexOf(left) - MODIFIER_ORDER.indexOf(right))
+    .map((part) => MODIFIER_LABELS[part] || part);
   return mods.concat(label).join('+');
 }
 
