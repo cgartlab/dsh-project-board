@@ -4901,7 +4901,7 @@
         observer.observe(column);
       }
       if (column && typeof MutationObserver !== "undefined") {
-        mutationObserver = new MutationObserver(schedule);
+        mutationObserver = new MutationObserver(() => apply2());
         mutationObserver.observe(column, { childList: true, subtree: true });
       }
       return () => {
