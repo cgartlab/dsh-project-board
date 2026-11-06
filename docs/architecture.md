@@ -5,6 +5,25 @@
 (`index.js`) is intentionally a no-op; everything runs in the browser client through the
 harness client module loader.
 
+The plugin is written in TypeScript under `src/`; `client.js` and `index.js` are generated
+by `scripts/build.mjs` (esbuild) and must not be edited by hand.
+
+## Source layout
+
+| Path | Responsibility |
+| --- | --- |
+| `src/index.ts` | loader entry: binds the host React, calls `apply` |
+| `src/apply.ts` | dictionaries, styles, stores, native board/sidebar actions, slot wiring |
+| `src/runtime.ts` | the host React binding (`h`, hooks) — the bundle never imports React |
+| `src/host.ts` | typed host contract (`HostContext` and the services it exposes) |
+| `src/constants.ts` | plugin id, storage keys, default settings |
+| `src/types.ts` | domain types (settings, log entries, stores) |
+| `src/core/` | settings + migration, logging, combos, stores, DOM probes, schedule/preset sources |
+| `src/i18n/` | zh/en dictionaries; `en` is typed against `zh` so parity is a compile error |
+| `src/styles.ts` | every CSS rule, injected once into a `<style>` tag |
+| `src/ui/` | icon geometry/components, project appearance helpers |
+| `src/features/` | board, HUD, palette + shortcut dispatcher, notifications, dialogs, settings page, chat scrolling |
+
 ## Entry points
 
 ```js

@@ -93,6 +93,8 @@ export interface Settings {
   hintsVersion: number;
   shortcutsVersion: number;
   headerButtonsVersion: number;
+  /** Migration marker for the project-first board view. */
+  boardProjVersion?: number;
   headerButtons: Record<string, HeaderButtonSetting>;
   hud: HudSettings;
   notify: NotifySettings;

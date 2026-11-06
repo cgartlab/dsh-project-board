@@ -1,2 +1,8 @@
-/** Host half of the dsh-tac bundle; the Client module owns all rendering. */
-export function apply() {}
+/*! @local/dsh-tac 0.3.0 — generated from src/ by scripts/build.mjs; do not edit */
+
+// src/host-entry.ts
+function apply() {
+}
+export {
+  apply
+};

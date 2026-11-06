@@ -10,6 +10,15 @@
 
 - 暂无
 
+## [0.3.0] - 2026-11-06
+
+- **插件改用 TypeScript 重写，功能没有减少**：源码拆成 `src/` 下的模块（设置与迁移、日志、组合键、看板、悬浮列表、搜索面板与快捷键分发、通知、弹窗、设置页、对话滚动），由 esbuild 打包成 `client.js`；`index.js`（宿主侧 no-op）也改为生成。
+- 对使用者没有行为变化：界面、快捷键、内置命令冲突检查、设置与悬浮窗状态的存储键都保持原样；13 条既有测试在**新产物**上全部通过。
+- 仓库结构变了：**改代码请改 `src/`，然后 `npm run build`**；`client.js`、`index.js` 是构建产物，不要手改。
+- 工具链：新增 `typescript` + `esbuild`（devDependencies）与 `npm run typecheck` / `build` / `check`；CI 会先 `npm ci`、跑类型检查、重新构建，并校验提交的产物与源码一致。
+- i18n 检查改为读 `src/i18n/` 的字典，并额外校验**构建产物里确实包含全部 240 个键**；`en` 字典现在按 `zh` 的键做类型约束，缺键或多键直接编译失败。
+- 文档同步：README（中/英）的「实现方式 / 开发」、CONTRIBUTING、`docs/architecture.md` 都改成 TypeScript 源码 + 构建产物的说明，新增 `docs/ts-rewrite.md` 记录重写的设计与验收。
+
 ## [0.2.5] - 2026-11-06
 
 - 启动诊断信息补全：`plugin ready` 现在一并记下**当前生效的 `Alt+W` 组合**、窗口宽度、原生框架宽度，以及启动瞬间的侧栏状态。窗口宽度决定侧栏是"整列 / 图标栏 / 抽屉"三种形态中的哪一种，`Alt+W` 的问题往往只发生在其中一种里；组合被改过也能一眼看出来。
@@ -235,6 +244,7 @@
 [0.2.3]: https://github.com/cgartlab/dsh-tac/releases/tag/v0.2.3
 [0.2.4]: https://github.com/cgartlab/dsh-tac/releases/tag/v0.2.4
 [0.2.5]: https://github.com/cgartlab/dsh-tac/releases/tag/v0.2.5
+[0.3.0]: https://github.com/cgartlab/dsh-tac/releases/tag/v0.3.0
 
 
 

@@ -66,15 +66,20 @@ plugin_manager install_bundle target="<本仓库路径>"
 
 ## 实现方式
 
-插件是一个客户端 bundle（`client.js`），通过 Harness 客户端模块加载器加载，只使用公开客户端能力
-（`ctx.slots`、`ctx.sidebarRight`、`ctx.layout`、`ctx.get('workspaces')`、会话状态 store）
-以及宿主提供的 React，自身没有运行时依赖；宿主侧 `index.js` 刻意保持 no-op。
+插件用 **TypeScript** 写在 `src/` 下，由 esbuild 编译成单文件客户端 bundle（`client.js`）。
+bundle 通过 Harness 客户端模块加载器加载，只使用公开客户端能力（`ctx.slots`、
+`ctx.sidebarRight`、`ctx.layout`、`ctx.get('workspaces')`、会话状态 store）以及宿主提供的
+React，自身没有运行时依赖；宿主侧 `index.js` 刻意保持 no-op。
 
-- `client.js` —— 全部界面：看板、HUD、搜索面板、快捷键、通知、设置页
-- `index.js` —— 宿主侧（no-op）
+- `src/index.ts` —— Harness 注入的入口：绑定宿主 React、调用 `apply`
+- `src/apply.ts` —— 字典、样式、store、原生看板/侧栏动作、插槽注册
+- `src/features/` —— 看板、悬浮列表、搜索面板（含快捷键分发）、通知、弹窗、设置页、对话滚动
+- `src/core/` —— 设置与迁移、日志、组合键、store、DOM 探测、自动化/模式数据源
+- `src/i18n/` —— zh/en 字典（键不一致会直接编译失败）
+- `client.js`、`index.js` —— 构建产物（不要手改）
 - `cordis.patch.yml` —— bundle 插入声明
 - `locale/` —— zh/en 尾部字符串
-- `scripts/` —— 本地与 CI 使用的清单、语法、i18n 检查
+- `scripts/` —— 构建脚本 + 本地与 CI 使用的清单、语法、i18n 检查
 - `docs/architecture.md` —— 插槽映射、状态、键盘与通知内部实现
 
 ## 已知限制
@@ -88,11 +93,14 @@ plugin_manager install_bundle target="<本仓库路径>"
 ## 开发
 
 ```bash
-node scripts/check-bundle.cjs   # 清单、exports、语法
-node scripts/check-i18n.cjs     # zh/en 字典一致性（含间接引用键）
-node --test test/load.test.cjs  # bundle 在打桩宿主服务下加载并挂载
+npm ci                 # 安装 typescript + esbuild
+npm run typecheck      # tsc --noEmit（strict）
+npm run build          # src/ -> client.js + index.js
+npm run check          # 类型检查 + 清单/exports/语法 + i18n 一致性
+npm test               # bundle 加载测试 + 快捷键回归
 ```
 
+`client.js`、`index.js` 都是由 `src/` 生成的；CI 会重新构建，若提交的产物与源码不一致就失败。
 这些检查都会在每次推送和 PR 时由 CI 执行（`.github/workflows/check.yml`）。
 
 ## 协议

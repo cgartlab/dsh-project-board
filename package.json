@@ -1,6 +1,6 @@
 {
   "name": "@local/dsh-tac",
-  "version": "0.2.5",
+  "version": "0.3.0",
   "private": true,
   "description": "DeepSeek Harness plugin: project/session task board, floating session HUD, keyboard-first navigation, and task notifications.",
   "license": "CC-BY-NC-SA-4.0",
@@ -23,7 +23,7 @@
   "scripts": {
     "build": "node scripts/build.mjs",
     "typecheck": "tsc --noEmit",
-    "check": "node scripts/check-bundle.cjs && node scripts/check-i18n.cjs",
+    "check": "tsc --noEmit && node scripts/check-bundle.cjs && node scripts/check-i18n.cjs",
     "check:bundle": "node scripts/check-bundle.cjs",
     "check:i18n": "node scripts/check-i18n.cjs",
     "test": "node --test test/load.test.cjs test/shortcuts.test.cjs"

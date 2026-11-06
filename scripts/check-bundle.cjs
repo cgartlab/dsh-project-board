@@ -62,16 +62,28 @@ if (!checkFile('cordis.patch.yml')) fail('missing cordis.patch.yml');
 if (!checkFile('LICENSE')) fail('missing LICENSE');
 
 // The package name is the plugin's identity in three places at once: package.json,
-// the client module loader id, and the loader entry inside cordis.patch.yml. Renaming
-// the repository is only finished when all three agree, so check the drift here.
+// the client module id in src/constants.ts, and the loader entry inside cordis.patch.yml.
+// client.js is generated from src/ by scripts/build.mjs, so the id there is a variable —
+// check the source it comes from and prove the built bundle embeds the same name.
 if (pkg && pkg.name && checkFile('client.js')) {
   const clientSource = fs.readFileSync(path.join(root, 'client.js'), 'utf8');
-  const loaderId = /__ModuleLoader__\.load\(\{\s*id:\s*'([^']+)'/.exec(clientSource);
-  if (!loaderId) fail('client.js: cannot read the module loader id');
-  else if (loaderId[1] !== pkg.name) fail('client.js module id "' + loaderId[1] + '" does not match package.json name "' + pkg.name + '"');
-  for (const match of clientSource.matchAll(/'(@local\/[^']+)'/g)) {
-    if (!match[1].startsWith(pkg.name)) fail('client.js still references the old package id "' + match[1] + '"');
+  const constantsPath = path.join(root, 'src', 'constants.ts');
+  if (!fs.existsSync(constantsPath)) fail('missing src/constants.ts');
+  else {
+    const constants = fs.readFileSync(constantsPath, 'utf8');
+    const moduleId = /export const MODULE_ID = '([^']+)'/.exec(constants);
+    if (!moduleId) fail('src/constants.ts: cannot read MODULE_ID');
+    else if (moduleId[1] !== pkg.name) fail('src/constants.ts MODULE_ID "' + moduleId[1] + '" does not match package.json name "' + pkg.name + '"');
   }
+  if (!clientSource.includes('__ModuleLoader__')) fail('client.js does not call window.__ModuleLoader__');
+  if (!clientSource.includes('"' + pkg.name + '"') && !clientSource.includes("'" + pkg.name + "'")) {
+    fail('client.js does not embed the package name "' + pkg.name + '" — rebuild with `npm run build`');
+  }
+  const staleIds = new Set();
+  for (const match of clientSource.matchAll(/"(@local\/[^"]+)"/g)) {
+    if (!match[1].startsWith(pkg.name)) staleIds.add(match[1]);
+  }
+  for (const stale of staleIds) fail('client.js still references the old package id "' + stale + '"');
   const patchPath = path.join(root, 'cordis.patch.yml');
   if (fs.existsSync(patchPath)) {
     const patch = fs.readFileSync(patchPath, 'utf8');

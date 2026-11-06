@@ -76,16 +76,21 @@ The package is `@local/dsh-tac` and inserts itself as the `dsh-tac` loader entry
 
 ## How it is built
 
-The plugin is a single client bundle (`client.js`) loaded through the harness client module
-loader, using only public client services (`ctx.slot`, `ctx.sidebarRight`, `ctx.layout`,
-`ctx.get('workspaces')`, session status stores) and React from the host. It ships with no
+The plugin is written in **TypeScript** under `src/` and compiled into a single client bundle
+(`client.js`) by esbuild. The bundle is loaded through the harness client module loader, uses
+only public client services (`ctx.slots`, `ctx.sidebarRight`, `ctx.layout`,
+`ctx.get('workspaces')`, session status stores) and takes React from the host. It ships with no
 runtime dependencies of its own; host-half `index.js` is intentionally a no-op.
 
-- `client.js` — all UI: board, HUD, palette, shortcuts, notifications, settings page
-- `index.js` — host half (no-op)
+- `src/index.ts` — entry the harness injects; binds the host React and calls `apply`
+- `src/apply.ts` — dictionaries, styles, stores, native board/sidebar actions, slot wiring
+- `src/features/` — board, floating list, palette + shortcut dispatcher, notifications, dialogs, settings page, chat scrolling
+- `src/core/` — settings/migration, logging, combos, stores, DOM probes, schedule + preset sources
+- `src/i18n/` — zh/en dictionaries (key parity is a compile-time error)
+- `client.js`, `index.js` — generated artifacts (never edit by hand)
 - `cordis.patch.yml` — bundle insertion
 - `locale/` — zh/en trailer strings
-- `scripts/` — manifest, syntax and i18n checks used locally and in CI
+- `scripts/` — build plus manifest, syntax and i18n checks used locally and in CI
 - `docs/architecture.md` — slot map, state, keyboard and notification internals
 
 ## Known limitations
@@ -103,12 +108,16 @@ runtime dependencies of its own; host-half `index.js` is intentionally a no-op.
 ## Development
 
 ```bash
-node scripts/check-bundle.cjs   # manifest, exports, syntax
-node scripts/check-i18n.cjs     # zh/en dictionary parity (direct and indirect keys)
-node --test test/load.test.cjs  # bundle loads and mounts against stubbed host services
+npm ci                          # toolchain: typescript + esbuild
+npm run typecheck               # tsc --noEmit (strict)
+npm run build                   # src/ -> client.js + index.js
+npm run check                   # typecheck, manifest/exports/syntax, i18n parity
+npm test                        # bundle + shortcut regression suite
 ```
 
-All of them run in CI on every push and pull request (`.github/workflows/check.yml`).
+`client.js` and `index.js` are generated; CI rebuilds them and fails if the committed
+artifacts differ from `src/`. All checks run on every push and pull request
+(`.github/workflows/check.yml`).
 
 ## License
 
