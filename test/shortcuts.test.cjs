@@ -65,10 +65,18 @@ function compoundMatches(node, compound) {
       if (!node.hasAttribute(inner)) return false;
       continue;
     }
-    const name = inner.slice(0, eq).trim();
+    let name = inner.slice(0, eq).trim();
     let value = inner.slice(eq + 1).trim();
     if ((value[0] === '"' && value[value.length - 1] === '"') || (value[0] === "'" && value[value.length - 1] === "'")) value = value.slice(1, -1);
-    if (node.getAttribute(name) !== value) return false;
+    let operator = '=';
+    const marker = name[name.length - 1];
+    if (marker === '*' || marker === '^' || marker === '$') { operator = marker; name = name.slice(0, -1).trim(); }
+    const actual = node.getAttribute(name);
+    if (actual === null) return false;
+    if (operator === '=' && actual !== value) return false;
+    if (operator === '*' && actual.indexOf(value) < 0) return false;
+    if (operator === '^' && actual.indexOf(value) !== 0) return false;
+    if (operator === '$' && actual.slice(-value.length) !== value) return false;
   }
   return true;
 }
@@ -509,6 +517,8 @@ function createLocalStorage() {
 
 function createWindowStub(doc, localStorage) {
   const timers = [];
+  const intervals = [];
+  const frames = [];
   const dispatched = [];
   const listenerMap = new Map();
   let idSeq = 0;
@@ -549,17 +559,27 @@ function createWindowStub(doc, localStorage) {
       const timer = timers.find((entry) => entry.id === id);
       if (timer) timer.cleared = true;
     },
-    setInterval() {
+    setInterval(fn, delay) {
       idSeq += 1;
+      intervals.push({ id: idSeq, fn, delay, cleared: false });
       return idSeq;
     },
-    clearInterval() {},
-    requestAnimationFrame() {
+    clearInterval(id) {
+      const timer = intervals.find((entry) => entry.id === id);
+      if (timer) timer.cleared = true;
+    },
+    requestAnimationFrame(fn) {
       idSeq += 1;
+      frames.push({ id: idSeq, fn });
       return idSeq;
     },
-    cancelAnimationFrame() {},
+    cancelAnimationFrame(id) {
+      const index = frames.findIndex((entry) => entry.id === id);
+      if (index >= 0) frames.splice(index, 1);
+    },
     __timers: timers,
+    __intervals: intervals,
+    __frames: frames,
     __dispatched: dispatched
   };
 
@@ -809,6 +829,7 @@ function createHarness() {
     module,
     ctx,
     registrations,
+    runtime,
     doc,
     window: win,
     paletteStore,
@@ -817,6 +838,19 @@ function createHarness() {
     spies,
     instance,
     render,
+    mountHud() {
+      const entry = registrations.find((item) => item.spec.id === 'project-board-hud');
+      assert.ok(entry, 'the floating session list overlay is registered');
+      const hud = runtime.mount(entry.component, Object.assign({}, props, entry.spec.inject()), () => {});
+      hud.render();
+      return hud;
+    },
+    runIntervals() {
+      for (const timer of win.__intervals.slice()) if (!timer.cleared) timer.fn();
+    },
+    runTimers() {
+      for (const timer of win.__timers.slice()) if (!timer.cleared) timer.fn();
+    },
     pressRaw,
     pressCombo,
     resetState,
@@ -974,6 +1008,90 @@ test('the native sidebar drawer does not block the shortcut that closes it', () 
   assert.deepEqual(harness.spies.toggleBoard, ['narrow'], 'Alt+N still toggles the board while the sidebar drawer is open');
 
   harness.doc.__removeRoot(drawer);
+});
+
+test('the floating list docks and comes back with the native sidebar on the same frame', () => {
+  const harness = createHarness();
+  harness.resetState();
+  harness.clearSpies();
+
+  // The native frame publishes the layout's *target* state: an inline grid template whose first
+  // track is the sidebar column, plus a collapsed attribute. Neither waits for the width animation.
+  const closed = 'grid-template-columns: 0px minmax(400px, 1fr) minmax(0px, 800px)';
+  const opened = 'grid-template-columns: 280px minmax(400px, 1fr) minmax(0px, 800px)';
+  const frame = new VirtualNode('div', {
+    className: 'AppFrame_frame',
+    style: { gridTemplateColumns: closed },
+    'data-sidebar-collapsed': 'true'
+  }, [], harness.doc);
+  frame.attributes.style = closed;
+  harness.doc.__addRoot(frame);
+
+  const hud = harness.mountHud();
+  assert.ok(hud.node, 'the floating list rendered');
+  assert.equal(/collapsed/.test(hud.node.className), false, 'the list starts unfolded while the sidebar is closed');
+
+  // Open the sidebar: the frame's target state changes immediately, before the column animates.
+  frame.style.gridTemplateColumns = opened;
+  frame.attributes.style = opened;
+  frame.removeAttribute('data-sidebar-collapsed');
+  harness.runIntervals();
+  hud.render();
+  assert.equal(/collapsed/.test(hud.node.className), true, 'the list collapses to a pill as soon as the sidebar target state changes');
+
+  // Close it again: the pill must come back without waiting for a width animation to finish.
+  frame.style.gridTemplateColumns = closed;
+  frame.attributes.style = closed;
+  frame.setAttribute('data-sidebar-collapsed', 'true');
+  harness.runIntervals();
+  hud.render();
+  assert.equal(/collapsed/.test(hud.node.className), false, 'the list unfolds again as soon as the sidebar closes');
+
+  harness.doc.__removeRoot(frame);
+});
+
+test('a sidebar width sampled mid-animation does not move the floating list', () => {
+  const harness = createHarness();
+  harness.resetState();
+  harness.clearSpies();
+
+  // No frame grid here: the only signal is the sidebar column's rendered width, which animates
+  // through intermediate values while the sidebar opens or closes.
+  let width = 52;
+  const column = new VirtualNode('div', { className: 'SidebarRoot_sidebarCol' }, [], harness.doc);
+  column.getBoundingClientRect = () => ({ width: width, height: 400, top: 0, left: 0, right: width, bottom: 400 });
+  harness.doc.__addRoot(column);
+
+  const hud = harness.mountHud();
+  assert.equal(/collapsed/.test(hud.node.className), false, 'the list starts unfolded');
+
+  // Mid-transition reading: taller than the rail but far below the expanded width.
+  width = 150;
+  harness.runIntervals();
+  hud.render();
+  assert.equal(/collapsed/.test(hud.node.className), false, 'one transient reading does not collapse the list');
+
+  // The expanded width holds: now it may dock.
+  width = 300;
+  harness.runIntervals();
+  harness.runTimers();
+  hud.render();
+  assert.equal(/collapsed/.test(hud.node.className), true, 'the list docks once the expanded width holds');
+
+  // Closing: the first reading is the animated width again, so the pill must stay put.
+  width = 150;
+  harness.runIntervals();
+  hud.render();
+  assert.equal(/collapsed/.test(hud.node.className), true, 'a transient reading does not unfold the list early');
+
+  // The collapsed rail width holds: the pill comes back.
+  width = 52;
+  harness.runIntervals();
+  harness.runTimers();
+  hud.render();
+  assert.equal(/collapsed/.test(hud.node.className), false, 'the list unfolds once the collapsed width holds');
+
+  harness.doc.__removeRoot(column);
 });
 
 test('palette open: Alt+K closes it, Alt+I and Alt+, still move the selection', () => {
