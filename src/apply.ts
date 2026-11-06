@@ -713,7 +713,7 @@ export function apply(ctx: HostContext): void {
 
   ctx.slots.inject('main', () =>
     ctx.slots.register(
-      { name: 'main', key: 'project-board', locale: NS, inject: () => ({ openSession: openSession, hooks: boardHooks(), viewRequestStore: boardViewStore }) },
+      { name: 'main', key: 'project-board', locale: NS, inject: boardInject },
       ProjectBoard as unknown as (props: never) => unknown
     )
   );

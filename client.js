@@ -6922,7 +6922,7 @@
     ctx.slots.inject(
       "main",
       () => ctx.slots.register(
-        { name: "main", key: "project-board", locale: NS, inject: () => ({ openSession, hooks: boardHooks(), viewRequestStore: boardViewStore }) },
+        { name: "main", key: "project-board", locale: NS, inject: boardInject },
         ProjectBoard
       )
     );
