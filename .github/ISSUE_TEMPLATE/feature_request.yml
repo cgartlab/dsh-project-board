@@ -1,0 +1,59 @@
+name: Feature request
+description: Suggest an improvement for dsh-tac
+labels: [enhancement]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Describe the problem first, then the outcome you want. Please check the
+        existing issues and open pull requests before filing so we do not duplicate work.
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem
+      description: What is inconvenient or missing today?
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed change
+      description: What should the plugin do instead?
+    validations:
+      required: true
+  - type: dropdown
+    id: area
+    attributes:
+      label: Area
+      options:
+        - Project board
+        - Floating HUD
+        - Search palette
+        - Keyboard shortcuts
+        - Conversation scrolling
+        - Notifications
+        - Settings
+        - Repository tooling
+        - Other
+    validations:
+      required: true
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives considered
+      description: Other approaches you thought about, and why they are worse.
+  - type: input
+    id: version
+    attributes:
+      label: Plugin version
+      description: Release tag or commit SHA you are running
+      placeholder: e.g. v0.3.1 or 296aa36
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Checklist
+      options:
+        - label: I searched existing issues and open pull requests
+          required: true
+        - label: This does not duplicate an open pull request
+          required: true
