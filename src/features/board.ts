@@ -578,7 +578,7 @@ export function ProjectBoard(props: ProjectBoardProps): unknown {
       def.key === 'running'
         ? { color: value > 0 ? 'var(--dsw-alias-brand-primary)' : undefined }
         : def.key === 'attention'
-          ? { color: value > 0 ? '#f59e0b' : undefined }
+          ? { color: value > 0 ? 'var(--dsw-alias-state-warn-primary)' : undefined }
           : def.key === 'auto'
             ? { color: value > 0 ? 'var(--dsw-alias-state-warn-primary)' : undefined }
             : undefined;
@@ -671,7 +671,7 @@ export function ProjectBoard(props: ProjectBoardProps): unknown {
         h('span', { className: 'pbx-total' }, h('strong', null, String(totals.workspaces)), t('stat.workspaces')),
         h('span', { className: 'pbx-total' }, h('strong', null, String(totals.sessions)), t('stat.sessions')),
         totals.attention > 0
-          ? h('span', { className: 'pbx-total' }, h('strong', { style: { color: '#f59e0b' } }, String(totals.attention)), t('stat.attention'))
+          ? h('span', { className: 'pbx-total' }, h('strong', { style: { color: 'var(--dsw-alias-state-warn-primary)' } }, String(totals.attention)), t('stat.attention'))
           : null,
         totals.running > 0
           ? h(
@@ -958,7 +958,7 @@ export function ProjectBoard(props: ProjectBoardProps): unknown {
                     'span',
                     { className: 'pbx-pcardStats' },
                     statChip(t('stat.running'), project.counts.running, 'var(--dsw-alias-brand-primary)'),
-                    statChip(t('stat.attention'), project.counts.attention, '#f59e0b'),
+                    statChip(t('stat.attention'), project.counts.attention, 'var(--dsw-alias-state-warn-primary)'),
                     statChip(t('status.done'), project.counts.done, 'var(--dsw-alias-state-success-primary)'),
                     statChip(t('stat.auto'), project.counts.auto, 'var(--dsw-alias-state-warn-primary)')
                   )

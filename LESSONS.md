@@ -32,6 +32,7 @@
 - 失误：`sidebarRight.isExpanded()` 在某个版本不可靠，按它判断"面板开着"导致 `Alt+N/B/V` 只能关不能开 → 规则：可见性用 DOM 判（`[class*="_panel"][data-sidebar-right-open]` + `sidebarRight.active().kind`），不依赖 `isExpanded()`
 - 失误：曾把"有 `role=dialog`"一律当阻塞弹窗，窄窗口下侧栏会渲染成模态抽屉，于是 `Alt+W` 能开不能关 → 规则：`data-shortcut-modal="sidebar"` 的抽屉放行；只有真正的模态层抑制快捷键（0.2.1）
 - 失误：假设宿主有"移动主列"的接口，实际只有左栏宽度与右栏轨道 → 规则：让位只在能改的地方改（对话滚动区 padding），改不了的不硬造，并在 `docs/architecture.md` 写明依据
+- 失误：`installChatScrollListeners` 用匿名函数注册 `keyup/blur/keydown`，热重载后无法 `removeEventListener`，旧监听器叠加、一次按键被多次处理；诊断 `setTimeout` 也不在 `ctx.effect` cleanup 里（审阅：0.4.0）→ 规则：任何 `window/document.addEventListener` 与裸 `setTimeout` 都要**具名回调**、放回 `ctx.effect`，并让回调返回 dispose（`removeEventListener` / `clearTimeout`）
 
 ## 快捷键
 
@@ -65,5 +66,7 @@
 ## 文案、设置与迁移
 
 - 失误：新增设置段没 bump 对应的迁移版本，老配置读不出来（`boardProjVersion` 就漏过一次）→ 规则：加/改设置段必须 bump `*Version` 并在 `mergeSettings` 写迁移，保存统一走 `writeSettings`（0.1.14 补）
+- 失误：`boardProjVersion` 迁移标记在 `mergeSettings` 写进 `board.boardProjVersion`（嵌套），判定却读顶层 `boardProjVersion`，两处各存各的，升级后反复触发迁移（审阅：0.4.0）→ 规则：迁移标记与判定必须读/写**同一层**；`Settings.boardProjVersion` 留在顶层，嵌套的 `BoardSettings.boardProjVersion` 是误加，删除
+- 失误：`headerButtons` 迁移先逐 id 叠加用户 `side/hidden/order`，紧接着又 `cloneJson(DEFAULT_SETTINGS.headerButtons)` 整组替换，用户改过的按钮全被清掉（审阅：0.4.0）→ 规则：迁移只做**增量叠加**，绝不整组重置；特殊 legacy 信号（如 `header.capsule===false`）在叠加之上单独应用
 - 失误：通知 / Toast 层级一度盖在模态背板之上 → 规则：新增浮层先决定它属于"模态背板之下"（Toast、通知 dock）还是"之上"（命令面板、弹窗），层级在 `src/styles.ts` 里成组管理，不临时加 z-index（0.1.14 修）
 - 失误：README 里写死的快捷键说明与实际默认值漂移 → 规则：改快捷键默认值必须同步 `README.md` / `README.zh.md` 的快捷键表与设置页文案，以及 `docs/architecture.md` 里点名的具体键（如 `Alt+U` / `Alt+M`）
