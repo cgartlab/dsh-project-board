@@ -9,16 +9,22 @@
 export const IS_MAC = (() => {
   try {
     const nav = (window.navigator || ({} as Navigator)) as Navigator & { userAgentData?: { platform?: string } };
+    const ua = nav.userAgent || '';
+    // iPadOS Safari in desktop mode reports platform "MacIntel" (and userAgentData.platform
+    // "macOS"), so the platform string alone cannot tell macOS from iOS. The UA still carries
+    // the iOS marker; rule it out first, on every path, before trusting any platform value.
+    if (/iphone|ipad|ipod/i.test(ua)) return false;
     const platform = (nav.userAgentData && nav.userAgentData.platform) || nav.platform || '';
     if (platform) return /mac/i.test(String(platform)) && !/iphone|ipad|ipod/i.test(String(platform));
-    const ua = nav.userAgent || '';
-    return /mac/i.test(ua) && !/iphone|ipad|ipod/i.test(ua);
+    return /mac/i.test(ua);
   } catch {
     return false;
   }
 })();
 
-const MODIFIER_LABELS: Record<string, string> = IS_MAC
+/** Shared by comboDisplay() and prose strings that use {ctrl}/{alt}/{meta}/{shift} placeholders.
+ *  Keeping one table prevents keycaps, tooltips and settings hints from drifting apart. */
+export const MODIFIER_LABELS: Record<string, string> = IS_MAC
   ? { ctrl: '⌃', meta: '⌘', alt: '⌥', shift: '⇧' }
   : { ctrl: 'Ctrl', meta: 'Meta', alt: 'Alt', shift: 'Shift' };
 

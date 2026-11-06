@@ -1,7 +1,7 @@
 /** The plugin's settings page: shortcut recording, header buttons, behaviour, logs and data. */
 import { DEFAULT_SETTINGS, HUD_COLLAPSE_KEY, HUD_POS_KEY, HUD_STARTS_KEY, LOG_KEY, SHORTCUT_LABEL_KEYS, STORE_KEY } from '../constants';
 import type { Translate, UseHook } from '../host';
-import { comboDisplay, comboFromEvent, comboHasModifier, isComposingEvent } from '../core/combos';
+import { comboDisplay, comboFromEvent, comboHasModifier, isComposingEvent, MODIFIER_LABELS } from '../core/combos';
 import { cloneJson } from '../core/json';
 import { logEvent } from '../core/log';
 import { fallbackHook } from '../core/schedule';
@@ -74,7 +74,7 @@ export function SettingsPage(props: SettingsPageProps): unknown {
       event.preventDefault();
       event.stopPropagation();
       if (!comboHasModifier(combo)) {
-        setRecordError(t('settings.shortcutNeedModifier'));
+        setRecordError(t('settings.shortcutNeedModifier', MODIFIER_LABELS));
         return;
       }
       const next = cloneJson(config);
@@ -515,7 +515,7 @@ export function SettingsPage(props: SettingsPageProps): unknown {
         )
       ),
       recordError ? h('div', { className: 'pbx-setError' }, recordError) : null,
-      h('div', { className: 'pbx-setHint' }, t('settings.shortcut.hint'))
+      h('div', { className: 'pbx-setHint' }, t('settings.shortcut.hint', MODIFIER_LABELS))
     ),
 
     h(
@@ -527,7 +527,9 @@ export function SettingsPage(props: SettingsPageProps): unknown {
         { value: 'composer', labelKey: 'settings.placement.composer' }
       ]),
       ['switch', 'historyNav', 'capsule'].map((id) => headerButtonRow(id, 'settings.hb.' + id)),
-      h('div', { className: 'pbx-setHint' }, t(config.header.placement === 'composer' ? 'settings.composerButtonsHint' : 'settings.headerButtonsHint'))
+      h('div', { className: 'pbx-setHint' }, config.header.placement === 'composer'
+        ? t('settings.composerButtonsHint')
+        : t('settings.headerButtonsHint', MODIFIER_LABELS))
     ),
 
     h(

@@ -64,7 +64,7 @@ function createReactStub() {
   };
 }
 
-function loadModule(platform = 'test') {
+function loadModule(platform = 'test', navExtras = {}) {
   let captured = null;
   const localStorage = createLocalStorage();
   const document = createDocumentStub();
@@ -74,7 +74,7 @@ function loadModule(platform = 'test') {
     innerWidth: 1440,
     innerHeight: 900,
     devicePixelRatio: 1,
-    navigator: { platform },
+    navigator: Object.assign({ platform: platform }, navExtras),
     matchMedia: () => ({ matches: false, addEventListener() {}, removeEventListener() {} }),
     addEventListener() {},
     removeEventListener() {},
@@ -180,6 +180,31 @@ test('the plugin marks the platform itself (Electron injects it only in the nati
   assert.equal(win.document.documentElement._attrs['data-pbx-platform'], 'other');
 });
 
+test('iOS devices are never reported as macOS, even with a MacIntel platform', () => {
+  const IPAD_UA = 'Mozilla/5.0 (iPad; CPU OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1';
+  const IPHONE_UA = 'Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1';
+  const MAC_UA = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Safari/605.1.15';
+
+  const platformOf = (platform, navExtras) => {
+    const loaded = loadModule(platform, navExtras);
+    loaded.module.apply(createContext(loaded.window, loaded.document).ctx);
+    return loaded.document.documentElement._attrs['data-pbx-platform'];
+  };
+
+  // iPadOS Safari requests desktop sites: platform/userAgentData say Mac, the UA says iPad.
+  assert.equal(platformOf('MacIntel', { userAgent: IPAD_UA }), 'other');
+  assert.equal(platformOf('MacIntel', { userAgent: IPAD_UA, userAgentData: { platform: 'macOS' } }), 'other');
+  assert.equal(platformOf('MacIntel', { userAgent: IPHONE_UA }), 'other');
+  assert.equal(platformOf('MacIntel', { userAgent: 'Mozilla/5.0 (IPAD; CPU OS 17_0 like Mac OS X)' }), 'other');
+
+  // Detection priority is unchanged: userAgentData.platform > navigator.platform > UA.
+  assert.equal(platformOf('Win32', { userAgentData: { platform: 'macOS' } }), 'darwin');
+  assert.equal(platformOf('MacIntel', { userAgent: MAC_UA }), 'darwin');
+  assert.equal(platformOf('', { userAgent: MAC_UA }), 'darwin');
+  assert.equal(platformOf('', { userAgent: IPAD_UA }), 'other');
+  assert.equal(platformOf('Win32', { userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)' }), 'other');
+});
+
 test('built bundle carries macOS labels, clearance rules and platform-neutral bindings', () => {
   // The checks read client.js (the build artifact) so a src/ edit without `npm run build` fails here.
   const built = fs.readFileSync(path.join(root, 'client.js'), 'utf8');
@@ -195,4 +220,76 @@ test('built bundle carries macOS labels, clearance rules and platform-neutral bi
   assert.match(built, /\{prev\}/);
   assert.match(built, /\{palette\}/);
   assert.doesNotMatch(built, /Alt\+K\/Esc close/);
+});
+
+test('settings and mouse hints show the modifier names of the current platform', () => {
+  const MAC_UA = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko)';
+  const WIN_UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko)';
+  const HINT_KEYS = ['sort.hint', 'settings.shortcut.hint', 'settings.shortcutNeedModifier', 'settings.headerButtonsHint'];
+  const MAC_PARAMS = { ctrl: '⌃', alt: '⌥', meta: '⌘', shift: '⇧' };
+  const WIN_PARAMS = { ctrl: 'Ctrl', alt: 'Alt', meta: 'Meta', shift: 'Shift' };
+
+  /* The host substitutes {name} placeholders; mirror it so the rendered text is the real string. */
+  const makeT = (dicts, lang) => (key, params) => {
+    let text = (dicts[lang] || {})[key] || key;
+    if (params) for (const [name, value] of Object.entries(params)) text = text.split('{' + name + '}').join(String(value));
+    return text;
+  };
+
+  const collectText = (node, out) => {
+    if (node === null || node === undefined || node === false || node === true) return out;
+    if (typeof node === 'string' || typeof node === 'number') { out.push(String(node)); return out; }
+    if (Array.isArray(node)) { for (const child of node) collectText(child, out); return out; }
+    if (typeof node === 'object') for (const child of node.children || []) collectText(child, out);
+    return out;
+  };
+
+  /* Every section the settings page reads must be an object; the values are irrelevant here. */
+  const settings = { shortcuts: {}, headerButtons: {}, palette: {}, hints: {}, hud: {}, board: {}, notify: {}, log: {}, projectColumns: {}, header: { placement: 'header' } };
+
+  const renderSettings = (platform, ua, lang) => {
+    const loaded = loadModule(platform, { userAgent: ua });
+    const { ctx, registrations, translations } = createContext(loaded.window, loaded.document);
+    loaded.module.apply(ctx);
+    const dicts = translations.projectBoard;
+    const entry = registrations.find((item) => item.spec.id === 'project-board-settings');
+    assert.ok(entry, 'the settings page is registered');
+    const tree = entry.component({ t: makeT(dicts, lang), useSettings: (selector) => selector(settings) });
+    return { text: collectText(tree, []).join(' '), dicts, t: makeT(dicts, lang) };
+  };
+
+  for (const lang of ['zh', 'en']) {
+    const mac = renderSettings('MacIntel', MAC_UA, lang);
+    const win = renderSettings('Win32', WIN_UA, lang);
+
+    /* The dictionaries are platform-neutral; only the injected names differ. */
+    for (const key of HINT_KEYS) {
+      assert.equal(mac.dicts[lang][key], win.dicts[lang][key], key + ' is identical on both platforms (' + lang + ')');
+      assert.doesNotMatch(mac.dicts[lang][key], /Windows|Option|Command|Shift\+|Ctrl \+|⌥|⌘|⌃|⇧/, key + ' has no hard-coded platform wording (' + lang + ')');
+      assert.match(mac.dicts[lang][key], /\{(ctrl|alt|meta|shift)\}/, key + ' uses modifier placeholders (' + lang + ')');
+      const macText = mac.t(key, MAC_PARAMS);
+      const winText = win.t(key, WIN_PARAMS);
+      assert.doesNotMatch(macText, /\{(ctrl|alt|meta|shift)\}/, key + ' resolves on macOS (' + lang + ')');
+      assert.doesNotMatch(winText, /\{(ctrl|alt|meta|shift)\}/, key + ' resolves on Windows (' + lang + ')');
+      assert.match(macText, /[⌃⌥⌘⇧]/, key + ' shows macOS symbols (' + lang + ')');
+      assert.match(winText, /Ctrl|Alt|Meta|Shift/, key + ' shows Windows names (' + lang + ')');
+      assert.doesNotMatch(macText, /Ctrl \/ Alt \/ Meta|Hold Ctrl|Ctrl \+/, key + ' has no Windows wording on macOS (' + lang + ')');
+      assert.doesNotMatch(winText, /[⌃⌥⌘⇧]/, key + ' has no macOS symbols on Windows (' + lang + ')');
+    }
+
+    /* Rendering really injects the params: no unresolved placeholders, right names. */
+    assert.doesNotMatch(mac.text, /\{(ctrl|alt|meta|shift)\}/, 'settings page resolves placeholders on macOS (' + lang + ')');
+    assert.match(mac.text, /⌃ \/ ⌥ \/ ⌘/, 'settings shortcut hint shows ⌃ / ⌥ / ⌘ (' + lang + ')');
+    assert.doesNotMatch(mac.text, /Ctrl \/ Alt \/ Meta/, 'settings shortcut hint hides Windows names on macOS (' + lang + ')');
+    assert.doesNotMatch(win.text, /\{(ctrl|alt|meta|shift)\}/, 'settings page resolves placeholders on Windows (' + lang + ')');
+    assert.match(win.text, /Ctrl \/ Alt \/ Meta/, 'settings shortcut hint shows Ctrl / Alt / Meta (' + lang + ')');
+    assert.doesNotMatch(win.text, /⌃ \/ ⌥ \/ ⌘/, 'settings shortcut hint hides macOS symbols on Windows (' + lang + ')');
+  }
+
+  /* Every render site (settings page, board column headers, bare-key error) passes params. */
+  const built = fs.readFileSync(path.join(root, 'client.js'), 'utf8');
+  for (const key of HINT_KEYS) {
+    const pattern = new RegExp('t\\("' + key.replace(/\./g, '\\.') + '"\\s*,\\s*[^)]+\\)');
+    assert.match(built, pattern, key + ' is rendered with modifier params in the built bundle');
+  }
 });
