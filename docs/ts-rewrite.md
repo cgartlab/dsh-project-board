@@ -28,10 +28,10 @@ passes against the built file.
 | `core/{json,log,store,combos,settings,dom,state,header-drag,schedule}.ts` | ported |
 | `i18n/{zh,en}.ts`, `styles.ts`, `ui/{icon-data,icons,appearance}.ts` | ported |
 | `features/{format,chat-dom,chat-nav,chat-scroll,interject,board}.ts` | ported |
-| `features/header.ts` (HeaderButtons, ShortcutHints) | pending |
-| `features/notifications.ts` (ToastStack, watcher, dock, chime) | pending |
-| `features/guard.ts` (BoardSessionGuard) | pending |
-| `features/palette.ts` | pending |
+| `features/header.ts` (HeaderButtons, ShortcutHints) | ported |
+| `features/notifications.ts` (ToastStack, watcher, dock, chime) | ported |
+| `features/guard.ts` (BoardSessionGuard) | ported |
+| `features/palette.ts` | ported (incl. the global keyboard dispatcher) |
 | `features/hud.ts` (FloatingStatus) | pending |
 | `features/dialogs.ts` (rename, session menu) | pending |
 | `features/settings.ts` (SettingsPage) | pending |
