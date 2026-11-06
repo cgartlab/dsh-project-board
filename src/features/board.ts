@@ -12,6 +12,8 @@ import { ICONS, PALETTE, hexToRgba, loadAppearance, paletteFor, saveAppearance }
 import { Icon, RunRing } from '../ui/icons';
 import { fallbackHook, type PresetSnapshot, type ScheduleSnapshot } from '../core/schedule';
 import { PROJECT_COLUMNS, SORT_DIR_DEFAULT, compareVersions, parseVersion, relTime, sessionTitleOf, statusInfo, workspaceLabel, type ProjectColumn, type SessionStatusLike, type StatusInfo } from './format';
+import { fetchRepoStats, type RepoStats } from '../core/github';
+import type { GithubRepoSetting } from '../types';
 
 export interface WorkspaceView {
   workspaceId: string;
@@ -86,14 +88,18 @@ interface ProjectModel {
   presets: Set<string>;
   hasCurrent: boolean;
   lastUpdated: number;
-  /** Open issue count; `undefined` means the host does not expose it yet (renders `—`). */
+  /** Open issue count; `undefined` means no source yet (renders `—`). */
   issues?: number;
-  /** Open pull-request count; `undefined` means not yet wired up (renders `—`). */
+  /** Open pull-request count; `undefined` means no source yet (renders `—`). */
   prs?: number;
   /** Local package version; `undefined` when unknown (renders `—`). */
   localVersion?: string;
   /** Latest published version; `undefined` when unknown (renders `—`). */
   latestVersion?: string;
+  /** GitHub mapping configured for this workspace (owner/repo/localVersion). */
+  repo?: GithubRepoSetting;
+  /** Live GitHub stats; `undefined` when no repo is configured or it has not been fetched. */
+  repoStats?: RepoStats;
 }
 
 const BUILTIN_PRESET_COPY: Record<string, string> = {
@@ -116,6 +122,7 @@ function versionSortKey(value: string | undefined): number {
 }
 
 const NO_AUTO = new Set<string>();
+const EMPTY_REPOS: Record<string, GithubRepoSetting> = {};
 
 interface PopoverPosition {
   left: number;
@@ -174,6 +181,41 @@ export function ProjectBoard(props: ProjectBoardProps): unknown {
   const [collapsed, setCollapsed] = useState<Record<string, boolean>>({});
   const [compactProjectId, setCompactProjectId] = useState<string | null>(null);
   const [popoverPos, setPopoverPos] = useState<PopoverPosition | null>(null);
+
+  const githubRepos = (config.githubRepos || EMPTY_REPOS) as Record<string, GithubRepoSetting>;
+  // Stable fingerprint of the owner/repo mappings. `githubRepos` itself is a fresh object
+  // reference on every settings save (mergeSettings clones it), so depending on it directly
+  // would re-fetch every configured repo on ANY settings change. Only owner/repo affect the
+  // fetch (localVersion does not), so they are the fingerprint's content.
+  const repoFingerprint = Object.keys(githubRepos)
+    .map((path) => `${path}\u0000${githubRepos[path] ? githubRepos[path].owner || '' : ''}\u0000${githubRepos[path] ? githubRepos[path].repo || '' : ''}`)
+    .sort()
+    .join('\n');
+  const [repoStats, setRepoStats] = useState<Record<string, RepoStats>>({});
+  useEffect(() => {
+    let cancelled = false;
+    const targets = Object.keys(githubRepos).filter((path) => {
+      const cfg = githubRepos[path];
+      return cfg && cfg.owner && cfg.repo;
+    });
+    if (targets.length === 0) {
+      setRepoStats({});
+      return undefined;
+    }
+    const loading: Record<string, RepoStats> = {};
+    for (const path of targets) loading[path] = { status: 'loading' };
+    setRepoStats(loading);
+    for (const path of targets) {
+      const cfg = githubRepos[path];
+      fetchRepoStats(cfg.owner, cfg.repo, config.githubToken).then((stats) => {
+        if (cancelled) return;
+        setRepoStats((prev) => ({ ...prev, [path]: stats }));
+      });
+    }
+    return () => {
+      cancelled = true;
+    };
+  }, [repoFingerprint, config.githubToken]);
 
   useEffect(() => {
     if (editingProject === null) return undefined;
@@ -271,15 +313,22 @@ export function ProjectBoard(props: ProjectBoardProps): unknown {
         last = Math.max(last, row.updatedAt);
       }
       if (!last) last = Date.parse(workspace.updatedAt || '') || 0;
-      // Repo-meta fields are a forward-compatibility seam: the host does not expose them
-      // yet, so they stay `undefined` and the table renders `—`. When a future host
-      // capability adds them to the workspace snapshot they flow through here untouched.
-      const repo = workspace as unknown as {
+      // Repo-meta fields: the user-configured GitHub mapping (settings.githubRepos, keyed by
+      // workspace path) wins; if none is configured we fall back to the workspace-snapshot
+      // seam so a future host that adds these fields lights up without a plugin change.
+      const pathKey = workspace.path || '';
+      const repoSetting = githubRepos[pathKey];
+      const stats = repoSetting ? repoStats[pathKey] : undefined;
+      const seam = workspace as unknown as {
         openIssues?: number;
         openPRs?: number;
         localVersion?: string;
         latestVersion?: string;
       };
+      const issues = stats?.status === 'ok' ? stats.issues : typeof seam.openIssues === 'number' ? seam.openIssues : undefined;
+      const prs = stats?.status === 'ok' ? stats.prs : typeof seam.openPRs === 'number' ? seam.openPRs : undefined;
+      const latestVersion = stats?.status === 'ok' ? stats.latestVersion : seam.latestVersion;
+      const localVersion = repoSetting?.localVersion || seam.localVersion;
       const model: ProjectModel = {
         workspaceId: workspace.workspaceId,
         name: workspaceLabel(workspace.title, t),
@@ -288,14 +337,16 @@ export function ProjectBoard(props: ProjectBoardProps): unknown {
         presets: presets,
         hasCurrent: hasCurrent,
         lastUpdated: last,
-        issues: typeof repo.openIssues === 'number' ? repo.openIssues : undefined,
-        prs: typeof repo.openPRs === 'number' ? repo.openPRs : undefined,
-        localVersion: repo.localVersion,
-        latestVersion: repo.latestVersion
+        issues: issues,
+        prs: prs,
+        localVersion: localVersion,
+        latestVersion: latestVersion,
+        repo: repoSetting,
+        repoStats: stats
       };
       return model;
     });
-  }, [workspaces, allSessions, t]);
+  }, [workspaces, allSessions, t, githubRepos, repoStats]);
 
   const compactStatusRank = (row: CompactRow): number =>
     row.archived ? 9 : row.info.tone === 'running' ? 0 : row.info.tone === 'attention' ? 1 : row.info.tone === 'done' ? 2 : 3;
@@ -608,6 +659,21 @@ export function ProjectBoard(props: ProjectBoardProps): unknown {
   };
 
   const projectCols: ProjectColumn[] = PROJECT_COLUMNS.filter((def) => !config.projectColumns || (config.projectColumns as unknown as Record<string, boolean>)[def.key] !== false);
+  const cellRepoState = (project: ProjectModel): 'loading' | 'error' | null => {
+    // A mapped path with an empty owner/repo is not a real target: treat it as unconfigured
+    // (show "—") instead of leaving the cell stuck at "loading" forever.
+    if (!project.repo || !project.repo.owner || !project.repo.repo) return null;
+    const stats = project.repoStats;
+    if (!stats || stats.status === 'loading') return 'loading';
+    if (stats.status === 'error') return 'error';
+    return null;
+  };
+  const repoErrorText = (code: string | undefined): string => {
+    if (code === 'repo-not-found') return t('col.errRepoNotFound');
+    if (code === 'token-invalid') return t('col.errTokenInvalid');
+    if (code === 'rate-limited') return t('col.errRateLimited');
+    return t('col.errGeneric', { code: code || '?' });
+  };
   const projectCell = (project: ProjectModel, def: ProjectColumn): unknown => {
     if (def.key === 'lastUpdated') {
       const absolute = project.lastUpdated ? new Date(project.lastUpdated).toLocaleString() : '';
@@ -615,6 +681,9 @@ export function ProjectBoard(props: ProjectBoardProps): unknown {
     }
     if (def.key === 'issues' || def.key === 'prs') {
       const value = def.key === 'issues' ? project.issues : project.prs;
+      const state = cellRepoState(project);
+      if (state === 'loading') return h('td', { className: 'pbx-num pbx-na', 'aria-busy': true, title: t('col.loading') }, '…');
+      if (state === 'error') return h('td', { className: 'pbx-num pbx-na pbx-err', 'aria-label': repoErrorText(project.repoStats?.error), title: repoErrorText(project.repoStats?.error) }, '⚠');
       if (value === undefined) {
         return h('td', { className: 'pbx-num pbx-na', title: t('col.naHint') }, t('col.na'));
       }
@@ -623,6 +692,9 @@ export function ProjectBoard(props: ProjectBoardProps): unknown {
     }
     if (def.key === 'localVersion' || def.key === 'latestVersion') {
       const value = def.key === 'localVersion' ? project.localVersion : project.latestVersion;
+      const state = cellRepoState(project);
+      if (state === 'loading') return h('td', { className: 'pbx-num pbx-ver pbx-na', 'aria-busy': true, title: t('col.loading') }, '…');
+      if (state === 'error') return h('td', { className: 'pbx-num pbx-ver pbx-na pbx-err', 'aria-label': repoErrorText(project.repoStats?.error), title: repoErrorText(project.repoStats?.error) }, '⚠');
       if (!value) return h('td', { className: 'pbx-num pbx-ver pbx-na', title: t('col.naHint') }, t('col.na'));
       const latest = project.latestVersion;
       const lagging = def.key === 'localVersion' && !!latest && compareVersions(value, latest) < 0;
