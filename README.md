@@ -59,6 +59,7 @@ physical Option key. On Windows and Linux the same combinations are shown as `Al
 | `⌥+S` | Scroll to bottom and focus the composer |
 | `⌥+D` | Session actions dialog (archive, cancel a running turn, delete where supported) |
 | `⌥+N` / `⌥+B` / `⌥+V` | Board at narrow / medium / fullscreen; same key closes |
+| `⌥+W` | Show / hide the native left sidebar; leaves a fullscreen board first |
 | `⌥+R` | Rename the current session |
 | `⌥+E` | Collapse / expand the floating session list |
 | `⌥+Enter` | Steer the earliest queued message into the running turn |
