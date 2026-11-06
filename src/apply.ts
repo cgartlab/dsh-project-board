@@ -354,11 +354,12 @@ export function apply(ctx: HostContext): void {
     }
   };
   /** External view request for the board: opening it via a shortcut lands on "projects"
-   *  even when the board component stays mounted with a previously chosen view. */
-  const boardViewRef: { seq: number; view: 'projects' | 'sessions' } = { seq: 0, view: 'projects' };
+   *  even when the board component stays mounted with a previously chosen view. Uses a
+   *  reactive store so store.set() reliably triggers a re-render via the subscription. */
+  const boardViewStore = createUiStore<{ seq: number; view: 'projects' | 'sessions' }>({ seq: 0, view: 'projects' });
   const requestBoardView = (view: 'projects' | 'sessions'): void => {
-    boardViewRef.seq += 1;
-    boardViewRef.view = view;
+    const snap = boardViewStore.getSnapshot();
+    boardViewStore.set({ seq: snap.seq + 1, view });
   };
   /** Current board pane state: { open, mode: 'narrow' | 'half' | 'full' | null }. */
   const boardStateNow = (): BoardState => {
@@ -551,7 +552,7 @@ export function apply(ctx: HostContext): void {
       return { ok: false, error: { message: String((error && (error as Error).message) || error) } };
     }
   };
-  const boardInject = (): Record<string, unknown> => ({ openSession: openSession, openBoard: openBoard, openFullBoard: openFullBoard, hooks: boardHooks(), viewRequest: boardViewRef });
+  const boardInject = (): Record<string, unknown> => ({ openSession: openSession, openBoard: openBoard, openFullBoard: openFullBoard, hooks: boardHooks(), viewRequestStore: boardViewStore });
 
   const sessionMenuStore = createUiStore<{ sessionId: string | null; title: string; at: number }>({ sessionId: null, title: '', at: 0 });
   const requestSessionMenu = (sessionId: string, title: string): void => {
@@ -712,7 +713,7 @@ export function apply(ctx: HostContext): void {
 
   ctx.slots.inject('main', () =>
     ctx.slots.register(
-      { name: 'main', key: 'project-board', locale: NS, inject: () => ({ openSession: openSession, hooks: boardHooks(), viewRequest: boardViewRef }) },
+      { name: 'main', key: 'project-board', locale: NS, inject: () => ({ openSession: openSession, hooks: boardHooks(), viewRequestStore: boardViewStore }) },
       ProjectBoard as unknown as (props: never) => unknown
     )
   );
