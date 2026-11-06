@@ -70,7 +70,10 @@
     log: { enabled: true, level: "info", max: 200 },
     board: { enabled: true, wideThreshold: 520, defaultView: "projects" },
     projectColumnsVersion: 1,
-    projectColumns: { total: true, issues: true, prs: true, localVersion: true, latestVersion: true, lastUpdated: true }
+    projectColumns: { total: true, issues: true, prs: true, localVersion: true, latestVersion: true, lastUpdated: true },
+    githubVersion: 1,
+    githubToken: void 0,
+    githubRepos: {}
   };
 
   // src/core/json.ts
@@ -263,6 +266,11 @@
       if (stored.projectColumnsVersion !== 1) {
         out.projectColumnsVersion = 1;
       }
+      if (typeof stored.githubToken === "string") out.githubToken = stored.githubToken;
+      if (stored.githubRepos && typeof stored.githubRepos === "object") {
+        out.githubRepos = cloneJson(stored.githubRepos);
+      }
+      if (stored.githubVersion !== 1) out.githubVersion = 1;
       for (const key of Object.keys(DEFAULT_SETTINGS.shortcuts)) {
         if (!comboHasModifier(out.shortcuts[key])) out.shortcuts[key] = DEFAULT_SETTINGS.shortcuts[key];
       }
@@ -296,7 +304,7 @@
   function loadSettings() {
     const raw = loadJson(SETTINGS_KEY, null);
     const merged = mergeSettings(DEFAULT_SETTINGS, raw);
-    if (raw && typeof raw === "object" && (raw.headerButtonsVersion !== 3 || raw.hintsVersion !== 1 || raw.shortcutsVersion !== 1 || raw.boardProjVersion !== 1 || raw.projectColumnsVersion !== 1)) {
+    if (raw && typeof raw === "object" && (raw.headerButtonsVersion !== 3 || raw.hintsVersion !== 1 || raw.shortcutsVersion !== 1 || raw.boardProjVersion !== 1 || raw.projectColumnsVersion !== 1 || raw.githubVersion !== 1)) {
       try {
         persistSettings(merged);
       } catch (error) {
@@ -1155,6 +1163,7 @@
     ".pbx-num.pbx-numZero{color:var(--dsw-alias-label-secondary);opacity:.65}",
     ".pbx-num.pbx-numHot{color:var(--dsw-alias-label-primary);font-weight:600}",
     ".pbx-num.pbx-na{color:var(--dsw-alias-label-secondary);opacity:.5}",
+    ".pbx-num.pbx-na.pbx-err{color:var(--dsw-alias-state-error-primary);opacity:.9}",
     ".pbx-num.pbx-ver{font-family:var(--dsw-font-mono,ui-monospace,SFMono-Regular,Menlo,Consolas,monospace);font-size:12px}",
     ".pbx-num.pbx-ver.pbx-verLag{color:var(--dsw-alias-state-warn-primary);font-weight:600}",
     ".pbx-num.pbx-time{color:var(--dsw-alias-label-secondary)}",
@@ -1462,6 +1471,16 @@
     ".pbx-setBtn{height:32px;padding:0 12px;border-radius:8px;border:1px solid var(--dsw-alias-border-l1);background:var(--dsw-alias-bg-layer-1);color:var(--dsw-alias-label-primary);font:inherit;font-size:12.5px;cursor:pointer}",
     ".pbx-setBtn:hover{background:var(--dsw-alias-interactive-bg-hover)}",
     ".pbx-setBtn.danger{color:var(--dsw-alias-state-error-primary);border-color:color-mix(in srgb,var(--dsw-alias-state-error-primary) 40%,var(--dsw-alias-border-l1))}",
+    ".pbx-githubToken{display:flex;align-items:center;gap:8px;flex-wrap:wrap}",
+    ".pbx-githubTokenInput{flex:1;min-width:180px;width:auto}",
+    ".pbx-githubOk{color:var(--dsw-alias-state-success-primary)}",
+    ".pbx-githubRepo{display:flex;align-items:center;gap:8px;padding:6px 2px;border-bottom:1px solid var(--dsw-alias-border-l1);flex-wrap:wrap}",
+    ".pbx-githubPath{font-size:11.5px;color:var(--dsw-alias-label-secondary);font-family:var(--dsw-font-mono,ui-monospace,SFMono-Regular,Menlo,Consolas,monospace);min-width:140px;max-width:220px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}",
+    ".pbx-githubPathInput{min-width:140px;flex:1.2}",
+    ".pbx-githubOwner{width:90px}",
+    ".pbx-githubRepoName{width:110px}",
+    ".pbx-githubLocal{width:84px}",
+    ".pbx-githubRemove{width:30px;padding:0;flex:none}",
     ".pbx-disabled{display:flex;align-items:center;justify-content:center;padding:40px 16px;color:var(--dsw-alias-label-secondary);font-size:13px}",
     ".pbx-tab,.pbx-input,.pbx-select,.pbx-toggle,.pbx-setBtn,.pbx-setSelect,.pbx-setInput,.pbx-navSwitch,.pbx-prow,.pbx-hudRow{border-radius:var(--dsw-radius-md)}",
     ".pbx-navIconBtn,.pbx-navHistory,.pbx-hudCollapse,.pbx-openBtn,.pbx-appearBtn,.pbx-keycap,.pbx-dragGhost,.pbx-navGap,.pbx-modeTag{border-radius:var(--dsw-radius-sm)}",
@@ -1523,7 +1542,12 @@
     "col.presets": "Presets",
     "col.path": "Path",
     "col.na": "—",
-    "col.naHint": "The host does not expose this yet (reserved for a future capability)",
+    "col.naHint": "No data source configured — set the GitHub repo for this project in Settings",
+    "col.loading": "Fetching from GitHub…",
+    "col.errRepoNotFound": "GitHub repo not found, or private without a valid token",
+    "col.errTokenInvalid": "GitHub token is invalid or expired",
+    "col.errRateLimited": "GitHub API rate limit reached — retry later or configure a token",
+    "col.errGeneric": "Failed to fetch GitHub data ({code})",
     "col.localBehind": "Local {local}, behind latest {latest}",
     "col.hint.name": "Project name, icon and color",
     "col.hint.total": "Total sessions under this project",
@@ -1691,6 +1715,24 @@
     "settings.pc.localVersion": "Local version",
     "settings.pc.latestVersion": "Latest release",
     "settings.pc.lastUpdated": "Last activity",
+    "settings.githubTitle": "GitHub data source",
+    "settings.githubDesc": 'Enter a token and map each project to a repo to show real Open Issue / Open PR / version data; unmapped projects still show a "—" placeholder.',
+    "settings.githubToken": "GitHub Personal Access Token",
+    "settings.githubTokenDesc": "Optional: public repos work without it; fill it for private repos or a higher rate limit. Used only to call api.github.com; the token stays on this machine, never syncs with the workspace and is never uploaded — clear it anytime.",
+    "settings.githubTest": "Test connection",
+    "settings.githubTesting": "Testing…",
+    "settings.githubTestOk": "Connected, token valid",
+    "settings.githubTestFail": "Connection failed",
+    "settings.githubReposTitle": "Project repository mapping",
+    "settings.githubReposHint": "For each project path, set the GitHub repo (owner/repo) and the local version; columns with owner and repo filled show real data, local version is filled separately.",
+    "settings.githubPath": "Project path",
+    "settings.githubOwner": "Owner",
+    "settings.githubRepo": "Repo",
+    "settings.githubLocalVersion": "Local version",
+    "settings.githubAddRepo": "Add project",
+    "settings.githubRemoveRepo": "Remove",
+    "settings.githubPlaceholderRepo": "owner/repo",
+    "settings.githubNone": "No project repo mapped yet",
     "settings.blur": "Search panel blur strength (px)",
     "settings.logging": "Logs & diagnostics",
     "settings.logEnabled": "Record logs",
@@ -1775,7 +1817,12 @@
     "col.presets": "模式数",
     "col.path": "路径",
     "col.na": "—",
-    "col.naHint": "宿主尚未提供此数据（预留待接入）",
+    "col.naHint": "未配置数据源，到设置里填写该项目的 GitHub 仓库",
+    "col.loading": "正在从 GitHub 获取…",
+    "col.errRepoNotFound": "GitHub 仓库不存在，或为私有且未提供有效 token",
+    "col.errTokenInvalid": "GitHub token 无效或已过期",
+    "col.errRateLimited": "触发 GitHub API 速率限制，请稍后重试或配置 token",
+    "col.errGeneric": "获取 GitHub 数据失败（{code}）",
     "col.localBehind": "本地 {local}，落后于最新 {latest}",
     "col.hint.name": "项目名称、图标与颜色",
     "col.hint.total": "该项目下的会话总数",
@@ -1943,6 +1990,24 @@
     "settings.pc.localVersion": "本地内部版本",
     "settings.pc.latestVersion": "最新上线版本",
     "settings.pc.lastUpdated": "最近活动时间",
+    "settings.githubTitle": "GitHub 数据源",
+    "settings.githubDesc": "填入 token 并为每个项目配置仓库，就能在看板显示真实的 Open Issue / Open PR / 版本数据；未配置的项目仍显示「—」占位。",
+    "settings.githubToken": "GitHub Personal Access Token",
+    "settings.githubTokenDesc": "可选：公开仓库可不填；私有仓库或需要更高速率限制时填写。仅用于调用 api.github.com；token 只保存在本机，不随工作区同步，也不会上传，随时可清除。",
+    "settings.githubTest": "测试连接",
+    "settings.githubTesting": "测试中…",
+    "settings.githubTestOk": "连接成功，token 有效",
+    "settings.githubTestFail": "连接失败",
+    "settings.githubReposTitle": "项目仓库映射",
+    "settings.githubReposHint": "按项目路径为每个项目指定 GitHub 仓库（owner/repo）与本地版本；填了 owner 和 repo 的列会显示真实数据，本地版本单独填写。",
+    "settings.githubPath": "项目路径",
+    "settings.githubOwner": "拥有者",
+    "settings.githubRepo": "仓库名",
+    "settings.githubLocalVersion": "本地版本",
+    "settings.githubAddRepo": "添加项目",
+    "settings.githubRemoveRepo": "移除",
+    "settings.githubPlaceholderRepo": "owner/repo",
+    "settings.githubNone": "尚未配置任何项目仓库",
     "settings.blur": "搜索面板模糊强度（px）",
     "settings.logging": "日志与排查",
     "settings.logEnabled": "记录日志",
@@ -2308,6 +2373,59 @@
     lastUpdated: "desc"
   };
 
+  // src/core/github.ts
+  function stripV(tag) {
+    return tag.replace(/^v(?=\d)/, "");
+  }
+  function countFromLink(link) {
+    if (!link) return 0;
+    const match = /page=(\d+)>;\s*rel="last"/.exec(link);
+    return match ? Number(match[1]) || 0 : 0;
+  }
+  function errorFor(status) {
+    let message = `HTTP ${status}`;
+    if (status === 404) message = "repo-not-found";
+    else if (status === 401) message = "token-invalid";
+    else if (status === 403) message = "rate-limited";
+    return { status: "error", error: message };
+  }
+  function normalizeVersion(tag) {
+    if (!tag) return void 0;
+    return stripV(tag);
+  }
+  async function fetchRepoStats(owner, repo, token, fetchImpl = fetch) {
+    const headers = { Accept: "application/vnd.github+json" };
+    if (token) headers.Authorization = `Bearer ${token}`;
+    const base = `https://api.github.com/repos/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}`;
+    try {
+      const [repoRes, pullsRes, releaseRes] = await Promise.all([
+        fetchImpl(base, { headers }),
+        fetchImpl(`${base}/pulls?state=open&per_page=1`, { headers }),
+        fetchImpl(`${base}/releases/latest`, { headers })
+      ]);
+      if (!repoRes.ok) return errorFor(repoRes.status);
+      if (!pullsRes.ok) return errorFor(pullsRes.status);
+      const repoData = await repoRes.json();
+      let prs = 0;
+      const lastPage = countFromLink(pullsRes.headers ? pullsRes.headers.get("link") : null);
+      if (lastPage > 0) {
+        prs = lastPage;
+      } else {
+        const pulls = await pullsRes.json();
+        prs = Array.isArray(pulls) ? pulls.length : 0;
+      }
+      let latestVersion;
+      if (releaseRes.ok) {
+        const release = await releaseRes.json();
+        latestVersion = normalizeVersion(release.tag_name);
+      }
+      const issues = Math.max(0, (repoData.open_issues_count ?? 0) - prs);
+      return { status: "ok", issues, prs, latestVersion };
+    } catch (error) {
+      return { status: "error", error: error instanceof Error ? error.message : "network" };
+    }
+  }
+
   // src/features/board.ts
   var BUILTIN_PRESET_COPY = {
     standard: "preset.standard",
@@ -2323,6 +2441,7 @@
     return key;
   }
   var NO_AUTO2 = /* @__PURE__ */ new Set();
+  var EMPTY_REPOS = {};
   function ProjectBoard(props) {
     const { useWorkspaces, useSessions, useSessionStatus, openSession, t } = props;
     const useScheduleCatalog = typeof props.useScheduleCatalog === "function" ? props.useScheduleCatalog : fallbackHook();
@@ -2365,6 +2484,33 @@
     const [collapsed, setCollapsed] = useState({});
     const [compactProjectId, setCompactProjectId] = useState(null);
     const [popoverPos, setPopoverPos] = useState(null);
+    const githubRepos = config.githubRepos || EMPTY_REPOS;
+    const repoFingerprint = Object.keys(githubRepos).map((path) => `${path}\0${githubRepos[path] ? githubRepos[path].owner || "" : ""}\0${githubRepos[path] ? githubRepos[path].repo || "" : ""}`).sort().join("\n");
+    const [repoStats, setRepoStats] = useState({});
+    useEffect(() => {
+      let cancelled = false;
+      const targets = Object.keys(githubRepos).filter((path) => {
+        const cfg = githubRepos[path];
+        return cfg && cfg.owner && cfg.repo;
+      });
+      if (targets.length === 0) {
+        setRepoStats({});
+        return void 0;
+      }
+      const loading = {};
+      for (const path of targets) loading[path] = { status: "loading" };
+      setRepoStats(loading);
+      for (const path of targets) {
+        const cfg = githubRepos[path];
+        fetchRepoStats(cfg.owner, cfg.repo, config.githubToken).then((stats) => {
+          if (cancelled) return;
+          setRepoStats((prev) => ({ ...prev, [path]: stats }));
+        });
+      }
+      return () => {
+        cancelled = true;
+      };
+    }, [repoFingerprint, config.githubToken]);
     useEffect(() => {
       if (editingProject === null) return void 0;
       const onDown = (event) => {
@@ -2453,7 +2599,14 @@
           last = Math.max(last, row.updatedAt);
         }
         if (!last) last = Date.parse(workspace.updatedAt || "") || 0;
-        const repo = workspace;
+        const pathKey = workspace.path || "";
+        const repoSetting = githubRepos[pathKey];
+        const stats = repoSetting ? repoStats[pathKey] : void 0;
+        const seam = workspace;
+        const issues = stats?.status === "ok" ? stats.issues : typeof seam.openIssues === "number" ? seam.openIssues : void 0;
+        const prs = stats?.status === "ok" ? stats.prs : typeof seam.openPRs === "number" ? seam.openPRs : void 0;
+        const latestVersion = stats?.status === "ok" ? stats.latestVersion : seam.latestVersion;
+        const localVersion = repoSetting?.localVersion || seam.localVersion;
         const model = {
           workspaceId: workspace.workspaceId,
           name: workspaceLabel(workspace.title, t),
@@ -2462,14 +2615,16 @@
           presets,
           hasCurrent,
           lastUpdated: last,
-          issues: typeof repo.openIssues === "number" ? repo.openIssues : void 0,
-          prs: typeof repo.openPRs === "number" ? repo.openPRs : void 0,
-          localVersion: repo.localVersion,
-          latestVersion: repo.latestVersion
+          issues,
+          prs,
+          localVersion,
+          latestVersion,
+          repo: repoSetting,
+          repoStats: stats
         };
         return model;
       });
-    }, [workspaces, allSessions, t]);
+    }, [workspaces, allSessions, t, githubRepos, repoStats]);
     const compactStatusRank = (row) => row.archived ? 9 : row.info.tone === "running" ? 0 : row.info.tone === "attention" ? 1 : row.info.tone === "done" ? 2 : 3;
     const compactSessionsOf = (workspaceId) => {
       const workspace = workspaces.find((item) => item.workspaceId === workspaceId);
@@ -2756,6 +2911,19 @@
       return rows;
     };
     const projectCols = PROJECT_COLUMNS.filter((def) => !config.projectColumns || config.projectColumns[def.key] !== false);
+    const cellRepoState = (project) => {
+      if (!project.repo || !project.repo.owner || !project.repo.repo) return null;
+      const stats = project.repoStats;
+      if (!stats || stats.status === "loading") return "loading";
+      if (stats.status === "error") return "error";
+      return null;
+    };
+    const repoErrorText = (code) => {
+      if (code === "repo-not-found") return t("col.errRepoNotFound");
+      if (code === "token-invalid") return t("col.errTokenInvalid");
+      if (code === "rate-limited") return t("col.errRateLimited");
+      return t("col.errGeneric", { code: code || "?" });
+    };
     const projectCell = (project, def) => {
       if (def.key === "lastUpdated") {
         const absolute = project.lastUpdated ? new Date(project.lastUpdated).toLocaleString() : "";
@@ -2763,6 +2931,9 @@
       }
       if (def.key === "issues" || def.key === "prs") {
         const value2 = def.key === "issues" ? project.issues : project.prs;
+        const state = cellRepoState(project);
+        if (state === "loading") return h("td", { className: "pbx-num pbx-na", "aria-busy": true, title: t("col.loading") }, "…");
+        if (state === "error") return h("td", { className: "pbx-num pbx-na pbx-err", "aria-label": repoErrorText(project.repoStats?.error), title: repoErrorText(project.repoStats?.error) }, "⚠");
         if (value2 === void 0) {
           return h("td", { className: "pbx-num pbx-na", title: t("col.naHint") }, t("col.na"));
         }
@@ -2771,6 +2942,9 @@
       }
       if (def.key === "localVersion" || def.key === "latestVersion") {
         const value2 = def.key === "localVersion" ? project.localVersion : project.latestVersion;
+        const state = cellRepoState(project);
+        if (state === "loading") return h("td", { className: "pbx-num pbx-ver pbx-na", "aria-busy": true, title: t("col.loading") }, "…");
+        if (state === "error") return h("td", { className: "pbx-num pbx-ver pbx-na pbx-err", "aria-label": repoErrorText(project.repoStats?.error), title: repoErrorText(project.repoStats?.error) }, "⚠");
         if (!value2) return h("td", { className: "pbx-num pbx-ver pbx-na", title: t("col.naHint") }, t("col.na"));
         const latest = project.latestVersion;
         const lagging = def.key === "localVersion" && !!latest && compareVersions(value2, latest) < 0;
@@ -5221,6 +5395,11 @@
     const [recordError, setRecordError] = useState("");
     const [builtinWarnings, setBuiltinWarnings] = useState([]);
     const scannedConflictsRef = useRef(/* @__PURE__ */ new Set());
+    const useWorkspaces = typeof props.useWorkspaces === "function" ? props.useWorkspaces : fallbackHook();
+    const wsSnap = useWorkspaces((value) => value);
+    const ghWorkspaces = (wsSnap && wsSnap.items || []).filter((item) => item && item.path);
+    const [ghTesting, setGhTesting] = useState(false);
+    const [ghTest, setGhTest] = useState(null);
     useEffect(() => {
       if (!recording) return void 0;
       shortcutState.suppressed = true;
@@ -5315,6 +5494,114 @@
         window.dispatchEvent(new Event("pbx-hud-reset"));
       } catch (error) {
       }
+    };
+    const githubRepos = config.githubRepos || {};
+    const repoNameFromPath = (path) => path.replace(/[\\/]+$/, "").split(/[\\/]/).pop() || "";
+    const setGithubToken = (value) => {
+      const next = cloneJson(config);
+      if (value) next.githubToken = value;
+      else delete next.githubToken;
+      saveSettings(next);
+    };
+    const updateGithubRepo = (path, patch) => {
+      const next = cloneJson(config);
+      const repos = { ...next.githubRepos || {} };
+      const existing = repos[path] || { owner: "", repo: "" };
+      repos[path] = { ...existing, ...patch };
+      next.githubRepos = repos;
+      saveSettings(next);
+    };
+    const renameRepoPath = (oldPath, newPath) => {
+      if (!oldPath || oldPath === newPath) return;
+      const next = cloneJson(config);
+      const repos = { ...next.githubRepos || {} };
+      const value = repos[oldPath];
+      if (!value) return;
+      delete repos[oldPath];
+      repos[newPath] = value;
+      next.githubRepos = repos;
+      saveSettings(next);
+    };
+    const removeGithubRepo = (path) => {
+      const next = cloneJson(config);
+      const repos = { ...next.githubRepos || {} };
+      delete repos[path];
+      next.githubRepos = repos;
+      saveSettings(next);
+    };
+    const addGithubRepo = () => {
+      const next = cloneJson(config);
+      const repos = { ...next.githubRepos || {} };
+      const candidate = ghWorkspaces.find((item) => item.path && !repos[item.path]);
+      const path = candidate ? candidate.path : "";
+      if (path) repos[path] = { owner: "", repo: repoNameFromPath(path) };
+      else repos[""] = { owner: "", repo: "" };
+      next.githubRepos = repos;
+      saveSettings(next);
+    };
+    const githubErrorText = (code) => {
+      if (code === "token-invalid") return t("col.errTokenInvalid");
+      if (code === "rate-limited") return t("col.errRateLimited");
+      if (code === "repo-not-found") return t("col.errRepoNotFound");
+      return t("settings.githubTestFail");
+    };
+    const testGithub = async () => {
+      setGhTesting(true);
+      setGhTest(null);
+      try {
+        const stats = await fetchRepoStats("octocat", "hello-world", config.githubToken);
+        setGhTest(stats.status === "ok" ? { ok: true, text: t("settings.githubTestOk") } : { ok: false, text: githubErrorText(stats.error) });
+      } catch (error) {
+        setGhTest({ ok: false, text: t("settings.githubTestFail") });
+      } finally {
+        setGhTesting(false);
+      }
+    };
+    const renderGithubRepos = () => {
+      const listed = ghWorkspaces.length > 0 ? ghWorkspaces.map((item) => item.path) : Object.keys(githubRepos);
+      if (listed.length === 0) return [h("div", { className: "pbx-setHint" }, t("settings.githubNone"))];
+      return listed.map((path) => {
+        const setting = githubRepos[path] || { owner: "", repo: repoNameFromPath(path) };
+        return h(
+          "div",
+          { className: "pbx-githubRepo", key: "gh-" + path },
+          ghWorkspaces.length > 0 ? h("div", { className: "pbx-githubPath", title: path }, path) : h("input", {
+            type: "text",
+            className: "pbx-setInput pbx-githubPathInput",
+            value: path,
+            onInput: (event) => renameRepoPath(path, event.target.value)
+          }),
+          h("input", {
+            type: "text",
+            className: "pbx-setInput pbx-githubOwner",
+            "aria-label": t("settings.githubOwner"),
+            placeholder: t("settings.githubOwner"),
+            value: setting.owner,
+            onInput: (event) => updateGithubRepo(path, { owner: event.target.value })
+          }),
+          h("input", {
+            type: "text",
+            className: "pbx-setInput pbx-githubRepoName",
+            "aria-label": t("settings.githubPlaceholderRepo"),
+            placeholder: t("settings.githubPlaceholderRepo"),
+            value: setting.repo,
+            onInput: (event) => updateGithubRepo(path, { repo: event.target.value })
+          }),
+          h("input", {
+            type: "text",
+            className: "pbx-setInput pbx-githubLocal",
+            "aria-label": t("settings.githubLocalVersion"),
+            placeholder: t("settings.githubLocalVersion"),
+            value: setting.localVersion || "",
+            onInput: (event) => updateGithubRepo(path, { localVersion: event.target.value })
+          }),
+          h(
+            "button",
+            { type: "button", className: "pbx-setBtn pbx-githubRemove", "aria-label": t("settings.githubRemoveRepo"), title: t("settings.githubRemoveRepo"), onClick: () => removeGithubRepo(path) },
+            "×"
+          )
+        );
+      });
     };
     const resetAppearance = () => {
       try {
@@ -5592,6 +5879,35 @@
         toggleRow("notify", "enabled", "settings.notifyEnabled", "settings.notifyEnabledDesc"),
         toggleRow("notify", "sound", "settings.notifySound", "settings.notifySoundDesc"),
         rangeRow("palette", "blur", "settings.blur", 6, 32, 1)
+      ),
+      h(
+        "section",
+        { className: "pbx-setSection" },
+        h("h3", { className: "pbx-setSectionTitle" }, t("settings.githubTitle")),
+        h("div", { className: "pbx-setHint" }, t("settings.githubDesc")),
+        row(
+          "gh-token",
+          "settings.githubToken",
+          "settings.githubTokenDesc",
+          h(
+            "div",
+            { className: "pbx-githubToken" },
+            h("input", {
+              type: "password",
+              className: "pbx-setInput pbx-githubTokenInput",
+              "aria-label": t("settings.githubToken"),
+              value: config.githubToken || "",
+              placeholder: "ghp_…",
+              onInput: (event) => setGithubToken(event.target.value)
+            }),
+            h("button", { type: "button", className: "pbx-setBtn", disabled: ghTesting, onClick: () => void testGithub() }, ghTesting ? t("settings.githubTesting") : t("settings.githubTest"))
+          )
+        ),
+        ghTest ? h("div", { role: "status", className: "pbx-setHint" + (ghTest.ok ? " pbx-githubOk" : " pbx-setError") }, ghTest.text) : null,
+        h("div", { className: "pbx-setSubTitle" }, t("settings.githubReposTitle")),
+        h("div", { className: "pbx-setHint" }, t("settings.githubReposHint")),
+        ...renderGithubRepos(),
+        h("div", { className: "pbx-setActions" }, h("button", { type: "button", className: "pbx-setBtn", onClick: addGithubRepo }, t("settings.githubAddRepo")))
       ),
       h(
         "section",
