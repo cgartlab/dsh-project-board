@@ -24,6 +24,7 @@ export interface WorkspaceView {
 export interface SessionSummary {
   id?: string;
   title?: string;
+  displayTitle?: string;
   updatedAt?: number;
   running?: boolean;
   origin?: string;

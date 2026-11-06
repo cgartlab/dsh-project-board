@@ -8,7 +8,7 @@
  */
 
 export interface ReactRuntime {
-  createElement: (type: unknown, props?: Record<string, unknown> | null, ...children: unknown[]) => unknown;
+  createElement: (type: unknown, props?: object | null, ...children: unknown[]) => unknown;
   useState: <T>(initial: T | (() => T)) => [T, (next: T | ((previous: T) => T)) => void];
   useEffect: (effect: () => void | (() => void), deps?: readonly unknown[]) => void;
   useLayoutEffect?: (effect: () => void | (() => void), deps?: readonly unknown[]) => void;
