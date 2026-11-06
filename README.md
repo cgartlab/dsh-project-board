@@ -1,6 +1,6 @@
-# dsh-project-board
+# dsh-tac
 
-[![check](https://github.com/cgartlab/dsh-project-board/actions/workflows/check.yml/badge.svg)](https://github.com/cgartlab/dsh-project-board/actions/workflows/check.yml)
+[![check](https://github.com/cgartlab/dsh-tac/actions/workflows/check.yml/badge.svg)](https://github.com/cgartlab/dsh-tac/actions/workflows/check.yml)
 [![license: CC BY-NC-SA 4.0](https://img.shields.io/badge/license-CC%20BY--NC--SA%204.0-lightgrey.svg)](https://creativecommons.org/licenses/by-nc-sa/4.0/)
 
 English | [中文](README.zh.md)
@@ -69,6 +69,7 @@ The bundle is installed as a local link, not from npm:
 plugin_manager install_bundle target="<this repository>"
 ```
 
+The package is `@local/dsh-tac` and inserts itself as the `dsh-tac` loader entry.
 `package.json` exposes `dsh.bundle.patch` and `dsh.client`; the plugin injects into
 `conversation.header.leading`, `conversation.session.header.utilities`,
 `conversation.composer.dock`, `shell.overlay`, and `settings.section`.

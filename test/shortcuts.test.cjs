@@ -1,7 +1,7 @@
 'use strict';
 
 /*
- * Keyboard-shortcut verification for @local/dsh-project-board.
+ * Keyboard-shortcut verification for @local/dsh-tac.
  *
  * The plugin binds its global shortcuts inside the Palette component:
  *

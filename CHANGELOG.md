@@ -10,6 +10,18 @@
 
 - 暂无
 
+## [0.2.0] - 2026-11-06
+
+- **插件改名**：`dsh-project-board` 正式改名为 **dsh-tac**。仓库地址变更为
+  <https://github.com/cgartlab/dsh-tac>，包名改为 `@local/dsh-tac`，客户端模块 id
+  （`@local/dsh-tac`、`@local/dsh-tac/tab`）和样式标记同步改了。
+- 因为包名变了，之前用旧名装过的插件要**卸载后按新仓库路径重装一次**；设置、悬浮窗位置、
+  项目颜色和图标存在浏览器本地存储里，键名没有改动，重装后仍然保留。
+- 界面里这个功能本身还是叫"项目看板"，设置页标题仍是"项目看板设置"；插件标题显示为
+  「dsh-tac 项目看板」，方便在插件列表里一眼认出来。
+- `scripts/check-bundle.cjs` 新增一致性校验：`client.js` 里的模块 id 和
+  `cordis.patch.yml` 里的包名必须与 `package.json` 的 `name` 一致，以后再改名漏同步会直接让检查失败。
+
 ## [0.1.14] - 2026-11-06
 
 - 悬浮列表收起后的小胶囊：加了图标徽标（有会话在跑时是蓝色，带轻微呼吸光），数字改成显示正在进行的会话数量，后面写"进行中"。
@@ -176,18 +188,22 @@
 
 - 仓库里不存任何账号密码或令牌；插件设置只放在 DSH 配置和浏览器本地存储里。
 
-[0.1.0]: https://github.com/cgartlab/dsh-project-board/releases/tag/v0.1.0
-[0.1.1]: https://github.com/cgartlab/dsh-project-board/releases/tag/v0.1.1
-[0.1.2]: https://github.com/cgartlab/dsh-project-board/releases/tag/v0.1.2
-[0.1.3]: https://github.com/cgartlab/dsh-project-board/releases/tag/v0.1.3
-[0.1.4]: https://github.com/cgartlab/dsh-project-board/releases/tag/v0.1.4
-[0.1.5]: https://github.com/cgartlab/dsh-project-board/releases/tag/v0.1.5
-[0.1.6]: https://github.com/cgartlab/dsh-project-board/releases/tag/v0.1.6
-[0.1.7]: https://github.com/cgartlab/dsh-project-board/releases/tag/v0.1.7
-[0.1.8]: https://github.com/cgartlab/dsh-project-board/releases/tag/v0.1.8
-[0.1.9]: https://github.com/cgartlab/dsh-project-board/releases/tag/v0.1.9
-[0.1.10]: https://github.com/cgartlab/dsh-project-board/releases/tag/v0.1.10
-[0.1.11]: https://github.com/cgartlab/dsh-project-board/releases/tag/v0.1.11
+[0.1.0]: https://github.com/cgartlab/dsh-tac/releases/tag/v0.1.0
+[0.1.1]: https://github.com/cgartlab/dsh-tac/releases/tag/v0.1.1
+[0.1.2]: https://github.com/cgartlab/dsh-tac/releases/tag/v0.1.2
+[0.1.3]: https://github.com/cgartlab/dsh-tac/releases/tag/v0.1.3
+[0.1.4]: https://github.com/cgartlab/dsh-tac/releases/tag/v0.1.4
+[0.1.5]: https://github.com/cgartlab/dsh-tac/releases/tag/v0.1.5
+[0.1.6]: https://github.com/cgartlab/dsh-tac/releases/tag/v0.1.6
+[0.1.7]: https://github.com/cgartlab/dsh-tac/releases/tag/v0.1.7
+[0.1.8]: https://github.com/cgartlab/dsh-tac/releases/tag/v0.1.8
+[0.1.9]: https://github.com/cgartlab/dsh-tac/releases/tag/v0.1.9
+[0.1.10]: https://github.com/cgartlab/dsh-tac/releases/tag/v0.1.10
+[0.1.11]: https://github.com/cgartlab/dsh-tac/releases/tag/v0.1.11
+[0.1.12]: https://github.com/cgartlab/dsh-tac/releases/tag/v0.1.12
+[0.1.13]: https://github.com/cgartlab/dsh-tac/releases/tag/v0.1.13
+[0.1.14]: https://github.com/cgartlab/dsh-tac/releases/tag/v0.1.14
+[0.2.0]: https://github.com/cgartlab/dsh-tac/releases/tag/v0.2.0
 
 
 

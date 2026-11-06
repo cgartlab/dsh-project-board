@@ -1,5 +1,5 @@
 name: Bug report
-description: Something in dsh-project-board does not work as expected
+description: Something in dsh-tac does not work as expected
 labels: [bug]
 body:
   - type: markdown

@@ -61,6 +61,24 @@ if (pkg) {
 if (!checkFile('cordis.patch.yml')) fail('missing cordis.patch.yml');
 if (!checkFile('LICENSE')) fail('missing LICENSE');
 
+// The package name is the plugin's identity in three places at once: package.json,
+// the client module loader id, and the loader entry inside cordis.patch.yml. Renaming
+// the repository is only finished when all three agree, so check the drift here.
+if (pkg && pkg.name && checkFile('client.js')) {
+  const clientSource = fs.readFileSync(path.join(root, 'client.js'), 'utf8');
+  const loaderId = /__ModuleLoader__\.load\(\{\s*id:\s*'([^']+)'/.exec(clientSource);
+  if (!loaderId) fail('client.js: cannot read the module loader id');
+  else if (loaderId[1] !== pkg.name) fail('client.js module id "' + loaderId[1] + '" does not match package.json name "' + pkg.name + '"');
+  for (const match of clientSource.matchAll(/'(@local\/[^']+)'/g)) {
+    if (!match[1].startsWith(pkg.name)) fail('client.js still references the old package id "' + match[1] + '"');
+  }
+  const patchPath = path.join(root, 'cordis.patch.yml');
+  if (fs.existsSync(patchPath)) {
+    const patch = fs.readFileSync(patchPath, 'utf8');
+    if (!patch.includes("'" + pkg.name + "'")) fail('cordis.patch.yml does not insert package name "' + pkg.name + '"');
+  }
+}
+
 if (failures.length > 0) {
   console.error('\n' + failures.length + ' check(s) failed');
   process.exitCode = 1;

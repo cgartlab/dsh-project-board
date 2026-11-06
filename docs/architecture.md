@@ -1,6 +1,6 @@
 # Architecture
 
-`dsh-project-board` is a DSH **client bundle**: `package.json` points at
+`dsh-tac` is a DSH **client bundle**: `package.json` points at
 `cordis.patch.yml`, which inserts the package into the harness profile. The host half
 (`index.js`) is intentionally a no-op; everything runs in the browser client through the
 harness client module loader.
@@ -9,7 +9,7 @@ harness client module loader.
 
 ```js
 window.__ModuleLoader__.load({
-  id: '@local/dsh-project-board',
+  id: '@local/dsh-tac',
   factory(require) { /* ... */ }
 });
 ```

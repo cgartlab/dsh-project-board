@@ -1,12 +1,13 @@
 {
-  "name": "@local/dsh-project-board",
-  "version": "0.1.14",
+  "name": "@local/dsh-tac",
+  "version": "0.2.0",
   "private": true,
   "description": "DeepSeek Harness plugin: project/session task board, floating session HUD, keyboard-first navigation, and task notifications.",
   "license": "CC-BY-NC-SA-4.0",
   "author": "CGArtLab",
   "keywords": [
     "dsh",
+    "dsh-tac",
     "deepseek-harness",
     "plugin",
     "project-board",
@@ -14,10 +15,10 @@
   ],
   "repository": {
     "type": "git",
-    "url": "https://github.com/cgartlab/dsh-project-board.git"
+    "url": "https://github.com/cgartlab/dsh-tac.git"
   },
-  "homepage": "https://github.com/cgartlab/dsh-project-board",
-  "bugs": "https://github.com/cgartlab/dsh-project-board/issues",
+  "homepage": "https://github.com/cgartlab/dsh-tac",
+  "bugs": "https://github.com/cgartlab/dsh-tac/issues",
   "type": "module",
   "scripts": {
     "check": "node scripts/check-bundle.cjs && node scripts/check-i18n.cjs",

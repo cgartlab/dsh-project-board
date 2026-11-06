@@ -1,6 +1,6 @@
-# dsh-project-board
+# dsh-tac
 
-[![check](https://github.com/cgartlab/dsh-project-board/actions/workflows/check.yml/badge.svg)](https://github.com/cgartlab/dsh-project-board/actions/workflows/check.yml)
+[![check](https://github.com/cgartlab/dsh-tac/actions/workflows/check.yml/badge.svg)](https://github.com/cgartlab/dsh-tac/actions/workflows/check.yml)
 [![license: CC BY-NC-SA 4.0](https://img.shields.io/badge/license-CC%20BY--NC--SA%204.0-lightgrey.svg)](https://creativecommons.org/licenses/by-nc-sa/4.0/)
 
 [English](README.md) | 中文
@@ -59,6 +59,7 @@
 plugin_manager install_bundle target="<本仓库路径>"
 ```
 
+包名为 `@local/dsh-tac`，以 `dsh-tac` 这个 loader 条目插入。
 `package.json` 暴露 `dsh.bundle.patch` 与 `dsh.client`；插件注入
 `conversation.header.leading`、`conversation.session.header.utilities`、
 `conversation.composer.dock`、`shell.overlay` 和 `settings.section`。

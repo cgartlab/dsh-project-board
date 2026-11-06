@@ -1,2 +1,2 @@
-/** Host half of the Project Board bundle; the Client module owns all rendering. */
+/** Host half of the dsh-tac bundle; the Client module owns all rendering. */
 export function apply() {}

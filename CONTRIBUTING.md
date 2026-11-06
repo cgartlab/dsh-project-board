@@ -1,6 +1,6 @@
 # Contributing
 
-Thanks for taking a look at `dsh-project-board`. This is a single-file DSH client
+Thanks for taking a look at `dsh-tac`. This is a single-file DSH client
 plugin; keep changes focused and verify them against a running harness.
 
 ## Development loop

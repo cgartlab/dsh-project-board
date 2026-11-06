@@ -1,5 +1,5 @@
 window.__ModuleLoader__.load({
-  id: '@local/dsh-project-board',
+  id: '@local/dsh-tac',
   factory(require) {
     const React = require('react');
     const h = React.createElement;
@@ -7,7 +7,7 @@ window.__ModuleLoader__.load({
 
     const NS = 'projectBoard';
     const STORE_KEY = 'dsh.project-board.appearance.v1';
-    const BOARD_ID = '@local/dsh-project-board/tab';
+    const BOARD_ID = '@local/dsh-tac/tab';
     const BOARD_KIND = 'projectBoard';
     const SETTINGS_KEY = 'dsh.project-board.settings.v1';
     const LOG_KEY = 'pbx.logs.v1';
@@ -4395,7 +4395,7 @@ window.__ModuleLoader__.load({
       ctx.effect(() => ctx.locale.register(NS, { zh: zh, en: en }), 'project-board: dictionaries');
       ctx.effect(() => {
         const tag = document.createElement('style');
-        tag.dataset.plugin = '@local/dsh-project-board';
+        tag.dataset.plugin = '@local/dsh-tac';
         tag.textContent = CSS;
         document.head.appendChild(tag);
         return () => { tag.remove(); };

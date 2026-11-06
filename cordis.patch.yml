@@ -1,4 +1,4 @@
 - insert:
-    - id: project-board
-      name: '@local/dsh-project-board'
+    - id: dsh-tac
+      name: '@local/dsh-tac'
       config: {}
