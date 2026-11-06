@@ -132,6 +132,7 @@ export const en: Dict = {
       'settings.githubDesc': 'Enter a token and map each project to a repo to show real Open Issue / Open PR / version data; unmapped projects still show a "—" placeholder.',
       'settings.githubToken': 'GitHub Personal Access Token',
       'settings.githubTokenDesc': 'Optional: public repos work without it; fill it for private repos or a higher rate limit. Used only to call api.github.com; the token stays on this machine, never syncs with the workspace and is never uploaded — clear it anytime.',
+      'settings.githubTokenPlaceholderWarn': 'This looks like a DSH secret reference ({{...}}), not a GitHub PAT. The GitHub API needs a real ghp_... token — paste the PAT directly.',
       'settings.githubTest': 'Test connection', 'settings.githubTesting': 'Testing…',
       'settings.githubTestOk': 'Connected, token valid', 'settings.githubTestFail': 'Connection failed',
       'settings.githubReposTitle': 'Project repository mapping',
