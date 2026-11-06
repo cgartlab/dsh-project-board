@@ -50,7 +50,7 @@
 - 失误：把"看板全屏"误判成"原生侧栏展开"，打开看板时 HUD 被无故收起 → 规则：全屏看板 ≠ 侧栏展开，判定口径见 `docs/architecture.md` 的诊断表（0.1.14 修）
 - 失误：往输入框加 margin 给 HUD 让位，窄窗口下溢出到面板外 → 规则：只给对话滚动区加 padding（单一机制），记住被垫节点、按会话中心判左右、剩余宽度不足约 360px 时不做（0.1.14）
 - 失误：贴边吸附后自动收起再展开，胶囊"浮"到上面去 → 规则：收起/展开时按旧盒子的右/下贴边重新计算坐标，而不是复用左上角（0.1.12）
-- 失误：切换会话时对话区 scroller 被替换，但 HUD padding effect 的依赖（collapsed/hudWidth/pos/rows.length）不含会话变化 → effect 不重跑 → 新 scroller 不被 padding → HUD 挡住对话 + 宽度跳变 → 规则：padding/位置 effect 如果操作的 DOM 元素会被宿主替换（如会话切换重建 scroller），必须加 MutationObserver 检测元素替换，不能只靠 React state 依赖；schedule() 用 requestAnimationFrame 防抖合并频繁变更（0.4.0）
+- 失误：切换会话时对话区 scroller 被替换，但 HUD padding effect 的依赖（collapsed/hudWidth/pos/rows.length）不含会话变化 → effect 不重跑 → 新 scroller 不被 padding → HUD 挡住对话 + 宽度跳变 → 规则：padding/位置 effect 如果操作的 DOM 元素会被宿主替换（如会话切换重建 scroller），必须加 MutationObserver 检测元素替换，不能只靠 React state 依赖；MutationObserver 回调是微任务（在下次渲染前执行），直接调 apply() 可在浏览器画之前设好 padding，消除 1-frame flash；apply() 幂等所以每次 mutation 直接调安全；ResizeObserver 仍用 schedule()（rAF）合并列宽变化（0.4.0）
 
 ## React 组件纪律
 
