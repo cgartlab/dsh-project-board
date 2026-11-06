@@ -738,6 +738,7 @@ export function ProjectBoard(props: ProjectBoardProps): unknown {
         key: project.workspaceId,
         className: 'pbx-tr' + (projectFilter === project.workspaceId ? ' pbx-tr-selected' : ''),
         'aria-current': projectFilter === project.workspaceId ? 'true' : undefined,
+        'aria-selected': projectFilter === project.workspaceId ? 'true' : 'false',
         tabIndex: 0,
         onClick: () => {
           setProjectFilter(project.workspaceId);

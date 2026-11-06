@@ -80,7 +80,7 @@ export const CSS: string = [
       '.pbx-num.pbx-strong{color:var(--dsw-alias-label-primary);font-weight:600}',
       '.pbx-num.pbx-numZero{color:var(--dsw-alias-label-secondary);opacity:.65}',
       '.pbx-num.pbx-numHot{color:var(--dsw-alias-label-primary);font-weight:600}',
-      '.pbx-num.pbx-na{color:var(--dsw-alias-label-secondary);opacity:.5}',
+      '.pbx-num.pbx-na{color:var(--dsw-alias-label-secondary);opacity:.6}',
       '.pbx-num.pbx-na.pbx-err{color:var(--dsw-alias-state-error-primary);opacity:.9}',
       '.pbx-num.pbx-ver{font-family:var(--dsw-font-mono,ui-monospace,SFMono-Regular,Menlo,Consolas,monospace);font-size:12px}',
       '.pbx-num.pbx-ver.pbx-verLag{color:var(--dsw-alias-state-warn-primary);font-weight:600}',
