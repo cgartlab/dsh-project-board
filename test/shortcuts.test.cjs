@@ -1045,6 +1045,20 @@ test('one Alt+W press toggles the sidebar once even if it is delivered twice', (
   assert.deepEqual(harness.services.calls.layoutToggleSidebar, [true], 'the duplicated delivery toggles the panel once, not twice');
 });
 
+test('one Alt+N press toggles the board once even if it is delivered twice', () => {
+  const harness = createHarness();
+  harness.resetState();
+  harness.clearSpies();
+
+  // Same guard as Alt+W (pbxSidebarActed): a leaked listener from a hot reload would
+  // receive the same event and toggleBoard a second time, cancelling the press.
+  const event = new KeyboardEventShim('keydown', { key: 'n', code: 'KeyN', altKey: true, bubbles: true, cancelable: true });
+  harness.doc.dispatchEvent(event);
+  harness.doc.dispatchEvent(event);
+  harness.render();
+  assert.deepEqual(harness.spies.toggleBoard, ['narrow'], 'the duplicated Alt+N delivery toggles the board once, not twice');
+});
+
 test('the floating list docks and comes back with the native sidebar on the same frame', () => {
   const harness = createHarness();
   harness.resetState();
