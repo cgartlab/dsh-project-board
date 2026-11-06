@@ -769,14 +769,26 @@ export function FloatingStatus(props: FloatingStatusProps): unknown {
     };
     window.addEventListener('resize', schedule);
     let observer: ResizeObserver | null = null;
+    let mutationObserver: MutationObserver | null = null;
     const column = document.querySelector('[class*="_centerCol"]');
     if (column && typeof ResizeObserver !== 'undefined') {
       observer = new ResizeObserver(schedule);
       observer.observe(column);
     }
+    /* A session switch replaces the conversation scroller inside the center column.
+       The ResizeObserver only fires on column size changes, so a content swap that
+       keeps the same column width leaves the new scroller unpadded — the HUD then
+       overlaps the conversation. Watch childList too so the padding re-applies on
+       the next frame whenever the column's content changes. schedule() debounces
+       via requestAnimationFrame, so frequent mutations coalesce into one apply(). */
+    if (column && typeof MutationObserver !== 'undefined') {
+      mutationObserver = new MutationObserver(schedule);
+      mutationObserver.observe(column, { childList: true, subtree: true });
+    }
     return () => {
       window.removeEventListener('resize', schedule);
       if (observer) observer.disconnect();
+      if (mutationObserver) mutationObserver.disconnect();
       if (frame) cancelAnimationFrame(frame);
       clear();
     };

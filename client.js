@@ -4868,14 +4868,20 @@
       };
       window.addEventListener("resize", schedule);
       let observer = null;
+      let mutationObserver = null;
       const column = document.querySelector('[class*="_centerCol"]');
       if (column && typeof ResizeObserver !== "undefined") {
         observer = new ResizeObserver(schedule);
         observer.observe(column);
       }
+      if (column && typeof MutationObserver !== "undefined") {
+        mutationObserver = new MutationObserver(schedule);
+        mutationObserver.observe(column, { childList: true, subtree: true });
+      }
       return () => {
         window.removeEventListener("resize", schedule);
         if (observer) observer.disconnect();
+        if (mutationObserver) mutationObserver.disconnect();
         if (frame) cancelAnimationFrame(frame);
         clear();
       };
