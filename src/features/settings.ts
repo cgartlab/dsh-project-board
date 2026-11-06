@@ -236,8 +236,9 @@ export function SettingsPage(props: SettingsPageProps): unknown {
           : h('input', {
               type: 'text',
               className: 'pbx-setInput pbx-githubPathInput',
-              value: path,
-              onInput: (event: Event) => renameRepoPath(path, (event.target as HTMLInputElement).value)
+              'aria-label': t('settings.githubPath'),
+              defaultValue: path,
+              onBlur: (event: Event) => renameRepoPath(path, (event.target as HTMLInputElement).value)
             }),
         h('input', {
           type: 'text',

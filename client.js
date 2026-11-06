@@ -5652,8 +5652,9 @@
           ghWorkspaces.length > 0 ? h("div", { className: "pbx-githubPath", title: path }, path) : h("input", {
             type: "text",
             className: "pbx-setInput pbx-githubPathInput",
-            value: path,
-            onInput: (event) => renameRepoPath(path, event.target.value)
+            "aria-label": t("settings.githubPath"),
+            defaultValue: path,
+            onBlur: (event) => renameRepoPath(path, event.target.value)
           }),
           h("input", {
             type: "text",
@@ -6307,7 +6308,7 @@
       const previous = stateRef.current;
       if (previous.id === currentId) return void 0;
       const want = previous.id === null ? api.boardStateNow() : previous.state;
-      stateRef.current = { id: currentId, state: want, settleUntil: Date.now() + 1600 };
+      stateRef.current = { id: currentId, state: want, settleUntil: Date.now() + 3e3 };
       if (previous.id === null) return void 0;
       let attempts = 0;
       const enforce = () => {
@@ -6321,9 +6322,9 @@
           return;
         }
         attempts += 1;
-        if (attempts === 1) logEvent("debug", "board", "restore after switch", want);
+        if (attempts === 1) logEvent("info", "board", "restore after switch", want);
         live.setBoardState(want);
-        if (attempts < 10) window.setTimeout(enforce, 140);
+        if (attempts < 20) window.setTimeout(enforce, 120);
       };
       const timer = window.setTimeout(enforce, 60);
       return () => window.clearTimeout(timer);
