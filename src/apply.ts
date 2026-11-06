@@ -247,8 +247,9 @@ export function apply(ctx: HostContext): void {
     try {
       const sidebarRight = ctx.sidebarRight;
       if (!sidebarRight) return;
-      const expanded = typeof sidebarRight.isExpanded === 'function' ? sidebarRight.isExpanded() : false;
-      if (expanded && rightBoardActive()) sidebarRight.toggleExpanded();
+      /* LESSONS: isExpanded() is unreliable (a build could leave Alt+N/B/V open-only).
+         Decide visibility from the DOM panel marker + the active panel kind instead. */
+      if (boardPanelVisible() && rightBoardActive()) sidebarRight.toggleExpanded();
     } catch (error) {
       /* ignore */
     }
@@ -605,36 +606,39 @@ export function apply(ctx: HostContext): void {
   };
 
   /* -------------------------------------------------------- diagnostics */
-  window.setTimeout(() => {
-    try {
-      const snapshot = settingsStore.getSnapshot();
-      const frame = document.querySelector('[class*="_frame"][style*="grid-template-columns"]') || document.querySelector('[data-sidebar-collapsed]');
-      /* Record the environment a shortcut has to work in: the effective Alt+W binding (it may
-         have been remapped), the window width that decides between the column, the rail and the
-         drawer sidebar, and the sidebar state at startup. */
-      logEvent('info', 'init', 'plugin ready', {
-        shortcuts: Object.keys(snapshot.shortcuts || {}).length,
-        hud: Boolean(snapshot.hud && snapshot.hud.enabled),
-        board: Boolean(snapshot.board && snapshot.board.enabled),
-        leftSidebar: snapshot.shortcuts && snapshot.shortcuts.leftSidebar,
-        windowWidth: window.innerWidth || 0,
-        frameWidth: frame ? Math.round(frame.getBoundingClientRect().width) : null,
-        sidebar: sidebarSignature()
-      });
-      for (const key of Object.keys(snapshot.shortcuts || {})) {
-        const conflict = findBuiltinConflict(snapshot.shortcuts[key as keyof typeof snapshot.shortcuts]);
-        if (conflict) {
-          logEvent('warn', 'shortcuts', 'also used by a built-in command', {
-            key: key,
-            combo: snapshot.shortcuts[key as keyof typeof snapshot.shortcuts],
-            builtin: conflict.label
-          });
+  ctx.effect(() => {
+    const timer = window.setTimeout(() => {
+      try {
+        const snapshot = settingsStore.getSnapshot();
+        const frame = document.querySelector('[class*="_frame"][style*="grid-template-columns"]') || document.querySelector('[data-sidebar-collapsed]');
+        /* Record the environment a shortcut has to work in: the effective Alt+W binding (it may
+           have been remapped), the window width that decides between the column, the rail and the
+           drawer sidebar, and the sidebar state at startup. */
+        logEvent('info', 'init', 'plugin ready', {
+          shortcuts: Object.keys(snapshot.shortcuts || {}).length,
+          hud: Boolean(snapshot.hud && snapshot.hud.enabled),
+          board: Boolean(snapshot.board && snapshot.board.enabled),
+          leftSidebar: snapshot.shortcuts && snapshot.shortcuts.leftSidebar,
+          windowWidth: window.innerWidth || 0,
+          frameWidth: frame ? Math.round(frame.getBoundingClientRect().width) : null,
+          sidebar: sidebarSignature()
+        });
+        for (const key of Object.keys(snapshot.shortcuts || {})) {
+          const conflict = findBuiltinConflict(snapshot.shortcuts[key as keyof typeof snapshot.shortcuts]);
+          if (conflict) {
+            logEvent('warn', 'shortcuts', 'also used by a built-in command', {
+              key: key,
+              combo: snapshot.shortcuts[key as keyof typeof snapshot.shortcuts],
+              builtin: conflict.label
+            });
+          }
         }
+      } catch (error) {
+        logEvent('warn', 'init', 'diagnostics failed', { reason: String((error && (error as Error).message) || error) });
       }
-    } catch (error) {
-      logEvent('warn', 'init', 'diagnostics failed', { reason: String((error && (error as Error).message) || error) });
-    }
-  }, 1500);
+    }, 1500);
+    return () => window.clearTimeout(timer);
+  }, 'project-board: startup diagnostics');
   ctx.effect(() => {
     const onError = (event: ErrorEvent): void =>
       logEvent('error', 'window', String((event && event.message) || 'script error'), {
@@ -654,7 +658,7 @@ export function apply(ctx: HostContext): void {
     };
   }, 'project-board: error hooks');
 
-  installChatScrollListeners();
+  ctx.effect(() => installChatScrollListeners(), 'project-board: chat scroll listeners');
 
   /* Warn once at startup when saved shortcuts collide with built-in DSH commands. */
   ctx.effect(() => {

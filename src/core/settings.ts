@@ -26,16 +26,17 @@ export function mergeSettings(base: Settings, raw: unknown): Settings {
         out.headerButtons[id] = Object.assign({}, DEFAULT_SETTINGS.headerButtons[id], buttons[id] || {});
       }
     }
-    const migratingButtons = stored.headerButtonsVersion !== 3;
-    if (migratingButtons) {
-      out.headerButtons = cloneJson(DEFAULT_SETTINGS.headerButtons);
+    if (stored.headerButtonsVersion !== 3) {
+      // Keep the per-button merge above (user side/hidden/order survive), only apply the
+      // one-off legacy "capsule hidden" signal on top. Do NOT replace the whole group with
+      // the defaults here: that would wipe every user tweak on upgrade to version 3.
       const header = stored.header as { capsule?: boolean } | undefined;
       if (header && header.capsule === false) out.headerButtons.capsule.hidden = true;
     }
     if (stored.hintsVersion !== 1) out.hints = cloneJson(DEFAULT_SETTINGS.hints);
     if (stored.boardProjVersion !== 1) {
       out.board.defaultView = 'projects';
-      out.board.boardProjVersion = 1;
+      out.boardProjVersion = 1;
     }
     for (const key of Object.keys(DEFAULT_SETTINGS.shortcuts) as (keyof ShortcutMap)[]) {
       if (!comboHasModifier(out.shortcuts[key])) out.shortcuts[key] = DEFAULT_SETTINGS.shortcuts[key];

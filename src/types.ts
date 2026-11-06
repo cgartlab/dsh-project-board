@@ -70,8 +70,6 @@ export interface BoardSettings {
   enabled: boolean;
   wideThreshold: number;
   defaultView: string;
-  /** Set by the settings migration; older builds stored a board view without it. */
-  boardProjVersion?: number;
 }
 
 export interface ProjectColumnsSettings {
