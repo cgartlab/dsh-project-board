@@ -21,6 +21,8 @@
   "bugs": "https://github.com/cgartlab/dsh-tac/issues",
   "type": "module",
   "scripts": {
+    "build": "node scripts/build.mjs",
+    "typecheck": "tsc --noEmit",
     "check": "node scripts/check-bundle.cjs && node scripts/check-i18n.cjs",
     "check:bundle": "node scripts/check-bundle.cjs",
     "check:i18n": "node scripts/check-i18n.cjs",
@@ -43,7 +45,9 @@
     "icon.svg"
   ],
   "dsh": {
-    "bundle": { "patch": "./cordis.patch.yml" },
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    },
     "client": {
       "platform": "web",
       "immediately": true,
@@ -53,18 +57,9 @@
         "@deepseek-ai/dsh-client-ui-session"
       ]
     }
+  },
+  "devDependencies": {
+    "esbuild": "^0.28.2",
+    "typescript": "^7.0.2"
   }
 }
-
-
-
-
-
-
-
-
-
-
-
-
-
