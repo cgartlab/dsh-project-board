@@ -1162,6 +1162,15 @@
     ".pbx-groupRow:hover td{background:var(--dsw-alias-interactive-bg-hover)}",
     ".pbx-groupChevron{display:inline-flex;color:var(--dsw-alias-label-secondary);transition:transform var(--pbx-dur-micro) var(--pbx-ease-standard);margin-right:6px;vertical-align:middle}",
     ".pbx-groupChevron.open{transform:rotate(90deg)}",
+    ".pbx-chevron{display:inline-flex;flex:none;color:var(--dsw-alias-label-secondary);transition:transform var(--pbx-dur-micro) var(--pbx-ease-standard);margin-right:4px;align-self:center}",
+    ".pbx-chevron.open{transform:rotate(90deg)}",
+    ".pbx-tr-expanded td{background:color-mix(in srgb,var(--dsw-alias-brand-primary) 5%,transparent)}",
+    ".pbx-tr-inline td{padding:5px 10px 5px 32px;font-size:12.5px}",
+    ".pbx-tr-inline:hover td{background:var(--dsw-alias-interactive-bg-hover)}",
+    ".pbx-inlineSession{border-bottom:1px solid var(--dsw-alias-border-l1)}",
+    ".pbx-inlineRow{display:flex;align-items:center;gap:8px;min-width:0}",
+    ".pbx-inlineRow .pbx-titleText{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}",
+    ".pbx-inlineTime{flex:none;font-size:11px;color:var(--dsw-alias-label-secondary);white-space:nowrap}",
     ".pbx-groupCount{margin-left:8px;font-size:11.5px;color:var(--dsw-alias-label-secondary);font-weight:400}",
     ".pbx-appearCell{display:inline-flex;align-items:center;gap:7px}",
     ".pbx-iconField{display:inline-flex;align-items:center;flex:none}",
@@ -2455,6 +2464,7 @@
       return () => window.removeEventListener("pbx-appearance-reset", handler);
     }, []);
     const [editingProject, setEditingProject] = useState(null);
+    const [expandedProject, setExpandedProject] = useState(null);
     const popRef = useRef(null);
     const [view, setView] = useState(
       () => config.board.defaultView === "projects" ? "projects" : "sessions"
@@ -2954,26 +2964,67 @@
       const cls = "pbx-num" + (def.key === "total" ? " pbx-strong" : "");
       return h("td", { className: cls }, String(value));
     };
+    const renderInlineSessionRow = (row) => h(
+      "tr",
+      {
+        key: "s-" + row.id,
+        className: "pbx-tr pbx-tr-inline" + (row.running ? " pbx-tr-live" : "") + (row.current ? " pbx-tr-current" : ""),
+        onClick: () => open(row.id),
+        tabIndex: 0,
+        onKeyDown: (e) => {
+          if (e.key === "Enter" || e.key === " ") {
+            e.preventDefault();
+            open(row.id);
+          }
+        }
+      },
+      h(
+        "td",
+        { colSpan: 1 + projectCols.length, className: "pbx-inlineSession" },
+        h(
+          "div",
+          { className: "pbx-inlineRow" },
+          row.info.tone === "running" ? h(RunRing, { size: 9 }) : h("span", { className: "pbx-rdot", "data-tone": row.info.tone }),
+          h("span", { className: "pbx-titleText" }, row.title),
+          row.current ? h("span", { className: "pbx-curTag" }, t("card.current")) : null,
+          h("span", { className: "pbx-inlineTime" }, relTime(row.updatedAt, t)),
+          h(
+            "button",
+            {
+              type: "button",
+              className: "pbx-openBtn",
+              title: t("open"),
+              "aria-label": t("open"),
+              onClick: (e) => {
+                e.stopPropagation();
+                open(row.id);
+              }
+            },
+            h(Icon, { name: "arrow", size: 14 })
+          )
+        )
+      )
+    );
     const renderProjectRow = (project) => {
       const spec = specOf(project.workspaceId);
       const isEditing = editingProject === project.workspaceId;
-      return h(
+      const isExpanded = expandedProject === project.workspaceId;
+      const projectRow = h(
         "tr",
         {
           key: project.workspaceId,
-          className: "pbx-tr" + (projectFilter === project.workspaceId ? " pbx-tr-selected" : ""),
+          className: "pbx-tr" + (isExpanded ? " pbx-tr-expanded" : "") + (projectFilter === project.workspaceId ? " pbx-tr-selected" : ""),
           "aria-current": projectFilter === project.workspaceId ? "true" : void 0,
           "aria-selected": projectFilter === project.workspaceId ? "true" : "false",
+          "aria-expanded": isExpanded ? "true" : "false",
           tabIndex: 0,
           onClick: () => {
-            setProjectFilter(project.workspaceId);
-            setView("sessions");
-            setStatusFilter("all");
+            setExpandedProject(isExpanded ? null : project.workspaceId);
           },
           onKeyDown: (e) => {
-            if (e.key === "Enter") {
-              setProjectFilter(project.workspaceId);
-              setView("sessions");
+            if (e.key === "Enter" || e.key === " ") {
+              e.preventDefault();
+              setExpandedProject(isExpanded ? null : project.workspaceId);
             }
           }
         },
@@ -2983,6 +3034,7 @@
           h(
             "div",
             { className: "pbx-titleCell" },
+            h("span", { className: "pbx-chevron" + (isExpanded ? " open" : "") }, h(Icon, { name: "chevron", size: 13 })),
             h(
               "span",
               { className: "pbx-iconField", style: { position: "relative" } },
@@ -3023,6 +3075,10 @@
         ),
         projectCols.map((def) => projectCell(project, def))
       );
+      if (!isExpanded) return projectRow;
+      const projectSessions = allSessions.filter((s) => s.workspaceId === project.workspaceId).sort((a, b) => b.updatedAt - a.updatedAt);
+      if (projectSessions.length === 0) return projectRow;
+      return [projectRow, ...projectSessions.map(renderInlineSessionRow)];
     };
     const header = h(
       "div",
@@ -3186,7 +3242,7 @@
           h(
             "tbody",
             null,
-            filteredProjects.length === 0 ? h("tr", null, h("td", { colSpan: 1 + projectCols.length, className: "pbx-emptyCell" }, t("empty.filtered"))) : filteredProjects.map(renderProjectRow)
+            filteredProjects.length === 0 ? h("tr", null, h("td", { colSpan: 1 + projectCols.length, className: "pbx-emptyCell" }, t("empty.filtered"))) : filteredProjects.map(renderProjectRow).flat()
           )
         ),
         h("div", { className: "pbx-dbFoot" }, t("count.rows", { n: filteredProjects.length }))
