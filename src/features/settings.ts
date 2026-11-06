@@ -216,7 +216,7 @@ export function SettingsPage(props: SettingsPageProps): unknown {
     setGhTest(null);
     try {
       const stats = await fetchRepoStats('octocat', 'hello-world', config.githubToken);
-      setGhTest(stats.status === 'ok' ? { ok: true, text: t('settings.githubTestOk') } : { ok: false, text: githubErrorText(stats.error) });
+      setGhTest(stats.status === 'ok' ? { ok: true, text: config.githubToken ? t('settings.githubTestOk') : t('settings.githubTestOkNoToken') } : { ok: false, text: githubErrorText(stats.error) });
     } catch (error) {
       setGhTest({ ok: false, text: t('settings.githubTestFail') });
     } finally {

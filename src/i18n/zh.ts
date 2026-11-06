@@ -132,7 +132,7 @@ export const zh = {
       'settings.githubTokenDesc': '可选：公开仓库可不填；私有仓库或需要更高速率限制时填写。仅用于调用 api.github.com；token 只保存在本机，不随工作区同步，也不会上传，随时可清除。',
       'settings.githubTokenPlaceholderWarn': '当前值看起来是 DSH 密钥引用（{{...}}），不是 GitHub PAT。GitHub API 需要真实的 ghp_... 格式 token，请直接粘贴 PAT。',
       'settings.githubTest': '测试连接', 'settings.githubTesting': '测试中…',
-      'settings.githubTestOk': '连接成功，token 有效', 'settings.githubTestFail': '连接失败',
+      'settings.githubTestOk': '连接成功，token 有效', 'settings.githubTestOkNoToken': '连接成功（公开仓库无需 token）', 'settings.githubTestFail': '连接失败',
       'settings.githubReposTitle': '项目仓库映射',
       'settings.githubReposHint': '按项目路径为每个项目指定 GitHub 仓库（owner/repo）与本地版本；填了 owner 和 repo 的列会显示真实数据，本地版本单独填写。',
       'settings.githubPath': '项目路径',

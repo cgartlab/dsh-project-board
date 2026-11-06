@@ -134,7 +134,7 @@ export const en: Dict = {
       'settings.githubTokenDesc': 'Optional: public repos work without it; fill it for private repos or a higher rate limit. Used only to call api.github.com; the token stays on this machine, never syncs with the workspace and is never uploaded — clear it anytime.',
       'settings.githubTokenPlaceholderWarn': 'This looks like a DSH secret reference ({{...}}), not a GitHub PAT. The GitHub API needs a real ghp_... token — paste the PAT directly.',
       'settings.githubTest': 'Test connection', 'settings.githubTesting': 'Testing…',
-      'settings.githubTestOk': 'Connected, token valid', 'settings.githubTestFail': 'Connection failed',
+      'settings.githubTestOk': 'Connected, token valid', 'settings.githubTestOkNoToken': 'Connected (public repos need no token)', 'settings.githubTestFail': 'Connection failed',
       'settings.githubReposTitle': 'Project repository mapping',
       'settings.githubReposHint': 'For each project path, set the GitHub repo (owner/repo) and the local version; columns with owner and repo filled show real data, local version is filled separately.',
       'settings.githubPath': 'Project path',
