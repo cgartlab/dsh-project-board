@@ -74,13 +74,11 @@ export interface BoardSettings {
 
 export interface ProjectColumnsSettings {
   total: boolean;
-  running: boolean;
-  attention: boolean;
-  done: boolean;
-  idle: boolean;
-  auto: boolean;
+  issues: boolean;
+  prs: boolean;
+  localVersion: boolean;
+  latestVersion: boolean;
   lastUpdated: boolean;
-  presets: boolean;
 }
 
 export interface Settings {
@@ -93,6 +91,8 @@ export interface Settings {
   headerButtonsVersion: number;
   /** Migration marker for the project-first board view. */
   boardProjVersion?: number;
+  /** Migration marker for the project-column visibility set (column keys changed over time). */
+  projectColumnsVersion?: number;
   headerButtons: Record<string, HeaderButtonSetting>;
   hud: HudSettings;
   notify: NotifySettings;

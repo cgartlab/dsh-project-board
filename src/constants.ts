@@ -71,5 +71,6 @@ export const DEFAULT_SETTINGS: Settings = {
   notify: { enabled: true, sound: true },
   log: { enabled: true, level: 'info', max: 200 },
   board: { enabled: true, wideThreshold: 520, defaultView: 'projects' },
-  projectColumns: { total: true, running: true, attention: true, done: true, idle: true, auto: true, lastUpdated: true, presets: false }
+  projectColumnsVersion: 1,
+  projectColumns: { total: true, issues: true, prs: true, localVersion: true, latestVersion: true, lastUpdated: true }
 };
