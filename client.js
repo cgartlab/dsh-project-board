@@ -3078,19 +3078,29 @@ window.__ModuleLoader__.load({
           const frame = frameNow();
           return document.querySelector('[class*="_sidebarCol"]') || (frame ? frame.firstElementChild : null);
         };
-        /* Judge by the sidebar column's real width: a fullscreen board can hide the column entirely,
-           and an attribute-only check then wrongly looked "expanded" and made the pill dock. */
+        /* Judge by the frame's own grid template first. DSH renders the frame with an inline
+           `gridTemplateColumns` whose first track IS the sidebar column ("280px …"), and a
+           `data-sidebar-collapsed` attribute that flips with the collapsed flag. Both describe the
+           layout's target state, so neither reads "collapsed" halfway through the width animation
+           the way the column's measured width does. The measured width stays as a fallback for a
+           frame we cannot parse, and a fullscreen board still counts as "not expanded" because it
+           hides the column while `sidebarCollapsed` stays false. */
         const readExpanded = () => {
-          if (document.querySelector('[data-sidebar-right-panel="fullscreen"]')) return false;
+          if (document.querySelector('[data-sidebar-right-panel="fullscreen"]')) return { expanded: false, source: 'fullscreen' };
+          const frame = frameNow();
+          if (frame) {
+            const template = (frame.style && frame.style.gridTemplateColumns) || '';
+            const first = parseFloat(template);
+            if (Number.isFinite(first) && first >= 0) return { expanded: first > 120, source: 'grid' };
+          }
           const column = sidebarColumn();
           if (column) {
             const width = column.getBoundingClientRect().width;
-            if (width > 120) return true;
-            if (width > 0) return false;
+            if (width > 120) return { expanded: true, source: 'measured' };
+            if (width > 0) return { expanded: false, source: 'measured' };
           }
-          const frame = frameNow();
           if (!frame) return null;
-          return !frame.hasAttribute('data-sidebar-collapsed');
+          return { expanded: !frame.hasAttribute('data-sidebar-collapsed'), source: 'attribute' };
         };
         /* Right edge of the native session list, so the pill hugs that column instead of the window. */
         const sidebarRightEdge = () => {
@@ -3141,6 +3151,7 @@ window.__ModuleLoader__.load({
           /* The column animates to its new width, so measure twice: once as the list collapses and
              once after the transition, otherwise the pill stops halfway across the screen. */
           followTimer = window.setTimeout(() => { followTimer = 0; if (autoDockRef.current) applyDockPos(); }, 320);
+          logEvent('info', 'hud', 'dock', {});
         };
         const restore = () => {
           if (!autoDockRef.current) return;
@@ -3152,20 +3163,24 @@ window.__ModuleLoader__.load({
             setCollapsed(Boolean(saved.collapsed));
             if (saved.pos) { posRef.current = Object.assign({}, saved.pos); setPos(Object.assign({}, saved.pos)); }
           }
+          logEvent('info', 'hud', 'restore', { hadSaved: Boolean(saved) });
         };
-        /* The column transitions between widths and its halfway widths read as "collapsed" or as the
-           rail. Only trust a reading that survives the transition: sample, then confirm ~160ms later,
-           so a dock/restore never fires on a transient width. */
+        /* The grid template and the collapsed attribute are authoritative, so act on them at once.
+           A measured column width is the animated one, so require the same reading twice before
+           believing it: a dock/restore must never fire halfway through the sidebar transition. */
         let sample = null;
         const tick = () => {
-          const expanded = readExpanded();
-          if (expanded === null) return;
-          if (expanded !== sample) {
+          const state = readExpanded();
+          if (!state) return;
+          const expanded = state.expanded;
+          if (state.source === 'measured' && expanded !== sample) {
             sample = expanded;
             window.clearTimeout(settleTimer);
             settleTimer = window.setTimeout(() => { settleTimer = 0; tick(); }, 160);
             return;
           }
+          sample = expanded;
+          window.clearTimeout(settleTimer);
           if (last === null) { last = expanded; if (expanded) dock(); return; }
           if (expanded === last) return;
           last = expanded;

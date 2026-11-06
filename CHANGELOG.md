@@ -10,6 +10,11 @@
 
 - 暂无
 
+## [0.2.2] - 2026-11-06
+
+- 悬浮列表判断"侧栏开没开"改成直接读原生框架的目标状态：`grid-template-columns` 的第一条轨道（侧栏列宽）和 `data-sidebar-collapsed` 属性。这两个值在点下快捷键的那一刻就变了，不会像侧栏宽度动画中途那样被读成"已收起 / 已展开"，所以贴边收起与复位不再滞后半秒或落错位置；只有读不到网格时才退回测量宽度，并且要求连续两次读数一致才动作。
+- `dock` / `restore` 也写进日志（scope `hud`）：配合 `shortcut`（按键、是否被挡、是否调用）和 `sidebar`（走了哪条接口）三条记录，一次 `Alt+W` 的完整过程可以在「日志与排查」里重建，不用猜。
+
 ## [0.2.1] - 2026-11-06
 
 - 修 `Alt+W` 不稳的三处原因：
@@ -213,6 +218,7 @@
 [0.1.14]: https://github.com/cgartlab/dsh-tac/releases/tag/v0.1.14
 [0.2.0]: https://github.com/cgartlab/dsh-tac/releases/tag/v0.2.0
 [0.2.1]: https://github.com/cgartlab/dsh-tac/releases/tag/v0.2.1
+[0.2.2]: https://github.com/cgartlab/dsh-tac/releases/tag/v0.2.2
 
 
 
