@@ -88,3 +88,25 @@ the conversation area) and plays a WebAudio chime; otherwise it uses the system
 - `scripts/check-i18n.cjs` — dictionary parity for direct and indirect keys.
 - `test/load.test.cjs` — evaluates `client.js` with stubbed DOM/React/host services,
   asserts `apply()` mounts every slot and that both dictionaries match.
+
+## Diagnosing the left-sidebar shortcut
+
+`Alt+W` touches three subsystems, and each one writes its own scope into the in-app log
+(Settings → 项目看板日志), so a press that misbehaves can be read back instead of guessed:
+
+| scope | line | meaning |
+| --- | --- | --- |
+| `shortcut` | `leftSidebar:key` | the key reached the plugin (absent: focus sat in a webview/IME/native menu) |
+| `shortcut` | `leftSidebar:blocked` | a real modal dialog owned the keystroke |
+| `shortcut` | `leftSidebar:duplicate` | a leaked listener from a hot reload already handled this press |
+| `shortcut` | `leftSidebar:acted` | the action ran; `acted:false` means the handler was not wired |
+| `sidebar` | `toggle` | which layout API answered (`layout.toggleSidebar` and friends) |
+| `sidebar` | `applied` / `no-change` | the frame's grid track and collapsed flag moved, or did not |
+| `sidebar` | `leave-fullscreen` | a fullscreen right panel was dismissed first, so the sidebar is visible |
+| `hud` | `dock` / `restore` | the floating list tucked into a pill, or came back |
+
+The frame itself is the source of truth for "is the sidebar open": DSH renders it with an
+inline `grid-template-columns` whose first track is the sidebar column (0 closed, ~52 rail,
+280 expanded) and a `data-sidebar-collapsed` attribute. Those describe the target state and
+change on the same frame as the key press, unlike the column's animated width.
+
