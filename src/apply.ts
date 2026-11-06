@@ -353,6 +353,13 @@ export function apply(ctx: HostContext): void {
       /* ignore */
     }
   };
+  /** External view request for the board: opening it via a shortcut lands on "projects"
+   *  even when the board component stays mounted with a previously chosen view. */
+  const boardViewRef: { seq: number; view: 'projects' | 'sessions' } = { seq: 0, view: 'projects' };
+  const requestBoardView = (view: 'projects' | 'sessions'): void => {
+    boardViewRef.seq += 1;
+    boardViewRef.view = view;
+  };
   /** Current board pane state: { open, mode: 'narrow' | 'half' | 'full' | null }. */
   const boardStateNow = (): BoardState => {
     try {
@@ -392,6 +399,8 @@ export function apply(ctx: HostContext): void {
     }
   };
   const showNativeBoard = (mode: string): void => {
+    /* Opening the board via a shortcut should land on the project view. */
+    requestBoardView('projects');
     try {
       const sidebarRight = ctx.sidebarRight;
       if (!sidebarRight) return;
@@ -499,6 +508,7 @@ export function apply(ctx: HostContext): void {
     }
   };
   const openBoard = (): void => {
+    requestBoardView('projects');
     try {
       const sidebarRight = ctx.sidebarRight;
       if (!sidebarRight) return;
@@ -515,6 +525,7 @@ export function apply(ctx: HostContext): void {
     }
   };
   const openFullBoard = (): void => {
+    requestBoardView('projects');
     collapseRightBoard();
     try {
       ctx.layout.selectPanel('project-board');
@@ -540,7 +551,7 @@ export function apply(ctx: HostContext): void {
       return { ok: false, error: { message: String((error && (error as Error).message) || error) } };
     }
   };
-  const boardInject = (): Record<string, unknown> => ({ openSession: openSession, openBoard: openBoard, openFullBoard: openFullBoard, hooks: boardHooks() });
+  const boardInject = (): Record<string, unknown> => ({ openSession: openSession, openBoard: openBoard, openFullBoard: openFullBoard, hooks: boardHooks(), viewRequest: boardViewRef });
 
   const sessionMenuStore = createUiStore<{ sessionId: string | null; title: string; at: number }>({ sessionId: null, title: '', at: 0 });
   const requestSessionMenu = (sessionId: string, title: string): void => {
@@ -701,7 +712,7 @@ export function apply(ctx: HostContext): void {
 
   ctx.slots.inject('main', () =>
     ctx.slots.register(
-      { name: 'main', key: 'project-board', locale: NS, inject: () => ({ openSession: openSession, hooks: boardHooks() }) },
+      { name: 'main', key: 'project-board', locale: NS, inject: () => ({ openSession: openSession, hooks: boardHooks(), viewRequest: boardViewRef }) },
       ProjectBoard as unknown as (props: never) => unknown
     )
   );
