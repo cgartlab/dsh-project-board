@@ -1,5 +1,6 @@
 /** Composer focus, caret placement, native "back to bottom" and steering queued messages. */
 import { findChatScroller, visibleChatFlow } from './chat-dom';
+import { isPaletteOpen } from '../core/dom';
 
 const STEER_LABELS = ['插话发送', 'Steer queued message'];
 
@@ -93,6 +94,8 @@ export function moveCaretToEnd(input: HTMLElement | null): boolean {
 
 /** Focus the conversation composer and put the caret at the end, without scrolling. */
 export function focusComposerInput(): boolean {
+  /* The command palette is modal: while it is open the search field owns the caret. */
+  if (isPaletteOpen()) return false;
   const card = document.querySelector('[data-composer-card]');
   let input = (card ? card.querySelector('textarea, [contenteditable="true"]') : null) as HTMLElement | null;
   if (!input) {

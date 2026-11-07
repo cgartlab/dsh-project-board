@@ -137,6 +137,21 @@ export function sidebarColumnElement(): Element | null {
 export const HOST_LAYOUT_ATTRIBUTES = ['data-sidebar-collapsed', 'data-sidebar-right-open', 'data-rightbar-collapsed', 'data-rightbar-fullscreen'];
 
 /**
+ * Whether the plugin's own command palette is on screen.
+ *
+ * The palette is modal and owns the keyboard while open. Anything that would move focus into
+ * the conversation (the composer helpers behind a shortcut) has to stand down, otherwise it
+ * pulls the caret out of the search field mid-word.
+ */
+export function isPaletteOpen(): boolean {
+  try {
+    return Boolean(document.querySelector('.pbx-paletteBackdrop'));
+  } catch (error) {
+    return false;
+  }
+}
+
+/**
  * The host's own collapsed flag on the frame, or null when there is no frame to read.
  * Preferred over measured widths because it describes the layout's target state and so does
  * not read "collapsed" halfway through the width animation.

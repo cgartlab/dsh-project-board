@@ -559,6 +559,13 @@
     }
   }
   var HOST_LAYOUT_ATTRIBUTES = ["data-sidebar-collapsed", "data-sidebar-right-open", "data-rightbar-collapsed", "data-rightbar-fullscreen"];
+  function isPaletteOpen() {
+    try {
+      return Boolean(document.querySelector(".pbx-paletteBackdrop"));
+    } catch (error) {
+      return false;
+    }
+  }
   function sidebarCollapsedFlag() {
     const frame = sidebarFrameElement();
     if (!frame) return null;
@@ -730,6 +737,7 @@
     return false;
   }
   function focusComposerInput() {
+    if (isPaletteOpen()) return false;
     const card = document.querySelector("[data-composer-card]");
     let input = card ? card.querySelector('textarea, [contenteditable="true"]') : null;
     if (!input) {
@@ -4121,6 +4129,36 @@
     useEffect(() => {
       if (!mounted || !state.open || !inputRef.current) return;
       inputRef.current.focus({ preventScroll: true });
+    }, [mounted, state.open]);
+    useEffect(() => {
+      if (!mounted || !state.open) return void 0;
+      let frame = 0;
+      const restore = () => {
+        if (frame) return;
+        frame = window.requestAnimationFrame(() => {
+          frame = 0;
+          if (!state.open || !mounted) return;
+          const input = inputRef.current;
+          if (!input || !input.isConnected) return;
+          const panel = input.closest ? input.closest(".pbx-palette") : null;
+          if (!panel) return;
+          const active = document.activeElement;
+          if (active && panel.contains(active)) return;
+          const escapedToBody = !active || active === document.body || active === document.documentElement;
+          if (!escapedToBody) return;
+          try {
+            input.focus({ preventScroll: true });
+          } catch (error) {
+          }
+        });
+      };
+      document.addEventListener("focusout", restore, true);
+      document.addEventListener("focusin", restore, true);
+      return () => {
+        document.removeEventListener("focusout", restore, true);
+        document.removeEventListener("focusin", restore, true);
+        if (frame) window.cancelAnimationFrame(frame);
+      };
     }, [mounted, state.open]);
     useEffect(() => {
       if (!mounted || !state.open) return;

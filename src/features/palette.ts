@@ -166,6 +166,43 @@ export function Palette(props: PaletteProps): unknown {
     if (!mounted || !state.open || !inputRef.current) return;
     inputRef.current.focus({ preventScroll: true });
   }, [mounted, state.open]);
+  /* The palette is a modal search field, so typing must not be interrupted. Nothing here
+     steals focus on purpose, yet the field still lost it while the list under it re-rendered
+     (a session push, a status change): the keystrokes then landed wherever focus had gone.
+     Put the caret back, but only when focus fell through to the document body — if it sits
+     on a real element the reader moved it deliberately (a row, a chip, or another dialog) and
+     pulling it back would fight them. */
+  useEffect(() => {
+    if (!mounted || !state.open) return undefined;
+    let frame = 0;
+    const restore = (): void => {
+      if (frame) return;
+      frame = window.requestAnimationFrame(() => {
+        frame = 0;
+        if (!state.open || !mounted) return;
+        const input = inputRef.current;
+        if (!input || !input.isConnected) return;
+        const panel = input.closest ? input.closest('.pbx-palette') : null;
+        if (!panel) return;
+        const active = document.activeElement;
+        if (active && panel.contains(active)) return;
+        const escapedToBody = !active || active === document.body || active === document.documentElement;
+        if (!escapedToBody) return;
+        try {
+          input.focus({ preventScroll: true });
+        } catch (error) {
+          /* ignore */
+        }
+      });
+    };
+    document.addEventListener('focusout', restore, true);
+    document.addEventListener('focusin', restore, true);
+    return () => {
+      document.removeEventListener('focusout', restore, true);
+      document.removeEventListener('focusin', restore, true);
+      if (frame) window.cancelAnimationFrame(frame);
+    };
+  }, [mounted, state.open]);
   useEffect(() => {
     if (!mounted || !state.open) return;
     const listNode = listRef.current;
