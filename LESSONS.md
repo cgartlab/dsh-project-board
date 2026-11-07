@@ -108,3 +108,7 @@
 ## 字典占位符与产物同步
 
 - 失误：0.3.2 把 `sort.hint` 等字典改成 `{shift}` 占位符、settings.ts 渲染点已传 `MODIFIER_LABELS`，但 `src/features/board.ts` 的 3 个 `t('sort.hint')` 漏传第二参数（列头 tooltip 显示字面量 `{shift}`）；同时合并含 src 改动的 PR 时 `client.js` 没跟着重建，旧产物仍是修复前代码 → main CI step 7「The committed bundle matches src/」失败、`npm test` 在 HEAD 产物上 18 条中 2 条失败，运行时没有任何修复 → 规则：改字典占位符后必须 grep 全部 `t('<key>')` 渲染点并逐一传参；合并任何含 `src/` 改动的 PR 后必须 `npm run build`、`git diff --exit-code -- client.js index.js`，并确认 CI 的「产物一致」step 绿 → 证据：fe3f948，`src/features/board.ts`、`src/features/settings.ts`、`src/i18n/zh.ts`、`src/i18n/en.ts`、`test/load.test.cjs`、`client.js`
+
+## 发版与合并
+
+- 失误：在 `79e9d54` 解决 CHANGELOG 冲突时整体取了旧文件，把已随 v0.3.2 发布的 13 条又写回 `[未发布]`，同一批条目在两个小节重复——下一个版本会再"发"一遍已发布内容，读者也无法判断哪些真的没发 → 规则：解决 CHANGELOG 冲突以**已发布 tag 的版本小节**为准；发版后再合并分支，先按「条目前 40 字」比对 `[未发布]` 与各版本小节，重叠即删 → 证据：`76e6d81`（折叠）、`79e9d54`（merge 回退）、本轮修复
