@@ -257,22 +257,17 @@ export function apply(ctx: HostContext): void {
   const boardPanelVisible = (): boolean => {
     try {
       const panel = document.querySelector('[class*="_panel"][data-sidebar-right-open]');
-      let attrOpen = false;
-      if (panel) {
-        const value = panel.getAttribute('data-sidebar-right-open');
-        if (value !== null) {
-          /* Absence means closed; the common truthy encodings mean expanded. Only an
-             explicit falsy value should read as closed — a bare `data-…` (empty string)
-             is how React renders a true boolean attribute. */
-          const normalized = value.trim().toLowerCase();
-          attrOpen = normalized !== 'false' && normalized !== '0' && normalized !== 'off';
-        }
-      }
-      /* The attribute is the declaration; the pane's real width is the ground truth. OR
-         (not AND) on purpose: during the host's open/close animation one of the two lags,
-         and treating that lag as "closed" is what made the guard toggle a second time and
-         bounce the pane. A pane that is merely animating still counts as visible. */
-      return attrOpen || rightbarWidthNow() > 0;
+      if (!panel) return false;
+      const value = panel.getAttribute('data-sidebar-right-open');
+      if (value === null) return false;
+      /* Judge by the VALUE, not by the attribute existing. The attribute stays on the
+         element in both states, so mere presence reads a collapsed pane as open and the
+         restore path then skips the toggle it needed. Absence or an explicit falsy value
+         means closed; a bare `data-…` (empty string) is how React renders a true boolean.
+         Do NOT OR in the measured width here: the right-hand column keeps a non-zero box
+         while collapsed, which would make every closed pane look open. */
+      const normalized = value.trim().toLowerCase();
+      return normalized !== 'false' && normalized !== '0' && normalized !== 'off';
     } catch (error) {
       return false;
     }

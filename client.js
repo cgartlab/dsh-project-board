@@ -2497,9 +2497,21 @@
     const [editingProject, setEditingProject] = useState(null);
     const [expandedProject, setExpandedProject] = useState(null);
     const popRef = useRef(null);
-    const [view, setView] = useState(
-      () => config.board.defaultView === "projects" ? "projects" : "sessions"
-    );
+    const [view, setView] = useState(() => {
+      const store = props.viewRequestStore;
+      if (store) {
+        const snap = store.getSnapshot();
+        if (snap.view === "sessions" || snap.view === "projects") return snap.view;
+      }
+      return config.board.defaultView === "projects" ? "projects" : "sessions";
+    });
+    const applyView = (next) => {
+      setView(next);
+      const store = props.viewRequestStore;
+      if (store && store.getSnapshot().view !== next) {
+        store.set({ seq: store.getSnapshot().seq + 1, view: next });
+      }
+    };
     const [viewReqSeq, setViewReqSeq] = useState(0);
     useEffect(() => {
       const store = props.viewRequestStore;
@@ -3168,7 +3180,7 @@
             role: "tab",
             "aria-selected": view === "projects" ? "true" : "false",
             className: "pbx-tab" + (view === "projects" ? " active" : ""),
-            onClick: () => setView("projects")
+            onClick: () => applyView("projects")
           },
           t("view.projects"),
           h("span", { className: "pbx-tabCount" }, String(projectModels.length))
@@ -3181,7 +3193,7 @@
             "aria-selected": view === "sessions" ? "true" : "false",
             className: "pbx-tab" + (view === "sessions" ? " active" : ""),
             onClick: () => {
-              setView("sessions");
+              applyView("sessions");
               setExpandedProject(null);
             }
           },
@@ -3314,7 +3326,7 @@
             "aria-selected": view === "projects" ? "true" : "false",
             className: "pbx-tab" + (view === "projects" ? " active" : ""),
             onClick: () => {
-              setView("projects");
+              applyView("projects");
               setCompactProjectId(null);
             }
           },
@@ -3329,7 +3341,7 @@
             "aria-selected": view === "sessions" ? "true" : "false",
             className: "pbx-tab" + (view === "sessions" ? " active" : ""),
             onClick: () => {
-              setView("sessions");
+              applyView("sessions");
               setCompactProjectId(null);
             }
           },
@@ -6633,15 +6645,11 @@
     const boardPanelVisible = () => {
       try {
         const panel = document.querySelector('[class*="_panel"][data-sidebar-right-open]');
-        let attrOpen = false;
-        if (panel) {
-          const value = panel.getAttribute("data-sidebar-right-open");
-          if (value !== null) {
-            const normalized = value.trim().toLowerCase();
-            attrOpen = normalized !== "false" && normalized !== "0" && normalized !== "off";
-          }
-        }
-        return attrOpen || rightbarWidthNow() > 0;
+        if (!panel) return false;
+        const value = panel.getAttribute("data-sidebar-right-open");
+        if (value === null) return false;
+        const normalized = value.trim().toLowerCase();
+        return normalized !== "false" && normalized !== "0" && normalized !== "off";
       } catch (error) {
         return false;
       }

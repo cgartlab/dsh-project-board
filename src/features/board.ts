@@ -178,9 +178,26 @@ export function ProjectBoard(props: ProjectBoardProps): unknown {
   const [editingProject, setEditingProject] = useState<string | null>(null);
   const [expandedProject, setExpandedProject] = useState<string | null>(null);
   const popRef = useRef<HTMLElement | null>(null);
-  const [view, setView] = useState<'projects' | 'sessions'>(() =>
-    config.board.defaultView === 'projects' ? 'projects' : 'sessions'
-  );
+  const [view, setView] = useState<'projects' | 'sessions'>(() => {
+    /* A session switch can unmount and remount the pane while the guard restores it. Seed
+       from the shared store so the tab the user picked survives that remount instead of
+       snapping back to the configured default. */
+    const store = props.viewRequestStore;
+    if (store) {
+      const snap = store.getSnapshot();
+      if (snap.view === 'sessions' || snap.view === 'projects') return snap.view;
+    }
+    return config.board.defaultView === 'projects' ? 'projects' : 'sessions';
+  });
+  /* Every view change writes through to the store, so a remount (and the other board
+     instance, e.g. the main panel) sees the tab the user actually chose. */
+  const applyView = (next: 'projects' | 'sessions'): void => {
+    setView(next);
+    const store = props.viewRequestStore;
+    if (store && store.getSnapshot().view !== next) {
+      store.set({ seq: store.getSnapshot().seq + 1, view: next });
+    }
+  };
   // Subscribe to an external view-request store. When the board is opened via a
   // shortcut, requestBoardView() calls store.set() which produces a new snapshot and
   // fires the subscriber — reliably re-rendering even though the component stays mounted.
@@ -920,7 +937,7 @@ export function ProjectBoard(props: ProjectBoardProps): unknown {
           role: 'tab',
           'aria-selected': view === 'projects' ? 'true' : 'false',
           className: 'pbx-tab' + (view === 'projects' ? ' active' : ''),
-          onClick: () => setView('projects')
+          onClick: () => applyView('projects')
         },
         t('view.projects'),
         h('span', { className: 'pbx-tabCount' }, String(projectModels.length))
@@ -932,7 +949,7 @@ export function ProjectBoard(props: ProjectBoardProps): unknown {
           role: 'tab',
           'aria-selected': view === 'sessions' ? 'true' : 'false',
           className: 'pbx-tab' + (view === 'sessions' ? ' active' : ''),
-          onClick: () => { setView('sessions'); setExpandedProject(null); }
+          onClick: () => { applyView('sessions'); setExpandedProject(null); }
         },
         t('view.sessions'),
         h('span', { className: 'pbx-tabCount' }, String(allSessions.length))
@@ -1079,7 +1096,7 @@ export function ProjectBoard(props: ProjectBoardProps): unknown {
           'aria-selected': view === 'projects' ? 'true' : 'false',
           className: 'pbx-tab' + (view === 'projects' ? ' active' : ''),
           onClick: () => {
-            setView('projects');
+            applyView('projects');
             setCompactProjectId(null);
           }
         },
@@ -1094,7 +1111,7 @@ export function ProjectBoard(props: ProjectBoardProps): unknown {
           'aria-selected': view === 'sessions' ? 'true' : 'false',
           className: 'pbx-tab' + (view === 'sessions' ? ' active' : ''),
           onClick: () => {
-            setView('sessions');
+            applyView('sessions');
             setCompactProjectId(null);
           }
         },
