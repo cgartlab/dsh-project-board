@@ -1,0 +1,18 @@
+# Configuration for actions/labeler@v5 (PR path labels).
+# Only labels that already exist in this repository are used, so the workflow never
+# needs permission to create labels. Issue keyword labels are handled separately in
+# .github/workflows/label.yml.
+
+documentation:
+  - changed-files:
+      - any-glob-to-any-file:
+          - '**/*.md'
+          - 'docs/**/*'
+          - '.github/**/*.md'
+          - '.github/ISSUE_TEMPLATE/**/*'
+
+enhancement:
+  - changed-files:
+      - any-glob-to-any-file:
+          - 'src/features/**/*'
+          - 'src/ui/**/*'
