@@ -33,6 +33,10 @@ reading, and desktop-class task notifications.
   loads older history automatically before reaching the boundary, and falls back to anchor
   stepping if the chat view reverts a position write. Holding `⌥+M` down to the end
   activates the composer so a reply can be typed immediately.
+- **History on scroll** — scrolling a long conversation to the top loads the previous page
+  of older messages without clicking "Load earlier" every time. On by default, switchable
+  off in settings. It drives the host's own pager, so its loading and error feedback and its
+  scroll-position anchoring behave exactly as they do for a manual click.
 - **Task notifications** — a session finishing a turn, waiting for an answer, or asking
   for permission raises an in-app card at the bottom-right of the conversation with a
   chime; when the app is in the background a system notification carries the full question

@@ -59,6 +59,9 @@
 - 失误：面板开合检测 `Boolean(querySelector('[class*="_panel"][data-sidebar-right-open]'))` 只看属性存在、不看值，把关闭态读成打开态（反之亦然）→ 会话切换的保持逻辑据此判断"状态一致"，并在不一致时反复 toggle，产生可见的开关抖动 → 规则：读 data-* 布尔属性必须读值（缺失=关闭，显式 false/0/off=关闭）；**不要用 `|| 宽度>0` 兜底**——右栏折叠时仍保留非零盒子，OR 之后每个关闭态都被读成打开态，恢复路径于是跳过本该执行的 toggle（0.4.0）
 - 失误：会话切换后恢复面板状态用 `setBoardState` 每 120ms 重试最多 20 次 → 每次重试都是一次 toggle，任何检测分歧都会变成来回横跳 → 规则：状态恢复类操作**最多执行一次**（一次动作 + 一次延迟确认探测），之后接受宿主状态；且首次动作要等宿主自己的切换流程结束（~320ms），不要抢在它前面（0.4.0）
 - 失误：看板视图（项目/会话）用 `useState(配置默认值)` 初始化，而恢复面板状态会重新挂载组件 → 用户在「会话」页切换会话后被弹回「项目」→ 规则：需要跨重挂保留的 UI 状态必须存在组件外（共享 store），组件初始化时**优先从 store 读**，每次变更**写回 store**；不能用 useState 默认值当地址（0.4.0）
+- 失误：设置页 `readSection` 直接返回 `config[section]`——旧版本存的设置没有新加的 section 键，`values[key]` 于是在渲染时抛错，整页打不开 → 规则：设置页读 section 必须回退到 `DEFAULT_SETTINGS[section]`，写入时也要以默认值为基底再合并；新增 section 时先确认旧配置能渲染（0.4.0）
+- 失误：给宿主聊天区做"滚动自动加载"时，最初按 `scrollHeight > clientHeight` + 最小高度筛滚动容器，实测不触发——宿主的对话用限高组拼装，分页状态的容器 `scrollHeight` 可能等于 `clientHeight` → 规则：判定"读者滚到顶"只依赖 `scrollTop <= 阈值`，不要用可滚动高度/容器高度做前置筛选；wheel 滚动可能以 document 为目标，要先用 `document.scrollingElement` 归一（0.4.0）
+- 失误：想复用宿主的分页能力时，第一反应是找内部 controller 的 `loadOlder()` → 规则：优先**点宿主自己的控件**（文本匹配多语言文案），这样加载指示、错误提示、滚动锚点补偿全都由宿主负责；只有在找不到控件时才考虑公开 API（`ctx.sessions.binding(id).session.loadOlder()`）（0.4.0）
 
 ## React 组件纪律
 
