@@ -53,6 +53,9 @@
 - 失误：贴边吸附后自动收起再展开，胶囊"浮"到上面去 → 规则：收起/展开时按旧盒子的右/下贴边重新计算坐标，而不是复用左上角（0.1.12）
 - 失误：切换会话时对话区 scroller 被替换，但 HUD padding effect 的依赖（collapsed/hudWidth/pos/rows.length）不含会话变化 → effect 不重跑 → 新 scroller 不被 padding → HUD 挡住对话 + 宽度跳变 → 规则：padding/位置 effect 如果操作的 DOM 元素会被宿主替换（如会话切换重建 scroller），必须加 MutationObserver 检测元素替换，不能只靠 React state 依赖；MutationObserver 回调是微任务（在下次渲染前执行），直接调 apply() 可在浏览器画之前设好 padding，消除 1-frame flash；apply() 幂等所以每次 mutation 直接调安全；ResizeObserver 仍用 schedule()（rAF）合并列宽变化（0.4.0）
 - 失误：BoardSessionGuard 的 enforce 重试 setTimeout(enforce, 120) 未被 effect cleanup 追踪——只有首触发 timer 被清理 → 会话切换期间旧 retry 携带过期闭包触发 setBoardState(oldWant)，与新 effect 的恢复互相竞争 → 规则：effect 内部的递归/链式 setTimeout 必须用单一变量追踪最新 timer ID，cleanup 清除它；不能只清理首触发而漏掉 retry（0.4.0）
+- 失误：`main` slot 的看板占满整个内容区，没有返回对话的入口，用户进去就出不来 → 规则：往 `main` slot 注册占满内容区的面板时，必须提供一个显式退出路径（`closePanel` → `layout.selectPanel(null)`）；退出按钮只注入给 main 实例，不要污染右侧栏实例（0.4.0）
+- 失误：`showNativeBoard()` 无条件 `requestBoardView('projects')`，导致「已打开面板 → 按 Alt+B/V 调整大小」时把用户正在看的「会话」视图弹回「项目」→ 规则：视图重置只属于"从未显示→显示"的打开语义；给 show 函数加 `resetView` 参数，resize / 进入全屏都传 `false`（0.4.0）
+- 失误：窄版（compact）分支完全不渲染「项目 / 会话」切换，右栏拖窄后用户无法查看会话列表 → 规则：响应式降级只改变呈现形式（表格→卡片、六列→统计chip），**不能删掉导航能力**；每个视图在 compact 下都要有等价入口（0.4.0）
 
 ## React 组件纪律
 
