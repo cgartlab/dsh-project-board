@@ -58,6 +58,10 @@ export interface ProjectBoardProps {
   usePresets?: UseHook<PresetSnapshot | null>;
   openSession?: (id: string) => void;
   openFullBoard?: () => void;
+  /** Close the standalone main-panel instance and return to the conversation.
+   *  Only supplied for the `main` slot registration (where the board occupies the
+   *  whole content area and the user would otherwise be stuck with no way back). */
+  closePanel?: () => void;
   t: Translate;
   compact?: boolean;
   /** External request to switch the board to a view (e.g. opening it via a shortcut
@@ -880,7 +884,26 @@ export function ProjectBoard(props: ProjectBoardProps): unknown {
               t('stat.running')
             )
           : null
-      )
+      ),
+      /* The main-panel instance covers the whole content area; without this the only way
+         back to the conversation is the host's own panel switch. Give it an explicit exit. */
+      typeof props.closePanel === 'function'
+        ? h(
+            'button',
+            {
+              type: 'button',
+              className: 'pbx-setBtn pbx-headerClose',
+              title: t('panel.close'),
+              'aria-label': t('panel.close'),
+              onClick: () => {
+                const close = props.closePanel;
+                if (typeof close === 'function') close();
+              }
+            },
+            h(Icon, { name: 'close', size: 13 }),
+            h('span', null, t('panel.close'))
+          )
+        : null
     )
   );
 
@@ -1042,6 +1065,62 @@ export function ProjectBoard(props: ProjectBoardProps): unknown {
       value > 0 ? h('span', { className: 'pbx-pcardStat', style: { color: color } }, String(value) + ' ' + label) : null;
     const activeProject = compactProjectId ? projectModels.find((item) => item.workspaceId === compactProjectId) : null;
     const activeRows = activeProject ? compactSessionsOf(activeProject.workspaceId) : [];
+    /* The narrow pane used to drop the project/session switch entirely, leaving no way to
+       reach the conversation list. Keep the same two tabs here; the project side stays a
+       card list (six columns do not fit) while the session side reuses the compact row. */
+    const compactTabs = h(
+      'div',
+      { className: 'pbx-compactTabs', role: 'tablist' },
+      h(
+        'button',
+        {
+          type: 'button',
+          role: 'tab',
+          'aria-selected': view === 'projects' ? 'true' : 'false',
+          className: 'pbx-tab' + (view === 'projects' ? ' active' : ''),
+          onClick: () => {
+            setView('projects');
+            setCompactProjectId(null);
+          }
+        },
+        t('view.projects'),
+        h('span', { className: 'pbx-tabCount' }, String(projectModels.length))
+      ),
+      h(
+        'button',
+        {
+          type: 'button',
+          role: 'tab',
+          'aria-selected': view === 'sessions' ? 'true' : 'false',
+          className: 'pbx-tab' + (view === 'sessions' ? ' active' : ''),
+          onClick: () => {
+            setView('sessions');
+            setCompactProjectId(null);
+          }
+        },
+        t('view.sessions'),
+        h('span', { className: 'pbx-tabCount' }, String(filteredSessions.length))
+      )
+    );
+    const compactRow = (row: SessionRow): unknown =>
+      h(
+        'button',
+        {
+          key: row.id,
+          type: 'button',
+          className: 'pbx-crow' + (row.auto ? ' auto' : '') + (row.info.tone === 'running' ? ' live' : ''),
+          title: t('card.open'),
+          onClick: () => open(row.id)
+        },
+        row.info.tone === 'running' ? h(RunRing, { size: 9 }) : h('span', { className: 'pbx-rdot', 'data-tone': row.info.tone }),
+        row.auto ? h('span', { className: 'pbx-autoGlyph' }, h(Icon, { name: 'clock', size: 12 })) : null,
+        h('span', { className: 'pbx-ctitle' }, row.title),
+        h('span', { className: 'pbx-ctime' }, relTime(row.updatedAt, t))
+      );
+    const compactSessionList =
+      filteredSessions.length === 0
+        ? h('div', { className: 'pbx-cgroupEmpty' }, t('empty.filtered'))
+        : h('div', { className: 'pbx-compactList' }, filteredSessions.map(compactRow));
     return h(
       'div',
       { className: 'pbx-root pbx-compact' },
@@ -1085,6 +1164,7 @@ export function ProjectBoard(props: ProjectBoardProps): unknown {
               )
             : null
         ),
+        activeProject ? null : compactTabs,
         activeProject
           ? h(
               'div',
@@ -1125,7 +1205,9 @@ export function ProjectBoard(props: ProjectBoardProps): unknown {
                   )
                 : null
             )
-          : filteredProjects.length === 0
+          : view === 'sessions'
+            ? compactSessionList
+            : filteredProjects.length === 0
             ? h('div', { className: 'pbx-cgroupEmpty' }, t('empty.filtered'))
             : filteredProjects.map((project) => {
                 const spec = specOf(project.workspaceId);

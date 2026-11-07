@@ -1,6 +1,6 @@
 /** Simplified-Chinese UI strings. These keys are the source of truth for `Dict`. */
 export const zh = {
-      'panel.label': '项目看板', 'title': '项目看板',
+      'panel.label': '项目看板', 'title': '项目看板', 'panel.close': '返回对话',
       'subtitle': '会话与项目的数据表：可筛选、分组、按属性排序。',
       'stat.workspaces': '工作区', 'stat.sessions': '会话', 'stat.attention': '待处理', 'stat.running': '运行中',
       'view.sessions': '会话', 'view.projects': '项目',

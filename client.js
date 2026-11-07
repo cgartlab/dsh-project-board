@@ -1353,6 +1353,7 @@
     ".pbx-responsive{height:100%;min-height:0;display:flex;flex-direction:column}",
     ".pbx-responsive>.pbx-root{flex:1;min-height:0}",
     ".pbx-headerRight{display:flex;align-items:center;gap:10px;flex-wrap:wrap}",
+    ".pbx-headerClose{display:inline-flex;align-items:center;gap:5px;flex:none;padding:0 10px;height:28px;font-size:12.5px}",
     ".pbx-renameBackdrop{position:fixed;inset:0;z-index:1300;display:flex;justify-content:center;align-items:flex-start;padding-top:16vh;background:rgba(8,10,14,.34);backdrop-filter:blur(3px);-webkit-backdrop-filter:blur(3px);pointer-events:auto;animation:pbxBackdropIn var(--pbx-dur-medium) var(--pbx-ease-decelerate) both}",
     ".pbx-renameCard{width:min(420px,calc(100vw - 32px));box-sizing:border-box;background:var(--dsw-alias-bg-layer-2);border:1px solid var(--dsw-alias-border-l2);border-radius:var(--dsw-radius-xl);box-shadow:0 24px 64px rgba(0,0,0,.32);padding:18px;display:flex;flex-direction:column;gap:7px;animation:pbxPaletteIn var(--pbx-dur-large) var(--pbx-ease-emphasized) both}",
     ".pbx-renameTitle{font-size:15px;font-weight:600;color:var(--dsw-alias-label-primary);margin-bottom:2px}",
@@ -1420,6 +1421,7 @@
     ".pbx-compact{padding:0}",
     ".pbx-compactWrap{padding:12px 10px 12px;max-width:none;display:flex;flex-direction:column;min-height:100%;box-sizing:border-box}",
     ".pbx-compactHead{display:flex;align-items:center;gap:8px;margin-bottom:10px;min-width:0}",
+    ".pbx-compactTabs{display:flex;align-items:center;gap:2px;margin-bottom:10px;flex-wrap:wrap}",
     ".pbx-compactTitle{display:flex;align-items:center;gap:7px;font-weight:600;font-size:14px;color:var(--dsw-alias-label-primary);flex:1;min-width:0;overflow:hidden}",
     ".pbx-compactTitle>span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0}",
     ".pbx-compactMeta{margin-left:auto;font-size:11.5px;color:var(--dsw-alias-label-secondary);white-space:nowrap;flex:none}",
@@ -1523,6 +1525,7 @@
   var en = {
     "panel.label": "Project Board",
     "title": "Project Board",
+    "panel.close": "Back to chat",
     "subtitle": "A database of sessions and projects: filter, group, and sort by properties.",
     "stat.workspaces": "workspaces",
     "stat.sessions": "sessions",
@@ -1800,6 +1803,7 @@
   var zh = {
     "panel.label": "项目看板",
     "title": "项目看板",
+    "panel.close": "返回对话",
     "subtitle": "会话与项目的数据表：可筛选、分组、按属性排序。",
     "stat.workspaces": "工作区",
     "stat.sessions": "会话",
@@ -3131,7 +3135,24 @@
             h("strong", { style: { color: "var(--dsw-alias-brand-primary)" } }, String(totals.running)),
             t("stat.running")
           ) : null
-        )
+        ),
+        /* The main-panel instance covers the whole content area; without this the only way
+           back to the conversation is the host's own panel switch. Give it an explicit exit. */
+        typeof props.closePanel === "function" ? h(
+          "button",
+          {
+            type: "button",
+            className: "pbx-setBtn pbx-headerClose",
+            title: t("panel.close"),
+            "aria-label": t("panel.close"),
+            onClick: () => {
+              const close = props.closePanel;
+              if (typeof close === "function") close();
+            }
+          },
+          h(Icon, { name: "close", size: 13 }),
+          h("span", null, t("panel.close"))
+        ) : null
       )
     );
     const toolbar = h(
@@ -3282,6 +3303,55 @@
       const statChip = (label, value, color) => value > 0 ? h("span", { className: "pbx-pcardStat", style: { color } }, String(value) + " " + label) : null;
       const activeProject = compactProjectId ? projectModels.find((item) => item.workspaceId === compactProjectId) : null;
       const activeRows = activeProject ? compactSessionsOf(activeProject.workspaceId) : [];
+      const compactTabs = h(
+        "div",
+        { className: "pbx-compactTabs", role: "tablist" },
+        h(
+          "button",
+          {
+            type: "button",
+            role: "tab",
+            "aria-selected": view === "projects" ? "true" : "false",
+            className: "pbx-tab" + (view === "projects" ? " active" : ""),
+            onClick: () => {
+              setView("projects");
+              setCompactProjectId(null);
+            }
+          },
+          t("view.projects"),
+          h("span", { className: "pbx-tabCount" }, String(projectModels.length))
+        ),
+        h(
+          "button",
+          {
+            type: "button",
+            role: "tab",
+            "aria-selected": view === "sessions" ? "true" : "false",
+            className: "pbx-tab" + (view === "sessions" ? " active" : ""),
+            onClick: () => {
+              setView("sessions");
+              setCompactProjectId(null);
+            }
+          },
+          t("view.sessions"),
+          h("span", { className: "pbx-tabCount" }, String(filteredSessions.length))
+        )
+      );
+      const compactRow = (row) => h(
+        "button",
+        {
+          key: row.id,
+          type: "button",
+          className: "pbx-crow" + (row.auto ? " auto" : "") + (row.info.tone === "running" ? " live" : ""),
+          title: t("card.open"),
+          onClick: () => open(row.id)
+        },
+        row.info.tone === "running" ? h(RunRing, { size: 9 }) : h("span", { className: "pbx-rdot", "data-tone": row.info.tone }),
+        row.auto ? h("span", { className: "pbx-autoGlyph" }, h(Icon, { name: "clock", size: 12 })) : null,
+        h("span", { className: "pbx-ctitle" }, row.title),
+        h("span", { className: "pbx-ctime" }, relTime(row.updatedAt, t))
+      );
+      const compactSessionList = filteredSessions.length === 0 ? h("div", { className: "pbx-cgroupEmpty" }, t("empty.filtered")) : h("div", { className: "pbx-compactList" }, filteredSessions.map(compactRow));
       return h(
         "div",
         { className: "pbx-root pbx-compact" },
@@ -3319,6 +3389,7 @@
               h(Icon, { name: "expand", size: 14 })
             ) : null
           ),
+          activeProject ? null : compactTabs,
           activeProject ? h(
             "div",
             { className: "pbx-compactBody" },
@@ -3349,7 +3420,7 @@
               h("span", { className: "pbx-compactPathLabel" }, t("col.path")),
               h("span", { className: "pbx-compactPathText" }, activeProject.path)
             ) : null
-          ) : filteredProjects.length === 0 ? h("div", { className: "pbx-cgroupEmpty" }, t("empty.filtered")) : filteredProjects.map((project) => {
+          ) : view === "sessions" ? compactSessionList : filteredProjects.length === 0 ? h("div", { className: "pbx-cgroupEmpty" }, t("empty.filtered")) : filteredProjects.map((project) => {
             const spec = specOf(project.workspaceId);
             return h(
               "button",
@@ -6691,8 +6762,8 @@
       } catch (error) {
       }
     };
-    const showNativeBoard = (mode) => {
-      requestBoardView("projects");
+    const showNativeBoard = (mode, resetView = true) => {
+      if (resetView) requestBoardView("projects");
       try {
         const sidebarRight = ctx.sidebarRight;
         if (!sidebarRight) return;
@@ -6772,7 +6843,7 @@
             sidebarRight.toggleExpanded();
             return;
           }
-          showNativeBoard("full");
+          showNativeBoard("full", !(visible && expanded));
           return;
         }
         const currentWidth = rightbarWidthNow();
@@ -6782,10 +6853,10 @@
             sidebarRight.toggleExpanded();
             return;
           }
-          showNativeBoard(mode);
+          showNativeBoard(mode, false);
           return;
         }
-        showNativeBoard(mode);
+        showNativeBoard(mode, !(visible && expanded));
       } catch (error) {
         console.warn("project-board: toggle native board failed", error);
       }
@@ -6812,6 +6883,13 @@
       collapseRightBoard();
       try {
         ctx.layout.selectPanel("project-board");
+      } catch (error) {
+      }
+    };
+    const closeBoardPanel = () => {
+      try {
+        if (ctx.layout && typeof ctx.layout.selectPanel === "function") ctx.layout.selectPanel(null);
+        logEvent("info", "board", "close-main-panel", {});
       } catch (error) {
       }
     };
@@ -6976,7 +7054,7 @@
     ctx.slots.inject(
       "main",
       () => ctx.slots.register(
-        { name: "main", key: "project-board", locale: NS, inject: boardInject },
+        { name: "main", key: "project-board", locale: NS, inject: () => Object.assign({}, boardInject(), { closePanel: closeBoardPanel }) },
         ProjectBoard
       )
     );

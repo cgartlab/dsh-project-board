@@ -409,9 +409,12 @@ export function apply(ctx: HostContext): void {
       /* ignore */
     }
   };
-  const showNativeBoard = (mode: string): void => {
+  /** Show the right-pane board at `mode`. `resetView` is false when the pane is already
+   *  open and the user is only resizing it (Alt+B/V while it shows) — resizing must not
+   *  throw away the view they picked (e.g. sessions). True means "this is an open". */
+  const showNativeBoard = (mode: string, resetView = true): void => {
     /* Opening the board via a shortcut should land on the project view. */
-    requestBoardView('projects');
+    if (resetView) requestBoardView('projects');
     try {
       const sidebarRight = ctx.sidebarRight;
       if (!sidebarRight) return;
@@ -499,21 +502,24 @@ export function apply(ctx: HostContext): void {
           sidebarRight.toggleExpanded();
           return;
         }
-        showNativeBoard('full');
+        /* Already showing (just not fullscreen) means the user is enlarging an open
+           board — keep their view instead of snapping back to projects. */
+        showNativeBoard('full', !(visible && expanded));
         return;
       }
       const currentWidth = rightbarWidthNow();
       const currentMode = currentWidth > 0 && currentWidth <= 460 ? 'narrow' : 'half';
       if (visible && expanded && !full) {
-        /* Same mode again closes; a different size key just resizes the open pane. */
+        /* Same mode again closes; a different size key just resizes the open pane —
+           and a resize must not reset the view the user is looking at. */
         if (currentMode === mode) {
           sidebarRight.toggleExpanded();
           return;
         }
-        showNativeBoard(mode);
+        showNativeBoard(mode, false);
         return;
       }
-      showNativeBoard(mode);
+      showNativeBoard(mode, !(visible && expanded));
     } catch (error) {
       console.warn('project-board: toggle native board failed', error);
     }
@@ -540,6 +546,16 @@ export function apply(ctx: HostContext): void {
     collapseRightBoard();
     try {
       ctx.layout.selectPanel('project-board');
+    } catch (error) {
+      /* ignore */
+    }
+  };
+  /** Leave the standalone main-panel board and return to the conversation. The `main` slot
+   *  replaces the whole content area, so without this the user has no in-board way back. */
+  const closeBoardPanel = (): void => {
+    try {
+      if (ctx.layout && typeof ctx.layout.selectPanel === 'function') ctx.layout.selectPanel(null);
+      logEvent('info', 'board', 'close-main-panel', {});
     } catch (error) {
       /* ignore */
     }
@@ -723,7 +739,7 @@ export function apply(ctx: HostContext): void {
 
   ctx.slots.inject('main', () =>
     ctx.slots.register(
-      { name: 'main', key: 'project-board', locale: NS, inject: boardInject },
+      { name: 'main', key: 'project-board', locale: NS, inject: (): Record<string, unknown> => Object.assign({}, boardInject(), { closePanel: closeBoardPanel }) },
       ProjectBoard as unknown as (props: never) => unknown
     )
   );

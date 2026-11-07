@@ -2,7 +2,7 @@
 import type { Dict } from './zh';
 
 export const en: Dict = {
-      'panel.label': 'Project Board', 'title': 'Project Board',
+      'panel.label': 'Project Board', 'title': 'Project Board', 'panel.close': 'Back to chat',
       'subtitle': 'A database of sessions and projects: filter, group, and sort by properties.',
       'stat.workspaces': 'workspaces', 'stat.sessions': 'sessions', 'stat.attention': 'attention', 'stat.running': 'running',
       'view.sessions': 'Sessions', 'view.projects': 'Projects',
