@@ -66,6 +66,7 @@
 - 失误：`features/board.ts` 逐渐变成全插件的类型枢纽，guard/header/hud/notifications/palette/settings 都从它 import 宿主快照类型，`settings.ts` 还跨 feature 借类型 → 规则：宿主快照形状放 `src/core/snapshot.ts`，feature 之间不互相借类型；「最小契约」（如 `SessionSummaryLike`）留在用它做判定的那个模块（0.4.0）
 - 失误：延时补做（等宿主动画结束再设面板宽度、再退出全屏）用裸 `window.setTimeout`，插件卸载后仍会执行，于是可能在"已经没有这个插件"的会话里改面板状态 → 规则：会把副作用施加到宿主/全局的定时器必须登记到统一集合，由一个 `ctx.effect` 在卸载时全部 `clearTimeout`；「toast 自动消失」这类只操作插件自身 store 的定时器反而**不该**清（清了会留下僵尸 toast）（0.4.0）
 - 失误：可选服务 `shortcuts`/`workspaces` 直接塞进 `INJECT` 会让缺少该服务的 profile **整个插件不激活**（看板/HUD 一起失效），而不声明又违反官方「optional services 放 inject」的建议 → 规则：INJECT 只放"没有它插件就没意义"的服务；纯增强型可选服务用 `optionalService()` 每次使用时探测，缺了只降级该功能，并把理由写在 INJECT 旁边（0.4.0）
+- 失误：命令面板是模态搜索框，但列表在下方持续刷新（会话推送、状态变化）时光标会掉出输入框，接着打的字去了别处——用户描述为"面板自己跳出" → 规则：**模态输入框必须有焦点守卫**（capture 监听 focusin/focusout），但只在焦点掉到 `body`/`documentElement` 时抢回；焦点停在真实元素说明用户主动点走了（行、筛选 chip、别的对话框），抢回会与用户打架。同理，所有"聚焦输入框"的快捷键处理必须先检查模态层是否打开（`isPaletteOpen()`），不能隔着模态框抢光标（0.4.0）
 
 ## React 组件纪律
 
