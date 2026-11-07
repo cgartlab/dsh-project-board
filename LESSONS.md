@@ -17,6 +17,7 @@
 - 失误：0.3.0 之前 `client.js` 既是源码又是产物，手改能"生效"，重构时无从下手 → 规则：只改 `src/`；`client.js` / `index.js` 由 `npm run build` 生成，手改必被覆盖（0.3.0）
 - 失误：两个测试文件都 `readFileSync('client.js')`，只跑 `npm test` 验证的是**上一次构建**的结果 —— 改完源码不 build 就等于没验证 → 规则：验证顺序固定为 `build` → `test`；提交前跑 `npm run check`（它会校验产物与源码一致）
 - 失误：产物 banner 里带 `package.json` 的 version，只改版本号不重建，产物版本与实际不符 → 规则：改版本必须 `npm run build` 并把产物一起提交；CI 用 `git diff --exit-code client.js index.js` 断言两者一致（0.3.0）
+- 失误：0.3.0 TypeScript 重写后，之前直接改 `client.js` 的 macOS 适配随旧产物一起失效；若把那个旧提交 rebase 到重写后的 main，改动仍落在生成文件里、下次 build 被覆盖且 CI 报产物不一致 → 规则：同步上游重写后，把改动重新落到 `src/` 的对应模块（combos / styles / i18n / apply / features）再 `npm run build`，不 rebase 改产物的提交（0.3.1）
 
 ## 构建与检查脚本
 
@@ -67,7 +68,12 @@
 - 失误：想用 SendKeys / AppActivate / PostMessage 往 DSH 窗口注入快捷键来验证，Windows 前台锁 + 无地址化的 Chromium 子窗口，全部失败 → 规则：快捷键只能由人按，Agent 只读插件日志验证；日志必须有 scope 粒度（`shortcut` / `sidebar` / `hud`）
 - 失误：想用浏览器客户端 `?token=` 连 `127.0.0.1` 验证，桌面端 token 是启动时临时签发 → 401 → 规则：不用 web 客户端代跑验证，走桌面端插件日志
 - 失误：日志级别停在默认档时，`Alt+W` 的 info 记录看不到 → 规则：排查前先把「日志与排查」级别调到「常规」，或直接读 localStorage 里的 `entries`
-- 失误：只写"修好了"而没有可复现的判断依据，下一轮又是猜 → 规则：每次行为修复配一条回归测试（两个测试文件共 13 条就是地基），并在 `docs/architecture.md` 留判定口径
+- 失误：只写"修好了"而没有可复现的判断依据，下一轮又是猜 → 规则：每次行为修复配一条回归测试（`test/` 下两个测试文件的回归测试就是地基），并在 `docs/architecture.md` 留判定口径
+
+## 本机网络与工具
+
+- 失误：本机 `git` 全局配了 `http.proxy = http://127.0.0.1:7900`，本地代理没启动时 `git fetch/push` 直接失败（`Failed to connect to github.com port 443 via 127.0.0.1`），而 `gh` 走 API 一切正常，很容易误判成"仓库/权限坏了" → 规则：先看 `git config --get http.proxy` 与端口是否有监听；绕过用 `git -c http.proxy= -c https.proxy= …`，大 pack 传输再叠加 `-c http.version=HTTP/1.1`（2026-11-06 实测：HTTP/2 直连会被 reset，HTTP/1.1 能过）
+- 失误：`git pull` 会在网络阶段再 fetch 一次，网络抖动时明明已经 `fetch` 成功却 pull 失败 → 规则：已经 `git fetch` 到本地后，用 `git merge --ff-only origin/main` 完成快进，不重复走网络
 
 ## 文案、设置与迁移
 
@@ -78,3 +84,12 @@
 - 失误：README 里写死的快捷键说明与实际默认值漂移 → 规则：改快捷键默认值必须同步 `README.md` / `README.zh.md` 的快捷键表与设置页文案，以及 `docs/architecture.md` 里点名的具体键（如 `Alt+U` / `Alt+M`）
 - 失误：用户在 GitHub token 输入框填了 DSH 密钥引用 `{{API_KEY_...}}`（不是真实 PAT），插件把它当 token 发给 GitHub API → 401 → 规则：接受凭据的输入框检测框架占位符模式（`{{...}}`），显示警告提示用户填真实值（0.4.0）
 - 失误：fallback 模式（无 workspace）下 path 输入用受控 `value` + row `key` 随 path 变 → 每次击键 row 重建、input 失焦 → 规则：path 输入用 `defaultValue` + `onBlur`（非受控，失焦时提交），不用 path 做 row key（0.4.0）
+
+## 平台检测与修饰键文案
+
+- 失误：`IS_MAC` 在 platform 非空时直接 return，只拿 platform 字符串排除 iphone/ipad/ipod；iPadOS Safari 请求桌面网站时是 `platform='MacIntel'` + UA 含 `iPad`，于是被当成 macOS、界面显示 ⌥/⌘ → 规则：平台判定无条件先查 UA 的 iOS 标记（`iphone|ipad|ipod`，忽略大小写）并立即返回 false，再走 `userAgentData.platform > navigator.platform > UA` 优先级；改检测必须给 `test/load.test.cjs` 的 `loadModule` 传 UA / userAgentData 变体做回归 → 证据：a6e314c，`src/core/combos.ts`、`test/load.test.cjs`
+- 失误：`zh` / `en` 字典把 macOS 与 Windows 两套修饰键术语塞进同一句（「Option（⌥，Windows 为 Alt）」），字典拿不到当前平台，macOS 用户看到「Windows 为 Alt」、Windows 用户看到 ⌥/⌘ → 规则：用户可见的修饰键名一律用 `{ctrl}/{alt}/{meta}/{shift}` 占位符，渲染处传 `src/core/combos.ts` 导出的 `MODIFIER_LABELS`（与 `comboDisplay` 同一张 IS_MAC 派生的表），zh/en 同步，不写死 ⌥/⌘ 或 `Alt on Windows` → 证据：a6e314c，`src/i18n/zh.ts`、`src/i18n/en.ts`、`src/features/settings.ts`、`src/features/board.ts`
+
+## 字典占位符与产物同步
+
+- 失误：0.3.2 把 `sort.hint` 等字典改成 `{shift}` 占位符、settings.ts 渲染点已传 `MODIFIER_LABELS`，但 `src/features/board.ts` 的 3 个 `t('sort.hint')` 漏传第二参数（列头 tooltip 显示字面量 `{shift}`）；同时合并含 src 改动的 PR 时 `client.js` 没跟着重建，旧产物仍是修复前代码 → main CI step 7「The committed bundle matches src/」失败、`npm test` 在 HEAD 产物上 18 条中 2 条失败，运行时没有任何修复 → 规则：改字典占位符后必须 grep 全部 `t('<key>')` 渲染点并逐一传参；合并任何含 `src/` 改动的 PR 后必须 `npm run build`、`git diff --exit-code -- client.js index.js`，并确认 CI 的「产物一致」step 绿 → 证据：fe3f948，`src/features/board.ts`、`src/features/settings.ts`、`src/i18n/zh.ts`、`src/i18n/en.ts`、`test/load.test.cjs`、`client.js`

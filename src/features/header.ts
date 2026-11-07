@@ -154,14 +154,14 @@ export function HeaderButtons(props: HeaderButtonsProps): unknown {
           {
             type: 'button',
             className: 'pbx-navSwitch' + (open ? ' active' : ''),
-            title: t('nav.switch') + ' (' + (comboDisplay(config.shortcuts.palette) || 'Alt+K') + ')' + (title ? ' · ' + title : ''),
+            title: t('nav.switch') + ' (' + comboDisplay(config.shortcuts.palette || DEFAULT_SETTINGS.shortcuts.palette) + ')' + (title ? ' · ' + title : ''),
             onClick: () => {
               if (palette) palette.set({ open: true });
             }
           },
           h(Icon, { name: 'search', size: 14 }),
           h('span', { className: 'pbx-navTitle' }, t('nav.switchLabel')),
-          h('kbd', { className: 'pbx-kbd' }, comboDisplay(config.shortcuts.palette) || 'Alt+K')
+          h('kbd', { className: 'pbx-kbd' }, comboDisplay(config.shortcuts.palette || DEFAULT_SETTINGS.shortcuts.palette))
         )
       : null,
     historyNav: h(

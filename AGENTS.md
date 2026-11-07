@@ -48,7 +48,7 @@
 npm run typecheck   # tsc --noEmit（strict）
 npm run build       # src/ -> client.js + index.js
 npm run check       # 类型 + 清单/exports/语法 + i18n（含产物嵌入）
-npm test            # 13 条：加载挂载 + 快捷键回归
+npm test            # 加载挂载 + 快捷键回归
 ```
 
 CI（`.github/workflows/check.yml`）除此之外还会 `npm ci` 后重建并 `git diff --exit-code client.js index.js`，以及对两个产物跑 `node --check`。

@@ -89,6 +89,23 @@ sends one synthetic wheel signal before the first write because DSH can hold a p
 scroll anchor that would otherwise pull the view back every frame, and holding down to the
 bottom focuses the composer.
 
+### macOS labels and top clearance
+
+`IS_MAC` in `src/core/combos.ts` reads `navigator.userAgentData.platform` /
+`navigator.platform` (UA is only a fallback) and drives `MODIFIER_LABELS`: `⌥`/`⌃`/`⇧`/`⌘`
+on macOS, `Alt`/`Ctrl`/`Shift`/`Meta` elsewhere. `comboDisplay` sorts modifiers into the
+host's canonical order (control → alt → shift → meta) before labelling, so a chord recorded
+in any order renders consistently. **Stored combos stay platform-neutral** — the physical
+Option key reports `altKey`, and DSH's built-in shortcut catalog uses `alt`; renaming them
+would break saved settings and conflict detection.
+
+`apply()` sets `data-pbx-platform` on `<html>` because Electron injects `data-platform` only
+into the native window. `src/styles.ts` uses it to place fixed UI below the macOS menu bar /
+window-control strip, following DSH's `--dsh-frame-top-clearance` (48px on macOS, plus 20px;
+20px in fullscreen, where the host sets `data-fullscreen`). Toasts, the search palette and
+the rename dialog follow the clearance fully; the floating HUD keeps its 120px design
+position and only follows a larger clearance, so the layout does not jump.
+
 ## Notifications
 
 A `shell.overlay` watcher diffs session status maps between renders:
