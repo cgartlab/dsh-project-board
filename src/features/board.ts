@@ -11,43 +11,11 @@ import type { AppearanceMap } from '../ui/appearance';
 import { ICONS, PALETTE, hexToRgba, loadAppearance, paletteFor, saveAppearance } from '../ui/appearance';
 import { Icon, RunRing } from '../ui/icons';
 import { MODIFIER_LABELS } from '../core/combos';
+import type { SessionListSnapshot, SessionStatusMap, SessionSummary, WorkspaceSnapshot, WorkspaceView } from '../core/snapshot';
 import { fallbackHook, type PresetSnapshot, type ScheduleSnapshot } from '../core/schedule';
 import { PROJECT_COLUMNS, SORT_DIR_DEFAULT, compareVersions, parseVersion, relTime, sessionTitleOf, statusInfo, workspaceLabel, type ProjectColumn, type SessionStatusLike, type StatusInfo } from './format';
 import { fetchRepoStats, type RepoStats } from '../core/github';
 import type { GithubRepoSetting } from '../types';
-
-export interface WorkspaceView {
-  workspaceId: string;
-  title?: string;
-  path?: string;
-  updatedAt?: string;
-  sessionIds?: string[];
-}
-
-export interface SessionSummary {
-  id?: string;
-  title?: string;
-  displayTitle?: string;
-  updatedAt?: number;
-  running?: boolean;
-  origin?: string;
-  blank?: boolean;
-  retainedBy?: { mainView?: number };
-  projectionValues?: Record<string, unknown>;
-}
-
-export interface WorkspaceSnapshot {
-  items?: WorkspaceView[];
-  archivedSessionIds?: string[];
-}
-
-export interface SessionListSnapshot {
-  ids?: string[];
-  byId?: Record<string, SessionSummary>;
-  phase?: string;
-}
-
-export type SessionStatusMap = Map<string, SessionStatusLike>;
 
 export interface ProjectBoardProps {
   useWorkspaces: UseHook<WorkspaceSnapshot>;

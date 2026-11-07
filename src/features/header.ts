@@ -6,12 +6,13 @@ import type { Settings } from '../types';
 import { comboDisplay } from '../core/combos';
 import { type HeaderDragState, type SaveSettings, startHeaderButtonDrag } from '../core/header-drag';
 import { headerClickBlocked } from '../core/state';
+import { centreColumnElement, hostCentreColumnWidth } from '../core/dom';
 import { fallbackHook } from '../core/schedule';
 import { Icon, RunRing } from '../ui/icons';
 import { jumpUserMessage } from './chat-nav';
 import { sessionTitleOf, statusInfo } from './format';
 import { cloneJson } from '../core/json';
-import type { SessionListSnapshot, SessionStatusMap, WorkspaceSnapshot } from './board';
+import type { SessionListSnapshot, SessionStatusMap, WorkspaceSnapshot } from '../core/snapshot';
 
 export interface PaletteSnapshot {
   open: boolean;
@@ -80,14 +81,13 @@ export function HeaderButtons(props: HeaderButtonsProps): unknown {
   const [moreOpen, setMoreOpen] = useState(false);
   useEffect(() => {
     const read = (): void => {
-      const box = document.querySelector('[class*="_centerCol"]') || document.querySelector('[class*="_frame"]');
-      if (!box) return;
-      const width = Math.round(box.getBoundingClientRect().width);
+      const width = hostCentreColumnWidth();
+      if (width <= 0) return;
       setNavSpace((previous) => (previous === null || Math.abs(previous - width) > 2 ? width : previous));
     };
     read();
     let observer: ResizeObserver | null = null;
-    const box = document.querySelector('[class*="_centerCol"]') || document.querySelector('[class*="_frame"]');
+    const box = centreColumnElement();
     if (box && typeof ResizeObserver !== 'undefined') {
       observer = new ResizeObserver(read);
       observer.observe(box);

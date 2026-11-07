@@ -474,6 +474,100 @@
   }
 
   // src/core/dom.ts
+  var rightPanelElement = () => {
+    try {
+      return document.querySelector('[class*="_panel"][data-sidebar-right-open]');
+    } catch (error) {
+      return null;
+    }
+  };
+  function isRightPanelExpanded() {
+    const panel = rightPanelElement();
+    if (!panel) return false;
+    let value = null;
+    try {
+      value = panel.getAttribute("data-sidebar-right-open");
+    } catch (error) {
+      return false;
+    }
+    if (value === null) return false;
+    const normalized = value.trim().toLowerCase();
+    return normalized !== "false" && normalized !== "0" && normalized !== "off";
+  }
+  function hostRightbarWidth() {
+    try {
+      const column = document.querySelector("[data-rightbar-col]") || document.querySelector('[class*="_rightbarCol"]');
+      const own = column ? column.getBoundingClientRect().width : 0;
+      if (own > 0) return own;
+      const panel = rightPanelElement();
+      return panel ? panel.getBoundingClientRect().width : 0;
+    } catch (error) {
+      return 0;
+    }
+  }
+  function isRightbarFullscreen() {
+    try {
+      return Boolean(document.querySelector('[data-sidebar-right-panel="fullscreen"]')) || Boolean(document.querySelector("[data-rightbar-fullscreen]"));
+    } catch (error) {
+      return false;
+    }
+  }
+  function rightbarColumnElement() {
+    try {
+      return document.querySelector("[data-rightbar-col]");
+    } catch (error) {
+      return null;
+    }
+  }
+  function hostCentreColumnWidth() {
+    try {
+      const box = document.querySelector('[class*="_centerCol"]') || document.querySelector('[class*="_frame"]');
+      return box ? Math.round(box.getBoundingClientRect().width) : 0;
+    } catch (error) {
+      return 0;
+    }
+  }
+  function centreColumnElement() {
+    try {
+      return document.querySelector('[class*="_centerCol"]') || document.querySelector('[class*="_frame"]');
+    } catch (error) {
+      return null;
+    }
+  }
+  function isInsideCentreColumn(node) {
+    try {
+      return Boolean(node && node.closest && node.closest('[class*="_centerCol"]'));
+    } catch (error) {
+      return false;
+    }
+  }
+  function sidebarFrameElement() {
+    try {
+      return document.querySelector('[class*="_frame"][style*="grid-template-columns"]') || document.querySelector("[data-sidebar-collapsed]");
+    } catch (error) {
+      return null;
+    }
+  }
+  function sidebarColumnElement() {
+    try {
+      const own = document.querySelector('[class*="_sidebarCol"]');
+      if (own) return own;
+      const frame = sidebarFrameElement();
+      return frame ? frame.firstElementChild : null;
+    } catch (error) {
+      return null;
+    }
+  }
+  var HOST_LAYOUT_ATTRIBUTES = ["data-sidebar-collapsed", "data-sidebar-right-open", "data-rightbar-collapsed", "data-rightbar-fullscreen"];
+  function sidebarCollapsedFlag() {
+    const frame = sidebarFrameElement();
+    if (!frame) return null;
+    try {
+      return frame.hasAttribute("data-sidebar-collapsed");
+    } catch (error) {
+      return null;
+    }
+  }
   function hasBlockingDialog() {
     try {
       const nodes = document.querySelectorAll('[role="dialog"][aria-modal="true"]');
@@ -3716,14 +3810,13 @@
     const [moreOpen, setMoreOpen] = useState(false);
     useEffect(() => {
       const read = () => {
-        const box2 = document.querySelector('[class*="_centerCol"]') || document.querySelector('[class*="_frame"]');
-        if (!box2) return;
-        const width = Math.round(box2.getBoundingClientRect().width);
+        const width = hostCentreColumnWidth();
+        if (width <= 0) return;
         setNavSpace((previous) => previous === null || Math.abs(previous - width) > 2 ? width : previous);
       };
       read();
       let observer = null;
-      const box = document.querySelector('[class*="_centerCol"]') || document.querySelector('[class*="_frame"]');
+      const box = centreColumnElement();
       if (box && typeof ResizeObserver !== "undefined") {
         observer = new ResizeObserver(read);
         observer.observe(box);
@@ -4748,13 +4841,10 @@
     useEffect(() => {
       if (config.hud.enabled === false) return void 0;
       let last = null;
-      const frameNow = () => document.querySelector('[class*="_frame"][style*="grid-template-columns"]') || document.querySelector("[data-sidebar-collapsed]");
-      const sidebarColumn = () => {
-        const frame = frameNow();
-        return document.querySelector('[class*="_sidebarCol"]') || (frame ? frame.firstElementChild : null);
-      };
+      const frameNow = () => sidebarFrameElement();
+      const sidebarColumn = () => sidebarColumnElement();
       const readExpanded = () => {
-        if (document.querySelector('[data-sidebar-right-panel="fullscreen"]')) return { expanded: false, source: "fullscreen" };
+        if (isRightbarFullscreen()) return { expanded: false, source: "fullscreen" };
         const frame = frameNow();
         if (frame) {
           const template = frame.style && frame.style.gridTemplateColumns || "";
@@ -4767,8 +4857,9 @@
           if (width > 120) return { expanded: true, source: "measured" };
           if (width > 0) return { expanded: false, source: "measured" };
         }
-        if (!frame) return null;
-        return { expanded: !frame.hasAttribute("data-sidebar-collapsed"), source: "attribute" };
+        const collapsedFlag = sidebarCollapsedFlag();
+        if (collapsedFlag === null) return null;
+        return { expanded: !collapsedFlag, source: "attribute" };
       };
       const sidebarRightEdge = () => {
         const column = sidebarColumn();
@@ -4878,7 +4969,7 @@
         observer.observe(document.documentElement, {
           subtree: true,
           attributes: true,
-          attributeFilter: ["data-sidebar-collapsed", "data-sidebar-right-open", "data-rightbar-collapsed", "data-rightbar-fullscreen"]
+          attributeFilter: HOST_LAYOUT_ATTRIBUTES
         });
       }
       const timer = window.setInterval(tick, 800);
@@ -5028,7 +5119,7 @@
         const box = hudRef.current;
         const scroller = findChatScroller();
         if (collapsed || !box || !scroller) return;
-        if (!scroller.closest || !scroller.closest('[class*="_centerCol"]')) return;
+        if (!isInsideCentreColumn(scroller)) return;
         const rect = box.getBoundingClientRect();
         const srect = scroller.getBoundingClientRect();
         if (!srect.width) return;
@@ -5052,7 +5143,7 @@
       window.addEventListener("resize", schedule);
       let observer = null;
       let mutationObserver = null;
-      const column = document.querySelector('[class*="_centerCol"]');
+      const column = centreColumnElement();
       if (column && typeof ResizeObserver !== "undefined") {
         observer = new ResizeObserver(schedule);
         observer.observe(column);
@@ -6537,6 +6628,15 @@
 
   // src/apply.ts
   var INJECT = ["slots", "locale", "uiWorkspace", "remote", "remote.session", "remote.schedule", "remote.agentPresets", "sidebarRight", "sidebarRightTabs", "layout"];
+  var optionalService = (ctx, name) => {
+    try {
+      const direct = ctx[name];
+      if (direct) return direct;
+      return typeof ctx.get === "function" ? ctx.get(name) ?? null : null;
+    } catch (error) {
+      return null;
+    }
+  };
   function apply(ctx) {
     ctx.effect(() => ctx.locale.register(NS, { zh, en }), "project-board: dictionaries");
     ctx.effect(() => {
@@ -6587,16 +6687,16 @@
           const hasText = typeof value === "string" ? value.length > 0 : Boolean(target.textContent && target.textContent.trim().length > 0);
           if (!hasText) return;
           moveCaretToEnd(target);
-          window.setTimeout(() => moveCaretToEnd(target), 0);
-          window.setTimeout(() => moveCaretToEnd(target), 140);
+          later(() => moveCaretToEnd(target), 0);
+          later(() => moveCaretToEnd(target), 140);
         } catch (error) {
         }
       };
       document.addEventListener("focusin", onFocusIn, true);
       return () => document.removeEventListener("focusin", onFocusIn, true);
     }, "project-board: composer caret");
-    const uiWorkspace = ctx.get("uiWorkspace");
-    const shortcutsService = ctx.get("shortcuts");
+    const uiWorkspace = optionalService(ctx, "uiWorkspace");
+    const shortcutsService = optionalService(ctx, "shortcuts");
     const openSession = (sessionId) => {
       logEvent("debug", "session", "open", { id: String(sessionId || "").slice(-12) });
       try {
@@ -6652,7 +6752,7 @@
     };
     const findBuiltinConflict = (combo) => {
       try {
-        const shortcuts = ctx.get("shortcuts");
+        const shortcuts = optionalService(ctx, "shortcuts");
         const rows = shortcuts && shortcuts.catalog && typeof shortcuts.catalog.getSnapshot === "function" ? shortcuts.catalog.getSnapshot() : null;
         if (!rows || !Array.isArray(rows)) return null;
         const target = comboBindingOf(combo);
@@ -6671,6 +6771,17 @@
     const settingsStore = createUiStore(loadSettings());
     const logStore = createUiStore(loadJson(LOG_KEY, { entries: [] }));
     setLogConfigGetter(() => settingsStore.getSnapshot().log || DEFAULT_SETTINGS.log);
+    const pendingTimers = /* @__PURE__ */ new Set();
+    const later = (run, delay) => {
+      const id = window.setTimeout(() => {
+        pendingTimers.delete(id);
+        try {
+          run();
+        } catch (error) {
+        }
+      }, delay);
+      pendingTimers.add(id);
+    };
     let logPersistTimer = 0;
     setLogSink((entry) => {
       try {
@@ -6689,6 +6800,17 @@
       } catch (error) {
       }
     });
+    ctx.effect(
+      () => () => {
+        for (const id of pendingTimers) window.clearTimeout(id);
+        pendingTimers.clear();
+        if (logPersistTimer) {
+          window.clearTimeout(logPersistTimer);
+          logPersistTimer = 0;
+        }
+      },
+      "project-board: pending timers"
+    );
     const writeSettings = (next) => {
       const merged = mergeSettings(DEFAULT_SETTINGS, next);
       merged.headerButtonsVersion = 3;
@@ -6723,25 +6845,8 @@
       } catch (error) {
       }
     };
-    const boardPanelVisible = () => {
-      try {
-        const panel = document.querySelector('[class*="_panel"][data-sidebar-right-open]');
-        if (!panel) return false;
-        const value = panel.getAttribute("data-sidebar-right-open");
-        if (value === null) return false;
-        const normalized = value.trim().toLowerCase();
-        return normalized !== "false" && normalized !== "0" && normalized !== "off";
-      } catch (error) {
-        return false;
-      }
-    };
-    const rightbarWidthNow = () => {
-      const column = document.querySelector("[data-rightbar-col]") || document.querySelector('[class*="_rightbarCol"]');
-      const own = column ? column.getBoundingClientRect().width : 0;
-      if (own > 0) return own;
-      const panel = document.querySelector('[class*="_panel"][data-sidebar-right-open]');
-      return panel ? panel.getBoundingClientRect().width : 0;
-    };
+    const boardPanelVisible = () => isRightPanelExpanded();
+    const rightbarWidthNow = () => hostRightbarWidth();
     const BOARD_WIDTH_KEY = "pbx.board.width";
     const boardWidthDefault = () => {
       try {
@@ -6760,7 +6865,7 @@
       } catch (error) {
       }
     };
-    const rightbarFullscreen = () => Boolean(document.querySelector('[data-sidebar-right-panel="fullscreen"]')) || Boolean(document.querySelector("[data-rightbar-fullscreen]"));
+    const rightbarFullscreen = () => isRightbarFullscreen();
     const setRightbarWidth = (px) => {
       try {
         const panels = ctx.layout && ctx.layout.panels;
@@ -6784,7 +6889,7 @@
       };
       const kick = window.setTimeout(read, 0);
       let observer = null;
-      const column = document.querySelector("[data-rightbar-col]");
+      const column = rightbarColumnElement();
       if (column && typeof ResizeObserver !== "undefined") {
         observer = new ResizeObserver(read);
         observer.observe(column);
@@ -6883,7 +6988,7 @@
         const viewport = window.innerWidth || 1200;
         const width = mode === "narrow" ? boardWidthDefault() : Math.round(viewport * 0.5);
         setRightbarWidth(width);
-        window.setTimeout(() => {
+        later(() => {
           if (rightbarFullscreen()) toggleRightbarFullscreen();
           setRightbarWidth(width);
         }, 130);
@@ -6904,7 +7009,7 @@
         logEvent(comparable && !changed ? "warn" : "info", "sidebar", !comparable ? "unverified" : changed ? "applied" : "no-change", { before, after });
       };
       const settled = () => {
-        window.setTimeout(verify, 260);
+        later(verify, 260);
         return true;
       };
       const attempt = (path, run) => {
@@ -6918,15 +7023,7 @@
           return false;
         }
       };
-      const service = (name) => {
-        const direct = ctx[name];
-        if (direct) return direct;
-        try {
-          return typeof ctx.get === "function" ? ctx.get(name) : null;
-        } catch (error) {
-          return null;
-        }
-      };
+      const service = (name) => optionalService(ctx, name);
       const layout = service("layout");
       if (layout && typeof layout.toggleSidebar === "function" && attempt("layout.toggleSidebar", () => layout.toggleSidebar())) return settled();
       if (layout && layout.panels && typeof layout.panels.toggleSidebar === "function" && attempt("layout.panels.toggleSidebar", () => layout.panels.toggleSidebar())) return settled();
@@ -6976,7 +7073,7 @@
         if (!boardPanelVisible()) {
           sidebarRight.toggleExpanded();
           const width = boardWidthDefault();
-          window.setTimeout(() => {
+          later(() => {
             if (!rightbarFullscreen()) setRightbarWidth(width);
           }, 60);
         }
@@ -7025,7 +7122,7 @@
     };
     const archiveSession = async (sessionId) => {
       try {
-        const workspaces = ctx.get("workspaces");
+        const workspaces = optionalService(ctx, "workspaces");
         if (!workspaces || typeof workspaces.archiveSession !== "function") {
           return { ok: false, error: { code: "unsupported", message: "session archive is unavailable" } };
         }
@@ -7071,14 +7168,13 @@
       const timer = window.setTimeout(() => {
         try {
           const snapshot = settingsStore.getSnapshot();
-          const frame = document.querySelector('[class*="_frame"][style*="grid-template-columns"]') || document.querySelector("[data-sidebar-collapsed]");
           logEvent("info", "init", "plugin ready", {
             shortcuts: Object.keys(snapshot.shortcuts || {}).length,
             hud: Boolean(snapshot.hud && snapshot.hud.enabled),
             board: Boolean(snapshot.board && snapshot.board.enabled),
             leftSidebar: snapshot.shortcuts && snapshot.shortcuts.leftSidebar,
             windowWidth: window.innerWidth || 0,
-            frameWidth: frame ? Math.round(frame.getBoundingClientRect().width) : null,
+            frameWidth: hostCentreColumnWidth() || null,
             sidebar: sidebarSignature()
           });
           for (const key of Object.keys(snapshot.shortcuts || {})) {

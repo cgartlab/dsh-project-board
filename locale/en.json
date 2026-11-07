@@ -1,6 +1,6 @@
 {
   "meta": {
     "title": "dsh-tac Project Board",
-    "description": "See the task status of every workspace and its sessions in one global panel, with a custom icon and color per workspace."
+    "description": "Project management and keyboard navigation: a global project board with GitHub data columns, a floating session list, a command palette with 14 global shortcuts, task notifications, and conversation scroll/history helpers."
   }
 }

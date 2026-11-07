@@ -7,7 +7,7 @@ import { fallbackHook } from '../core/schedule';
 import { Icon } from '../ui/icons';
 import { findChatScroller } from './chat-dom';
 import { sessionTitleOf } from './format';
-import type { SessionListSnapshot, SessionStatusMap } from './board';
+import type { SessionListSnapshot, SessionStatusMap } from '../core/snapshot';
 
 export interface ToastItem {
   id: number;

@@ -8,6 +8,7 @@ import type { Translate, UseHook } from '../host';
 import { cloneJson } from '../core/json';
 import { loadJson, saveJson } from '../core/json';
 import { logEvent } from '../core/log';
+import { HOST_LAYOUT_ATTRIBUTES, centreColumnElement, isInsideCentreColumn, isRightbarFullscreen, sidebarCollapsedFlag, sidebarColumnElement, sidebarFrameElement } from '../core/dom';
 import { fallbackHook, type ScheduleSnapshot } from '../core/schedule';
 import { h, useLayoutEffectSafe, useEffect, useRef, useState } from '../runtime';
 import type { Settings } from '../types';
@@ -17,7 +18,7 @@ import { Icon, RunRing } from '../ui/icons';
 import { type SaveSettings } from '../core/header-drag';
 import { findChatScroller } from './chat-dom';
 import { relTime, sessionTitleOf, statusInfo, workspaceLabel, type Tone } from './format';
-import type { SessionListSnapshot, SessionStatusMap, WorkspaceSnapshot } from './board';
+import type { SessionListSnapshot, SessionStatusMap, WorkspaceSnapshot } from '../core/snapshot';
 
 export function fmtElapsed(milliseconds: number): string {
   const total = Math.max(0, Math.floor(milliseconds / 1000));
@@ -430,13 +431,8 @@ export function FloatingStatus(props: FloatingStatusProps): unknown {
   useEffect(() => {
     if (config.hud.enabled === false) return undefined;
     let last: boolean | null = null;
-    const frameNow = (): HTMLElement | null =>
-      (document.querySelector('[class*="_frame"][style*="grid-template-columns"]') as HTMLElement | null) ||
-      (document.querySelector('[data-sidebar-collapsed]') as HTMLElement | null);
-    const sidebarColumn = (): Element | null => {
-      const frame = frameNow();
-      return document.querySelector('[class*="_sidebarCol"]') || (frame ? frame.firstElementChild : null);
-    };
+    const frameNow = (): HTMLElement | null => sidebarFrameElement();
+    const sidebarColumn = (): Element | null => sidebarColumnElement();
     /* Judge by the frame's own grid template first. DSH renders the frame with an inline
        `gridTemplateColumns` whose first track IS the sidebar column ("280px …"), and a
        `data-sidebar-collapsed` attribute that flips with the collapsed flag. Both describe the
@@ -445,7 +441,7 @@ export function FloatingStatus(props: FloatingStatusProps): unknown {
        frame we cannot parse, and a fullscreen board still counts as "not expanded" because it
        hides the column while `sidebarCollapsed` stays false. */
     const readExpanded = (): { expanded: boolean; source: string } | null => {
-      if (document.querySelector('[data-sidebar-right-panel="fullscreen"]')) return { expanded: false, source: 'fullscreen' };
+      if (isRightbarFullscreen()) return { expanded: false, source: 'fullscreen' };
       const frame = frameNow();
       if (frame) {
         const template = (frame.style && frame.style.gridTemplateColumns) || '';
@@ -458,8 +454,9 @@ export function FloatingStatus(props: FloatingStatusProps): unknown {
         if (width > 120) return { expanded: true, source: 'measured' };
         if (width > 0) return { expanded: false, source: 'measured' };
       }
-      if (!frame) return null;
-      return { expanded: !frame.hasAttribute('data-sidebar-collapsed'), source: 'attribute' };
+      const collapsedFlag = sidebarCollapsedFlag();
+      if (collapsedFlag === null) return null;
+      return { expanded: !collapsedFlag, source: 'attribute' };
     };
     /* Right edge of the native session list, so the pill hugs that column instead of the window. */
     const sidebarRightEdge = (): number | null => {
@@ -579,7 +576,7 @@ export function FloatingStatus(props: FloatingStatusProps): unknown {
       observer.observe(document.documentElement, {
         subtree: true,
         attributes: true,
-        attributeFilter: ['data-sidebar-collapsed', 'data-sidebar-right-open', 'data-rightbar-collapsed', 'data-rightbar-fullscreen']
+        attributeFilter: HOST_LAYOUT_ATTRIBUTES
       });
     }
     const timer = window.setInterval(tick, 800);
@@ -746,7 +743,7 @@ export function FloatingStatus(props: FloatingStatusProps): unknown {
       const box = hudRef.current;
       const scroller = findChatScroller();
       if (collapsed || !box || !scroller) return;
-      if (!scroller.closest || !scroller.closest('[class*="_centerCol"]')) return;
+      if (!isInsideCentreColumn(scroller)) return;
       const rect = box.getBoundingClientRect();
       const srect = scroller.getBoundingClientRect();
       if (!srect.width) return;
@@ -770,7 +767,7 @@ export function FloatingStatus(props: FloatingStatusProps): unknown {
     window.addEventListener('resize', schedule);
     let observer: ResizeObserver | null = null;
     let mutationObserver: MutationObserver | null = null;
-    const column = document.querySelector('[class*="_centerCol"]');
+    const column = centreColumnElement();
     if (column && typeof ResizeObserver !== 'undefined') {
       observer = new ResizeObserver(schedule);
       observer.observe(column);

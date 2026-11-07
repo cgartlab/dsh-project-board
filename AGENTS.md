@@ -28,7 +28,8 @@
 
 - **只改 `src/`，然后 `npm run build`**；产物与源码不一致时 CI 直接失败。
 - **不 import React**：宿主通过 loader 的 `factory(require)` 提供 React，`src/runtime.ts` 绑定一次，其它模块只用活绑定的 `h` / hooks。
-- **只用公开 client 服务**（`slots`、`locale`、`sidebarRight`、`layout`、`uiWorkspace`、`remote`）；宿主没暴露的能力不要猜着调用。
+- **只用公开 client 服务**：`INJECT`（`src/apply.ts`）声明的必需服务是 `slots`、`locale`、`uiWorkspace`、`remote`（含 `remote.session` / `remote.schedule` / `remote.agentPresets` 子路径）、`sidebarRight`、`sidebarRightTabs`、`layout`；可选服务 `shortcuts`、`workspaces` 用 `optionalService()` 探测（缺了只降级该功能，不整插件失活）。宿主没暴露的能力不要猜着调用。
+- **宿主 DOM 探测集中在 `src/core/dom.ts`**：宿主内部的类名/属性（`_frame`、`_centerCol`、`_panel`、`_rightbarCol`、`data-sidebar-*`、`data-rightbar-*`）只允许出现在该文件，且每个探测都必须 `try/catch` 并回落到安全默认值（`false`/`0`/`null`）；`features/chat-dom.ts` 例外，它只读官方 `data-slot` 契约。官方文档明确不鼓励靠宿主 DOM 做布局，新增需求优先找 slot props 或服务。
 - **不读写会话记录**：只读状态，只调用宿主暴露的动作（打开 / 重命名 / 归档）。
 - **新增或改快捷键要五处同步**：`DEFAULT_SETTINGS.shortcuts`（`src/constants.ts`）、`SHORTCUT_LABEL_KEYS`、设置页录制项、`README*.md` 的快捷键表、`test/shortcuts.test.cjs` 的覆盖。
 - **任何用户可见文案都要 zh + en**：`src/i18n/en.ts` 的类型按 `zh` 的键约束，缺键直接编译失败；`npm run check` 另外校验产物里嵌入了全部键。

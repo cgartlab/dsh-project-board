@@ -1,11 +1,8 @@
 /** Label/tone formatting shared by the board and the floating list. */
 import type { Translate } from '../host';
+import type { SessionStatusLike } from '../core/snapshot';
 
-export interface SessionStatusLike {
-  running?: boolean;
-  completionUnread?: boolean;
-  pendingInteraction?: { kind?: string } | null;
-}
+export type { SessionStatusLike };
 
 export interface SessionSummaryLike {
   id?: string;

@@ -17,7 +17,7 @@ import { beginHoldScroll, stopHoldScroll } from './chat-scroll';
 import { relTime, sessionTitleOf, statusInfo, workspaceLabel, type StatusInfo } from './format';
 import { interjectEarliestQueued, scrollToComposerAndFocus } from './interject';
 import type { PaletteSnapshot, PaletteStore } from './header';
-import type { SessionListSnapshot, SessionStatusMap, WorkspaceSnapshot } from './board';
+import type { SessionListSnapshot, SessionStatusMap, WorkspaceSnapshot } from '../core/snapshot';
 
 /** Native keydown events carrying the plugin's own "this press was handled" marker. */
 type PluginKeyEvent = KeyboardEvent & { pbxSidebarActed?: boolean; pbxBoardActed?: boolean };

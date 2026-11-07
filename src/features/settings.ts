@@ -11,7 +11,7 @@ import { h, useEffect, useRef, useState } from '../runtime';
 import type { LogEntry, Settings, ShortcutAction, GithubRepoSetting } from '../types';
 import type { SaveSettings } from '../core/header-drag';
 import { PROJECT_COLUMNS } from './format';
-import type { WorkspaceSnapshot } from './board';
+import type { WorkspaceSnapshot } from '../core/snapshot';
 
 export interface SettingsPageProps {
   useSettings?: UseHook<Settings>;

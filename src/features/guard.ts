@@ -8,7 +8,7 @@ import type { UseHook } from '../host';
 import { useEffect, useMemo, useRef } from '../runtime';
 import { logEvent } from '../core/log';
 import { fallbackHook } from '../core/schedule';
-import type { SessionListSnapshot } from './board';
+import type { SessionListSnapshot } from '../core/snapshot';
 
 export interface BoardState {
   open: boolean;

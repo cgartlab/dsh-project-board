@@ -1,5 +1,156 @@
 /** DOM-level questions the plugin asks the native shell: dialogs, the sidebar frame, pointers. */
 
+/* ------------------------------------------------------------------------------------
+ * Host structure probes.
+ *
+ * Everything below reads DSH's own markup, which the host does not publish as an API. The
+ * official guidance is to take layout from slots and services instead; where the host
+ * exposes no equivalent (right-pane geometry, fullscreen flag, the conversation column
+ * width) a probe is the only option. Keeping every such selector in this one module means
+ * a host rename is a single-file fix, and each probe already degrades to a safe default
+ * (`false` / `0` / `null`) rather than throwing, so an unknown host build loses the feature
+ * instead of breaking the page.
+ * ---------------------------------------------------------------------------------- */
+
+/** The right pane element; the host marks it in both its expanded and collapsed states. */
+const rightPanelElement = (): Element | null => {
+  try {
+    return document.querySelector('[class*="_panel"][data-sidebar-right-open]');
+  } catch (error) {
+    return null;
+  }
+};
+
+/**
+ * Whether the right pane is expanded.
+ *
+ * The `data-sidebar-right-open` attribute is present in BOTH states, so testing for its
+ * existence reads a collapsed pane as open. Only the value decides: absence or an explicit
+ * falsy value means collapsed, while a bare attribute (empty string) is how React renders a
+ * true boolean.
+ */
+export function isRightPanelExpanded(): boolean {
+  const panel = rightPanelElement();
+  if (!panel) return false;
+  let value: string | null = null;
+  try {
+    value = panel.getAttribute('data-sidebar-right-open');
+  } catch (error) {
+    return false;
+  }
+  if (value === null) return false;
+  const normalized = value.trim().toLowerCase();
+  return normalized !== 'false' && normalized !== '0' && normalized !== 'off';
+}
+
+/** The right pane's rendered width in CSS pixels, or 0 when it is not rendered. */
+export function hostRightbarWidth(): number {
+  try {
+    const column = document.querySelector('[data-rightbar-col]') || document.querySelector('[class*="_rightbarCol"]');
+    const own = column ? column.getBoundingClientRect().width : 0;
+    if (own > 0) return own;
+    const panel = rightPanelElement();
+    return panel ? panel.getBoundingClientRect().width : 0;
+  } catch (error) {
+    return 0;
+  }
+}
+
+/** Whether the right pane is currently showing fullscreen. */
+export function isRightbarFullscreen(): boolean {
+  try {
+    return Boolean(document.querySelector('[data-sidebar-right-panel="fullscreen"]')) || Boolean(document.querySelector('[data-rightbar-fullscreen]'));
+  } catch (error) {
+    return false;
+  }
+}
+
+/** The right pane's width-tracking column element, for a ResizeObserver. */
+export function rightbarColumnElement(): Element | null {
+  try {
+    return document.querySelector('[data-rightbar-col]');
+  } catch (error) {
+    return null;
+  }
+}
+
+/**
+ * Width of the host's centre column (the conversation area).
+ *
+ * It is a real `minmax(0,1fr)` grid track that shrinks on window resize, sidebar collapse or
+ * right-pane open, so it is the only stable signal for header layout: the slot anchor is
+ * `display:contents` (no box) and measuring the plugin's own row would feed back into the
+ * fold decision.
+ */
+export function hostCentreColumnWidth(): number {
+  try {
+    const box = document.querySelector('[class*="_centerCol"]') || document.querySelector('[class*="_frame"]');
+    return box ? Math.round(box.getBoundingClientRect().width) : 0;
+  } catch (error) {
+    return 0;
+  }
+}
+
+/** The element to observe for centre-column width changes, if the host renders one. */
+export function centreColumnElement(): Element | null {
+  try {
+    return document.querySelector('[class*="_centerCol"]') || document.querySelector('[class*="_frame"]');
+  } catch (error) {
+    return null;
+  }
+}
+
+/** Whether `node` sits inside the host's conversation column. */
+export function isInsideCentreColumn(node: Element | null): boolean {
+  try {
+    return Boolean(node && node.closest && node.closest('[class*="_centerCol"]'));
+  } catch (error) {
+    return false;
+  }
+}
+
+/** The host's frame element — the grid that carries the sidebar column and its flags. */
+export function sidebarFrameElement(): HTMLElement | null {
+  try {
+    return (
+      (document.querySelector('[class*="_frame"][style*="grid-template-columns"]') as HTMLElement | null) ||
+      (document.querySelector('[data-sidebar-collapsed]') as HTMLElement | null)
+    );
+  } catch (error) {
+    return null;
+  }
+}
+
+/** The native session-list column element, if the host renders one. */
+export function sidebarColumnElement(): Element | null {
+  try {
+    const own = document.querySelector('[class*="_sidebarCol"]');
+    if (own) return own;
+    const frame = sidebarFrameElement();
+    return frame ? frame.firstElementChild : null;
+  } catch (error) {
+    return null;
+  }
+}
+
+/** Host attributes that change when the sidebar/pane layout changes, for a MutationObserver. */
+export const HOST_LAYOUT_ATTRIBUTES = ['data-sidebar-collapsed', 'data-sidebar-right-open', 'data-rightbar-collapsed', 'data-rightbar-fullscreen'];
+
+/**
+ * The host's own collapsed flag on the frame, or null when there is no frame to read.
+ * Preferred over measured widths because it describes the layout's target state and so does
+ * not read "collapsed" halfway through the width animation.
+ */
+export function sidebarCollapsedFlag(): boolean | null {
+  const frame = sidebarFrameElement();
+  if (!frame) return null;
+  try {
+    return frame.hasAttribute('data-sidebar-collapsed');
+  } catch (error) {
+    return null;
+  }
+}
+
 /* The plugin's own palette is aria-modal too, but it owns its keys: it must not suppress
    Alt+K (close) or Alt+I / Alt+, (move). Only real dialogs block shortcuts. */
 export function hasBlockingDialog(): boolean {

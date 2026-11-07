@@ -10,7 +10,7 @@ import { mergeSettings, loadSettings, persistSettings } from './core/settings';
 import { createPresetSource, createScheduleSource, type ObservableSnapshot, type PresetSnapshot, type ScheduleSnapshot } from './core/schedule';
 import { createUiStore } from './core/store';
 import { bindingsOverlap, comboBindingOf, comboDisplay, IS_MAC } from './core/combos';
-import { sidebarSignature } from './core/dom';
+import { hostCentreColumnWidth, hostRightbarWidth, isRightPanelExpanded, isRightbarFullscreen, rightbarColumnElement, sidebarSignature } from './core/dom';
 import { moveCaretToEnd } from './features/interject';
 import { installChatScrollListeners } from './features/chat-scroll';
 import { installChatHistoryAutoLoad } from './features/chat-history';
@@ -30,6 +30,24 @@ import { NotificationDock, NotificationWatcher, ToastStack, showSystemNotificati
 import { BoardSessionGuard, type BoardState } from './features/guard';
 
 export const INJECT = ['slots', 'locale', 'uiWorkspace', 'remote', 'remote.session', 'remote.schedule', 'remote.agentPresets', 'sidebarRight', 'sidebarRightTabs', 'layout'];
+
+/**
+ * `INJECT` lists what the module cannot run without: a missing entry keeps it inactive in
+ * that profile instead of throwing at first use. Two services are intentionally absent —
+ * `shortcuts` and `workspaces` are optional in the host contract (`ctx.shortcuts?:`), and
+ * the board, HUD and palette all work without them. Declaring them here would disable the
+ * whole plugin on a profile that merely lacks the shortcut catalog. They are read through
+ * `optionalService()` at each use instead, so only that extra degrades.
+ */
+const optionalService = <T>(ctx: HostContext, name: string): T | null => {
+  try {
+    const direct = (ctx as unknown as Record<string, unknown>)[name];
+    if (direct) return direct as T;
+    return typeof ctx.get === 'function' ? ((ctx.get(name) as T) ?? null) : null;
+  } catch (error) {
+    return null;
+  }
+};
 
 interface BuiltinConflict {
   id?: string;
@@ -103,8 +121,8 @@ export function apply(ctx: HostContext): void {
         const hasText = typeof value === 'string' ? value.length > 0 : Boolean(target.textContent && target.textContent.trim().length > 0);
         if (!hasText) return;
         moveCaretToEnd(target);
-        window.setTimeout(() => moveCaretToEnd(target), 0);
-        window.setTimeout(() => moveCaretToEnd(target), 140);
+        later(() => moveCaretToEnd(target), 0);
+        later(() => moveCaretToEnd(target), 140);
       } catch (error) {
         /* ignore */
       }
@@ -113,8 +131,8 @@ export function apply(ctx: HostContext): void {
     return () => document.removeEventListener('focusin', onFocusIn, true);
   }, 'project-board: composer caret');
 
-  const uiWorkspace = ctx.get('uiWorkspace') as { openSession(target: unknown): void } | null;
-  const shortcutsService = ctx.get('shortcuts') as { catalog?: { getSnapshot?: () => unknown } } | null;
+  const uiWorkspace = optionalService<{ openSession(target: unknown): void }>(ctx, 'uiWorkspace');
+  const shortcutsService = optionalService<{ catalog?: { getSnapshot?: () => unknown } }>(ctx, 'shortcuts');
   const openSession = (sessionId: string): void => {
     logEvent('debug', 'session', 'open', { id: String(sessionId || '').slice(-12) });
     try {
@@ -174,7 +192,7 @@ export function apply(ctx: HostContext): void {
   /** Read the DSH shortcut catalog and report the first built-in command already using this combo. */
   const findBuiltinConflict = (combo: string): BuiltinConflict | null => {
     try {
-      const shortcuts = ctx.get('shortcuts') as { catalog?: { getSnapshot?: () => CatalogRow[] } } | null;
+      const shortcuts = optionalService<{ catalog?: { getSnapshot?: () => CatalogRow[] } }>(ctx, 'shortcuts');
       const rows = shortcuts && shortcuts.catalog && typeof shortcuts.catalog.getSnapshot === 'function' ? shortcuts.catalog.getSnapshot() : null;
       if (!rows || !Array.isArray(rows)) return null;
       const target = comboBindingOf(combo);
@@ -195,6 +213,24 @@ export function apply(ctx: HostContext): void {
   const settingsStore = createUiStore<Settings>(loadSettings());
   const logStore = createUiStore<{ entries: LogEntry[] }>(loadJson(LOG_KEY, { entries: [] as LogEntry[] }));
   setLogConfigGetter(() => settingsStore.getSnapshot().log || DEFAULT_SETTINGS.log);
+  /* Shortcut paths schedule follow-up work a frame or two later (resize after the host's
+     own transition, caret placement after a remount, the sidebar-toggle verification log).
+     Those timers outlive an unload: disabling or hot-reloading the plugin while one is
+     pending used to let it fire against the host afterwards — resizing the pane or leaving
+     fullscreen in a session that no longer has this plugin. Track them so one effect can
+     clear everything on teardown. */
+  const pendingTimers = new Set<number>();
+  const later = (run: () => void, delay: number): void => {
+    const id = window.setTimeout(() => {
+      pendingTimers.delete(id);
+      try {
+        run();
+      } catch (error) {
+        /* ignore */
+      }
+    }, delay);
+    pendingTimers.add(id);
+  };
   let logPersistTimer = 0;
   setLogSink((entry: LogEntry) => {
     try {
@@ -215,6 +251,18 @@ export function apply(ctx: HostContext): void {
       /* ignore */
     }
   });
+  /* Clear every deferred follow-up on teardown so an unload cannot act on the host. */
+  ctx.effect(
+    () => () => {
+      for (const id of pendingTimers) window.clearTimeout(id);
+      pendingTimers.clear();
+      if (logPersistTimer) {
+        window.clearTimeout(logPersistTimer);
+        logPersistTimer = 0;
+      }
+    },
+    'project-board: pending timers'
+  );
   const writeSettings = (next: Settings): void => {
     const merged = mergeSettings(DEFAULT_SETTINGS, next);
     merged.headerButtonsVersion = 3;
@@ -255,31 +303,10 @@ export function apply(ctx: HostContext): void {
       /* ignore */
     }
   };
-  const boardPanelVisible = (): boolean => {
-    try {
-      const panel = document.querySelector('[class*="_panel"][data-sidebar-right-open]');
-      if (!panel) return false;
-      const value = panel.getAttribute('data-sidebar-right-open');
-      if (value === null) return false;
-      /* Judge by the VALUE, not by the attribute existing. The attribute stays on the
-         element in both states, so mere presence reads a collapsed pane as open and the
-         restore path then skips the toggle it needed. Absence or an explicit falsy value
-         means closed; a bare `data-…` (empty string) is how React renders a true boolean.
-         Do NOT OR in the measured width here: the right-hand column keeps a non-zero box
-         while collapsed, which would make every closed pane look open. */
-      const normalized = value.trim().toLowerCase();
-      return normalized !== 'false' && normalized !== '0' && normalized !== 'off';
-    } catch (error) {
-      return false;
-    }
-  };
-  const rightbarWidthNow = (): number => {
-    const column = document.querySelector('[data-rightbar-col]') || document.querySelector('[class*="_rightbarCol"]');
-    const own = column ? column.getBoundingClientRect().width : 0;
-    if (own > 0) return own;
-    const panel = document.querySelector('[class*="_panel"][data-sidebar-right-open]');
-    return panel ? panel.getBoundingClientRect().width : 0;
-  };
+  /* Host-structure probes live in core/dom.ts so every selector the plugin depends on sits
+     in one place; these aliases keep the call sites reading naturally. */
+  const boardPanelVisible = (): boolean => isRightPanelExpanded();
+  const rightbarWidthNow = (): number => hostRightbarWidth();
   const BOARD_WIDTH_KEY = 'pbx.board.width';
   /* The width the user last left the board at becomes the default for the next open. */
   const boardWidthDefault = (): number => {
@@ -301,8 +328,7 @@ export function apply(ctx: HostContext): void {
       /* ignore */
     }
   };
-  const rightbarFullscreen = (): boolean =>
-    Boolean(document.querySelector('[data-sidebar-right-panel="fullscreen"]')) || Boolean(document.querySelector('[data-rightbar-fullscreen]'));
+  const rightbarFullscreen = (): boolean => isRightbarFullscreen();
   const setRightbarWidth = (px: number): void => {
     try {
       const panels = ctx.layout && ctx.layout.panels;
@@ -327,7 +353,7 @@ export function apply(ctx: HostContext): void {
     };
     const kick = window.setTimeout(read, 0);
     let observer: ResizeObserver | null = null;
-    const column = document.querySelector('[data-rightbar-col]');
+    const column = rightbarColumnElement();
     if (column && typeof ResizeObserver !== 'undefined') {
       observer = new ResizeObserver(read);
       observer.observe(column);
@@ -441,7 +467,7 @@ export function apply(ctx: HostContext): void {
       const width = mode === 'narrow' ? boardWidthDefault() : Math.round(viewport * 0.5);
       setRightbarWidth(width);
       /* A presentation persisted from a fullscreen open lands one render later. */
-      window.setTimeout(() => {
+      later(() => {
         if (rightbarFullscreen()) toggleRightbarFullscreen();
         setRightbarWidth(width);
       }, 130);
@@ -468,7 +494,7 @@ export function apply(ctx: HostContext): void {
       logEvent(comparable && !changed ? 'warn' : 'info', 'sidebar', !comparable ? 'unverified' : changed ? 'applied' : 'no-change', { before: before, after: after });
     };
     const settled = (): boolean => {
-      window.setTimeout(verify, 260);
+      later(verify, 260);
       return true;
     };
     const attempt = (path: string, run: () => unknown): boolean => {
@@ -482,15 +508,7 @@ export function apply(ctx: HostContext): void {
         return false;
       }
     };
-    const service = (name: string): unknown => {
-      const direct = ctx[name];
-      if (direct) return direct;
-      try {
-        return typeof ctx.get === 'function' ? ctx.get(name) : null;
-      } catch (error) {
-        return null;
-      }
-    };
+    const service = (name: string): unknown => optionalService<unknown>(ctx, name);
     const layout = service('layout') as { toggleSidebar?: () => void; panels?: { toggleSidebar?: () => void } } | null;
     if (layout && typeof layout.toggleSidebar === 'function' && attempt('layout.toggleSidebar', () => layout.toggleSidebar!())) return settled();
     if (layout && layout.panels && typeof layout.panels.toggleSidebar === 'function' && attempt('layout.panels.toggleSidebar', () => layout.panels!.toggleSidebar!())) return settled();
@@ -545,7 +563,7 @@ export function apply(ctx: HostContext): void {
       if (!boardPanelVisible()) {
         sidebarRight.toggleExpanded();
         const width = boardWidthDefault();
-        window.setTimeout(() => {
+        later(() => {
           if (!rightbarFullscreen()) setRightbarWidth(width);
         }, 60);
       }
@@ -601,7 +619,7 @@ export function apply(ctx: HostContext): void {
   };
   const archiveSession = async (sessionId: string): Promise<{ ok?: boolean; error?: { code?: string; message?: string } }> => {
     try {
-      const workspaces = ctx.get('workspaces') as { archiveSession?: (id: string) => Promise<void> } | null;
+      const workspaces = optionalService<{ archiveSession?: (id: string) => Promise<void> }>(ctx, 'workspaces');
       if (!workspaces || typeof workspaces.archiveSession !== 'function') {
         return { ok: false, error: { code: 'unsupported', message: 'session archive is unavailable' } };
       }
@@ -650,7 +668,6 @@ export function apply(ctx: HostContext): void {
     const timer = window.setTimeout(() => {
       try {
         const snapshot = settingsStore.getSnapshot();
-        const frame = document.querySelector('[class*="_frame"][style*="grid-template-columns"]') || document.querySelector('[data-sidebar-collapsed]');
         /* Record the environment a shortcut has to work in: the effective Alt+W binding (it may
            have been remapped), the window width that decides between the column, the rail and the
            drawer sidebar, and the sidebar state at startup. */
@@ -660,7 +677,7 @@ export function apply(ctx: HostContext): void {
           board: Boolean(snapshot.board && snapshot.board.enabled),
           leftSidebar: snapshot.shortcuts && snapshot.shortcuts.leftSidebar,
           windowWidth: window.innerWidth || 0,
-          frameWidth: frame ? Math.round(frame.getBoundingClientRect().width) : null,
+          frameWidth: hostCentreColumnWidth() || null,
           sidebar: sidebarSignature()
         });
         for (const key of Object.keys(snapshot.shortcuts || {})) {
