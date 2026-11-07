@@ -169,10 +169,11 @@
   var IS_MAC = (() => {
     try {
       const nav = window.navigator || {};
+      const ua = nav.userAgent || "";
+      if (/iphone|ipad|ipod/i.test(ua)) return false;
       const platform = nav.userAgentData && nav.userAgentData.platform || nav.platform || "";
       if (platform) return /mac/i.test(String(platform)) && !/iphone|ipad|ipod/i.test(String(platform));
-      const ua = nav.userAgent || "";
-      return /mac/i.test(ua) && !/iphone|ipad|ipod/i.test(ua);
+      return /mac/i.test(ua);
     } catch {
       return false;
     }
@@ -1534,7 +1535,7 @@
     "filter.project": "Project",
     "filter.search": "Search…",
     "group.byProject": "Group by project",
-    "sort.hint": "Shift+click a column to add a sort",
+    "sort.hint": "{shift}+click a column to add a sort",
     "col.title": "Name",
     "col.project": "Project",
     "col.status": "Status",
@@ -1655,8 +1656,8 @@
     "menu.deleteUnavailable": "This DSH client does not expose session deletion yet. Use archive instead.",
     "menu.failed": "Failed: {message}",
     "menu.busy": "Working…",
-    "settings.shortcut.hint": "Click a keycap, then press the new combination; Ctrl / Option (⌥; Alt on Windows) / Command (⌘; Meta on Windows) is required; Esc cancels. Combinations that clash with built-in DSH commands are rejected with a notice.",
-    "settings.shortcutNeedModifier": "A shortcut must include Ctrl / Option (⌥) / Command (⌘); bare keys are not allowed.",
+    "settings.shortcut.hint": "Click a keycap, then press the new combination; {ctrl} / {alt} / {meta} is required; Esc cancels. Combinations that clash with built-in DSH commands are rejected with a notice.",
+    "settings.shortcutNeedModifier": "A shortcut must include {ctrl} / {alt} / {meta}; bare keys are not allowed.",
     "settings.shortcutConflict": "That combination is already used by another action.",
     "settings.shortcutResetHint": "Click to record, double-click to reset",
     "settings.recording": "Press keys…",
@@ -1669,7 +1670,7 @@
     "settings.headerPlacement": "Button placement",
     "settings.placement.header": "Header bar",
     "settings.placement.composer": "Below composer status",
-    "settings.headerButtonsHint": "Hold Ctrl and drag a button with the left mouse button to move it between the left and right sides. Each button can also be hidden separately. Right docking requires an open session.",
+    "settings.headerButtonsHint": "Hold {ctrl} and drag a button with the left mouse button to move it between the left and right sides. Each button can also be hidden separately. Right docking requires an open session.",
     "settings.composerButtonsHint": "Buttons are shown below the composer in a fixed order; each button can still be hidden individually.",
     "settings.hb.switch": "Session search",
     "settings.hb.historyNav": "History & bottom",
@@ -1811,7 +1812,7 @@
     "filter.project": "项目",
     "filter.search": "搜索…",
     "group.byProject": "按项目分组",
-    "sort.hint": "Shift+点击列头可叠加排序",
+    "sort.hint": "{shift}+点击列头可叠加排序",
     "col.title": "名称",
     "col.project": "项目",
     "col.status": "状态",
@@ -1932,8 +1933,8 @@
     "menu.deleteUnavailable": "当前 DSH 客户端未开放会话删除接口，请使用归档。",
     "menu.failed": "操作失败：{message}",
     "menu.busy": "处理中…",
-    "settings.shortcut.hint": "点击键帽后按下新的组合键；必须包含 Ctrl / Option（⌥，Windows 为 Alt）/ Command（⌘，Windows 为 Meta），Esc 取消。与 DSH 内置命令冲突时会拒绝录制并弹出提示。",
-    "settings.shortcutNeedModifier": "快捷键必须包含 Ctrl / Option（⌥，Windows 为 Alt）/ Command（⌘，Windows 为 Meta），不能使用裸键。",
+    "settings.shortcut.hint": "点击键帽后按下新的组合键；必须包含 {ctrl} / {alt} / {meta}，Esc 取消。与 DSH 内置命令冲突时会拒绝录制并弹出提示。",
+    "settings.shortcutNeedModifier": "快捷键必须包含 {ctrl} / {alt} / {meta}，不能使用裸键。",
     "settings.shortcutConflict": "该组合键已被其他功能占用，请换一个。",
     "settings.shortcutResetHint": "点击录制，双击恢复默认",
     "settings.recording": "按下按键…",
@@ -1946,7 +1947,7 @@
     "settings.headerPlacement": "按钮显示位置",
     "settings.placement.header": "顶部标题栏",
     "settings.placement.composer": "输入框下方状态信息下方",
-    "settings.headerButtonsHint": "按住 Ctrl + 鼠标左键拖动按钮，可在左侧与右侧之间移动；每个按钮也可以单独隐藏。右侧停靠需要打开一个会话。",
+    "settings.headerButtonsHint": "按住 {ctrl} + 鼠标左键拖动按钮，可在左侧与右侧之间移动；每个按钮也可以单独隐藏。右侧停靠需要打开一个会话。",
     "settings.composerButtonsHint": "当前统一显示在输入框下方，按钮按固定顺序排列；每个按钮仍可单独隐藏。",
     "settings.hb.switch": "会话搜索",
     "settings.hb.historyNav": "历史指令与底部",
@@ -2842,7 +2843,7 @@
       const position = sorts.findIndex((entry) => entry.key === key);
       const active = position >= 0;
       const direction = active ? sorts[position].dir : null;
-      const title = opts.sortable === false ? opts.hint : opts.hint ? opts.hint + " · " + t("sort.hint") : t("sort.hint");
+      const title = opts.sortable === false ? opts.hint : opts.hint ? opts.hint + " · " + t("sort.hint", MODIFIER_LABELS) : t("sort.hint", MODIFIER_LABELS);
       return h(
         "th",
         {
@@ -3216,7 +3217,7 @@
           projectModels.map((p) => h("option", { key: p.workspaceId, value: p.workspaceId }, p.name))
         ) : null,
         view === "sessions" ? h("button", { type: "button", className: "pbx-toggle" + (grouped ? " on" : ""), onClick: () => setGrouped((v) => !v) }, t("group.byProject")) : null,
-        h("span", { className: "pbx-sortHint" }, t("sort.hint"))
+        h("span", { className: "pbx-sortHint" }, t("sort.hint", MODIFIER_LABELS))
       )
     );
     let body;
@@ -5515,7 +5516,7 @@
         event.preventDefault();
         event.stopPropagation();
         if (!comboHasModifier(combo)) {
-          setRecordError(t("settings.shortcutNeedModifier"));
+          setRecordError(t("settings.shortcutNeedModifier", MODIFIER_LABELS));
           return;
         }
         const next = cloneJson(config);
@@ -5938,7 +5939,7 @@
           )
         ),
         recordError ? h("div", { className: "pbx-setError" }, recordError) : null,
-        h("div", { className: "pbx-setHint" }, t("settings.shortcut.hint"))
+        h("div", { className: "pbx-setHint" }, t("settings.shortcut.hint", MODIFIER_LABELS))
       ),
       h(
         "section",
@@ -5949,7 +5950,7 @@
           { value: "composer", labelKey: "settings.placement.composer" }
         ]),
         ["switch", "historyNav", "capsule"].map((id) => headerButtonRow(id, "settings.hb." + id)),
-        h("div", { className: "pbx-setHint" }, t(config.header.placement === "composer" ? "settings.composerButtonsHint" : "settings.headerButtonsHint"))
+        h("div", { className: "pbx-setHint" }, config.header.placement === "composer" ? t("settings.composerButtonsHint") : t("settings.headerButtonsHint", MODIFIER_LABELS))
       ),
       h(
         "section",

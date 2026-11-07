@@ -10,6 +10,7 @@ import type { Settings, UiStore } from '../types';
 import type { AppearanceMap } from '../ui/appearance';
 import { ICONS, PALETTE, hexToRgba, loadAppearance, paletteFor, saveAppearance } from '../ui/appearance';
 import { Icon, RunRing } from '../ui/icons';
+import { MODIFIER_LABELS } from '../core/combos';
 import { fallbackHook, type PresetSnapshot, type ScheduleSnapshot } from '../core/schedule';
 import { PROJECT_COLUMNS, SORT_DIR_DEFAULT, compareVersions, parseVersion, relTime, sessionTitleOf, statusInfo, workspaceLabel, type ProjectColumn, type SessionStatusLike, type StatusInfo } from './format';
 import { fetchRepoStats, type RepoStats } from '../core/github';
@@ -569,7 +570,7 @@ export function ProjectBoard(props: ProjectBoardProps): unknown {
     const position = sorts.findIndex((entry) => entry.key === key);
     const active = position >= 0;
     const direction = active ? sorts[position].dir : null;
-    const title = opts.sortable === false ? opts.hint : opts.hint ? opts.hint + ' · ' + t('sort.hint') : t('sort.hint');
+    const title = opts.sortable === false ? opts.hint : opts.hint ? opts.hint + ' · ' + t('sort.hint', MODIFIER_LABELS) : t('sort.hint', MODIFIER_LABELS);
     return h(
       'th',
       {
@@ -971,7 +972,7 @@ export function ProjectBoard(props: ProjectBoardProps): unknown {
       view === 'sessions'
         ? h('button', { type: 'button', className: 'pbx-toggle' + (grouped ? ' on' : ''), onClick: () => setGrouped((v) => !v) }, t('group.byProject'))
         : null,
-      h('span', { className: 'pbx-sortHint' }, t('sort.hint'))
+      h('span', { className: 'pbx-sortHint' }, t('sort.hint', MODIFIER_LABELS))
     )
   );
 

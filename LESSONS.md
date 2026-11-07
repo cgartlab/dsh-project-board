@@ -89,3 +89,7 @@
 
 - 失误：`IS_MAC` 在 platform 非空时直接 return，只拿 platform 字符串排除 iphone/ipad/ipod；iPadOS Safari 请求桌面网站时是 `platform='MacIntel'` + UA 含 `iPad`，于是被当成 macOS、界面显示 ⌥/⌘ → 规则：平台判定无条件先查 UA 的 iOS 标记（`iphone|ipad|ipod`，忽略大小写）并立即返回 false，再走 `userAgentData.platform > navigator.platform > UA` 优先级；改检测必须给 `test/load.test.cjs` 的 `loadModule` 传 UA / userAgentData 变体做回归 → 证据：a6e314c，`src/core/combos.ts`、`test/load.test.cjs`
 - 失误：`zh` / `en` 字典把 macOS 与 Windows 两套修饰键术语塞进同一句（「Option（⌥，Windows 为 Alt）」），字典拿不到当前平台，macOS 用户看到「Windows 为 Alt」、Windows 用户看到 ⌥/⌘ → 规则：用户可见的修饰键名一律用 `{ctrl}/{alt}/{meta}/{shift}` 占位符，渲染处传 `src/core/combos.ts` 导出的 `MODIFIER_LABELS`（与 `comboDisplay` 同一张 IS_MAC 派生的表），zh/en 同步，不写死 ⌥/⌘ 或 `Alt on Windows` → 证据：a6e314c，`src/i18n/zh.ts`、`src/i18n/en.ts`、`src/features/settings.ts`、`src/features/board.ts`
+
+## 字典占位符与产物同步
+
+- 失误：0.3.2 把 `sort.hint` 等字典改成 `{shift}` 占位符、settings.ts 渲染点已传 `MODIFIER_LABELS`，但 `src/features/board.ts` 的 3 个 `t('sort.hint')` 漏传第二参数（列头 tooltip 显示字面量 `{shift}`）；同时合并含 src 改动的 PR 时 `client.js` 没跟着重建，旧产物仍是修复前代码 → main CI step 7「The committed bundle matches src/」失败、`npm test` 在 HEAD 产物上 18 条中 2 条失败，运行时没有任何修复 → 规则：改字典占位符后必须 grep 全部 `t('<key>')` 渲染点并逐一传参；合并任何含 `src/` 改动的 PR 后必须 `npm run build`、`git diff --exit-code -- client.js index.js`，并确认 CI 的「产物一致」step 绿 → 证据：fe3f948，`src/features/board.ts`、`src/features/settings.ts`、`src/i18n/zh.ts`、`src/i18n/en.ts`、`test/load.test.cjs`、`client.js`
