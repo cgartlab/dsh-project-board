@@ -308,7 +308,14 @@ export function apply(ctx: HostContext): void {
   const boardPanelVisible = (): boolean => isRightPanelExpanded();
   const rightbarWidthNow = (): number => hostRightbarWidth();
   const BOARD_WIDTH_KEY = 'pbx.board.width';
-  /* The width the user last left the board at becomes the default for the next open. */
+  /* Alt+N asks for "the narrow board", so narrow is a FIXED width, not the width the user
+     last dragged. `boardStateNow()` classifies a pane by measured width (below `BOARD_NARROW_MAX`
+     is narrow), so a restored 600px "narrow" pane reads as half: the next Alt+N then saw a
+     different mode and resized the pane instead of closing it, and the key looked broken. */
+  const BOARD_NARROW_WIDTH = 380;
+  /** Width at or below which the pane counts as the narrow presentation. */
+  const BOARD_NARROW_MAX = 460;
+  /* The width the user last left a NON-narrow board at becomes the default for the next open. */
   const boardWidthDefault = (): number => {
     try {
       const saved = Number(window.localStorage.getItem(BOARD_WIDTH_KEY));
@@ -417,7 +424,7 @@ export function apply(ctx: HostContext): void {
       const width = rightbarWidthNow();
       const viewport = window.innerWidth || 1200;
       if (width >= viewport * 0.72) return { open: true, mode: 'full' };
-      return { open: true, mode: width <= 460 ? 'narrow' : 'half' };
+      return { open: true, mode: width <= BOARD_NARROW_MAX ? 'narrow' : 'half' };
     } catch (error) {
       return { open: false, mode: null };
     }
@@ -441,7 +448,7 @@ export function apply(ctx: HostContext): void {
       }
       if (rightbarFullscreen()) toggleRightbarFullscreen();
       const viewport = window.innerWidth || 1200;
-      const width = mode === 'narrow' ? boardWidthDefault() : Math.round(viewport * 0.5);
+      const width = mode === 'narrow' ? BOARD_NARROW_WIDTH : Math.round(viewport * 0.5);
       if (Math.abs(rightbarWidthNow() - width) > 24) setRightbarWidth(width);
     } catch (error) {
       /* ignore */
@@ -464,7 +471,7 @@ export function apply(ctx: HostContext): void {
       }
       if (rightbarFullscreen()) toggleRightbarFullscreen();
       const viewport = window.innerWidth || 1200;
-      const width = mode === 'narrow' ? boardWidthDefault() : Math.round(viewport * 0.5);
+      const width = mode === 'narrow' ? BOARD_NARROW_WIDTH : Math.round(viewport * 0.5);
       setRightbarWidth(width);
       /* A presentation persisted from a fullscreen open lands one render later. */
       later(() => {
@@ -538,7 +545,7 @@ export function apply(ctx: HostContext): void {
         return;
       }
       const currentWidth = rightbarWidthNow();
-      const currentMode = currentWidth > 0 && currentWidth <= 460 ? 'narrow' : 'half';
+      const currentMode = currentWidth > 0 && currentWidth <= BOARD_NARROW_MAX ? 'narrow' : 'half';
       if (visible && expanded && !full) {
         /* Same mode again closes; a different size key just resizes the open pane —
            and a resize must not reset the view the user is looking at. */

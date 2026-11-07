@@ -293,3 +293,19 @@ test('settings and mouse hints show the modifier names of the current platform',
     assert.match(built, pattern, key + ' is rendered with modifier params in the built bundle');
   }
 });
+test('the narrow board is a fixed width, so Alt+N opens narrow and closes on the next press', () => {
+  /* boardStateNow() classifies a pane by its measured width, so the narrow presentation has to
+     be the same width every time. Restoring the last dragged width (say 600px) made the pane
+     read as "half" right after opening it, so the next Alt+N saw a different mode and resized
+     the pane instead of closing it — the key looked dead. */
+  assert.match(source, /BOARD_NARROW_WIDTH = 380/);
+  assert.match(source, /BOARD_NARROW_MAX = 460/);
+  /* Narrow uses the constant in both the restore and the open path... */
+  const narrowWidthUses = source.match(/mode === "narrow" \? BOARD_NARROW_WIDTH/g) || [];
+  assert.equal(narrowWidthUses.length, 2);
+  /* ...and neither path falls back to the persisted width for narrow. */
+  assert.doesNotMatch(source, /mode === "narrow" \? boardWidthDefault/);
+  /* Both mode classifications share the same threshold. */
+  const thresholdUses = source.match(/<= BOARD_NARROW_MAX \? "narrow"/g) || [];
+  assert.equal(thresholdUses.length, 2);
+});

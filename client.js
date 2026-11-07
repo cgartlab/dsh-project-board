@@ -6886,6 +6886,8 @@
     const boardPanelVisible = () => isRightPanelExpanded();
     const rightbarWidthNow = () => hostRightbarWidth();
     const BOARD_WIDTH_KEY = "pbx.board.width";
+    const BOARD_NARROW_WIDTH = 380;
+    const BOARD_NARROW_MAX = 460;
     const boardWidthDefault = () => {
       try {
         const saved = Number(window.localStorage.getItem(BOARD_WIDTH_KEY));
@@ -6983,7 +6985,7 @@
         const width = rightbarWidthNow();
         const viewport = window.innerWidth || 1200;
         if (width >= viewport * 0.72) return { open: true, mode: "full" };
-        return { open: true, mode: width <= 460 ? "narrow" : "half" };
+        return { open: true, mode: width <= BOARD_NARROW_MAX ? "narrow" : "half" };
       } catch (error) {
         return { open: false, mode: null };
       }
@@ -7006,7 +7008,7 @@
         }
         if (rightbarFullscreen()) toggleRightbarFullscreen();
         const viewport = window.innerWidth || 1200;
-        const width = mode === "narrow" ? boardWidthDefault() : Math.round(viewport * 0.5);
+        const width = mode === "narrow" ? BOARD_NARROW_WIDTH : Math.round(viewport * 0.5);
         if (Math.abs(rightbarWidthNow() - width) > 24) setRightbarWidth(width);
       } catch (error) {
       }
@@ -7024,7 +7026,7 @@
         }
         if (rightbarFullscreen()) toggleRightbarFullscreen();
         const viewport = window.innerWidth || 1200;
-        const width = mode === "narrow" ? boardWidthDefault() : Math.round(viewport * 0.5);
+        const width = mode === "narrow" ? BOARD_NARROW_WIDTH : Math.round(viewport * 0.5);
         setRightbarWidth(width);
         later(() => {
           if (rightbarFullscreen()) toggleRightbarFullscreen();
@@ -7088,7 +7090,7 @@
           return;
         }
         const currentWidth = rightbarWidthNow();
-        const currentMode = currentWidth > 0 && currentWidth <= 460 ? "narrow" : "half";
+        const currentMode = currentWidth > 0 && currentWidth <= BOARD_NARROW_MAX ? "narrow" : "half";
         if (visible && expanded && !full) {
           if (currentMode === mode) {
             sidebarRight.toggleExpanded();
