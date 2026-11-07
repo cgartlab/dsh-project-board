@@ -50,6 +50,12 @@ export interface HintsSettings {
   shortcuts: boolean;
 }
 
+/** Behaviour around the host conversation view (not the plugin's own panels). */
+export interface ChatSettings {
+  /** Drive the host's "load earlier" control when the reader scrolls to the top. */
+  autoHistory: boolean;
+}
+
 export interface HudSettings {
   enabled: boolean;
   includeDone: boolean;
@@ -110,6 +116,7 @@ export interface Settings {
   notify: NotifySettings;
   log: LogConfig;
   board: BoardSettings;
+  chat: ChatSettings;
   projectColumns: ProjectColumnsSettings;
   /** GitHub Personal Access Token (stored locally, never sent anywhere but api.github.com). */
   githubToken?: string;

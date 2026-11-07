@@ -26,7 +26,7 @@ export interface SettingsPageProps {
   t: Translate;
 }
 
-type SettingsSection = 'palette' | 'header' | 'hints' | 'hud' | 'notify' | 'log' | 'board' | 'projectColumns';
+type SettingsSection = 'palette' | 'header' | 'hints' | 'hud' | 'notify' | 'log' | 'board' | 'projectColumns' | 'chat';
 
 interface SelectOption {
   value: string;
@@ -138,10 +138,22 @@ export function SettingsPage(props: SettingsPageProps): unknown {
     }
   }, [config.shortcuts, shortcutsCatalog]);
 
-  const readSection = (section: SettingsSection): Record<string, unknown> => config[section] as unknown as Record<string, unknown>;
+  /* A settings object saved before this section existed has no key for it (migration may
+     not have back-filled it yet), and reading through undefined would throw while the page
+     renders. Fall back to the shipped defaults so the section still shows, and a change
+     writes it into place. */
+  const readSection = (section: SettingsSection): Record<string, unknown> => {
+    const live = (config as unknown as Record<string, unknown>)[section];
+    if (live && typeof live === 'object') return live as Record<string, unknown>;
+    const fallback = (DEFAULT_SETTINGS as unknown as Record<string, unknown>)[section];
+    return fallback && typeof fallback === 'object' ? (fallback as Record<string, unknown>) : {};
+  };
   const update = (section: SettingsSection, patch: Record<string, unknown>): void => {
     const next = cloneJson(config);
-    Object.assign(next[section] as unknown as Record<string, unknown>, patch);
+    const current = (next as unknown as Record<string, unknown>)[section];
+    const base = current && typeof current === 'object' ? current : cloneJson((DEFAULT_SETTINGS as unknown as Record<string, unknown>)[section] || {});
+    Object.assign(base as Record<string, unknown>, patch);
+    (next as unknown as Record<string, unknown>)[section] = base;
     saveSettings(next);
   };
   const resetAll = (): void => {
@@ -562,6 +574,7 @@ export function SettingsPage(props: SettingsPageProps): unknown {
       h('div', { className: 'pbx-setHint' }, t('settings.projectColumnsHint')),
       toggleRow('notify', 'enabled', 'settings.notifyEnabled', 'settings.notifyEnabledDesc'),
       toggleRow('notify', 'sound', 'settings.notifySound', 'settings.notifySoundDesc'),
+      toggleRow('chat', 'autoHistory', 'settings.chatAutoHistory', 'settings.chatAutoHistoryDesc'),
       rangeRow('palette', 'blur', 'settings.blur', 6, 32, 1)
     ),
 

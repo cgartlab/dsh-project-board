@@ -100,6 +100,7 @@ export const zh = {
       'settings.hudEnabled': '启用悬浮窗', 'settings.hudEnabledDesc': '实时显示非空闲会话与计时',
       'settings.notifyEnabled': '启用任务通知', 'settings.notifyEnabledDesc': '会话完成、模型提问或权限请求时提醒',
       'settings.notifySound': '通知提示音', 'settings.notifySoundDesc': '应用内通知播放提示音',
+      'settings.chatAutoHistory': '滚动到顶自动加载历史', 'settings.chatAutoHistoryDesc': '会话滚动到顶部时，自动加载更早的消息（等同点击「加载更早」）',
       'notif.completeTitle': '任务完成',
       'notif.completeBody': '会话「{title}」已完成',
       'notif.questionTitle': '等待回答',

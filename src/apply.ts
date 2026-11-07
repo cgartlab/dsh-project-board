@@ -13,6 +13,7 @@ import { bindingsOverlap, comboBindingOf, comboDisplay, IS_MAC } from './core/co
 import { sidebarSignature } from './core/dom';
 import { moveCaretToEnd } from './features/interject';
 import { installChatScrollListeners } from './features/chat-scroll';
+import { installChatHistoryAutoLoad } from './features/chat-history';
 import type { LogEntry, Settings } from './types';
 import { CSS } from './styles';
 import { en } from './i18n/en';
@@ -698,6 +699,23 @@ export function apply(ctx: HostContext): void {
   }, 'project-board: error hooks');
 
   ctx.effect(() => installChatScrollListeners(), 'project-board: chat scroll listeners');
+
+  /* Scrolling to the top of a conversation loads the previous page of history for you,
+     instead of requiring a click on the host's "load earlier" control every time. */
+  ctx.effect(
+    () =>
+      installChatHistoryAutoLoad({
+        enabled: () => {
+          try {
+            const chat = settingsStore.getSnapshot().chat;
+            return !chat || chat.autoHistory !== false;
+          } catch (error) {
+            return true;
+          }
+        }
+      }),
+    'project-board: chat history auto-load'
+  );
 
   /* Warn once at startup when saved shortcuts collide with built-in DSH commands. */
   ctx.effect(() => {

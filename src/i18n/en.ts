@@ -102,6 +102,7 @@ export const en: Dict = {
       'settings.hudEnabled': 'Enable floating status', 'settings.hudEnabledDesc': 'Live non-idle sessions and timers',
       'settings.notifyEnabled': 'Enable task notifications', 'settings.notifyEnabledDesc': 'Notify on completion, questions, or approvals',
       'settings.notifySound': 'Notification sound', 'settings.notifySoundDesc': 'Play a chime for in-app notifications',
+      'settings.chatAutoHistory': 'Load history on scroll', 'settings.chatAutoHistoryDesc': 'When a conversation is scrolled to the top, load older messages automatically (same as clicking "Load earlier")',
       'notif.completeTitle': 'Task complete',
       'notif.completeBody': 'Session "{title}" finished',
       'notif.questionTitle': 'Waiting for your answer',

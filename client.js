@@ -69,6 +69,7 @@
     notify: { enabled: true, sound: true },
     log: { enabled: true, level: "info", max: 200 },
     board: { enabled: true, wideThreshold: 520, defaultView: "projects" },
+    chat: { autoHistory: true },
     projectColumnsVersion: 1,
     projectColumns: { total: true, issues: true, prs: true, localVersion: true, latestVersion: true, lastUpdated: true },
     githubVersion: 1,
@@ -1081,6 +1082,73 @@
     };
   }
 
+  // src/features/chat-history.ts
+  var LOAD_OLDER_LABELS = [
+    "加载更早",
+    "载入更早",
+    "Load earlier",
+    "Load older",
+    "以前を読み込む",
+    "Cargar antes",
+    "Charger plus tôt",
+    "Früher laden",
+    "Загрузить раньше",
+    "Carregar mais cedo"
+  ];
+  var NEAR_TOP_PX = 120;
+  var COOLDOWN_MS = 500;
+  var labelOf = (node) => (node.textContent || "").replace(/\s+/g, " ").trim();
+  var resolveScroller = (target) => {
+    if (!target) return null;
+    if (target instanceof HTMLElement) return target;
+    if (target === document) {
+      const root = document.scrollingElement;
+      return root instanceof HTMLElement ? root : null;
+    }
+    return null;
+  };
+  var findLoadOlderControl = (root) => {
+    const candidates = root.querySelectorAll('button, [role="button"]');
+    for (const node of Array.from(candidates)) {
+      const text = labelOf(node);
+      if (!text) continue;
+      if (LOAD_OLDER_LABELS.indexOf(text) >= 0) return node;
+    }
+    return null;
+  };
+  var isVisible = (element) => {
+    const rect = element.getBoundingClientRect();
+    return rect.width > 0 && rect.height > 0 && rect.bottom > 0 && rect.top < window.innerHeight;
+  };
+  function installChatHistoryAutoLoad(options) {
+    let lastTriggeredAt = 0;
+    const onScroll = (event) => {
+      if (!options.enabled()) return;
+      const scroller = resolveScroller(event.target);
+      if (!scroller) return;
+      if (scroller.scrollTop > NEAR_TOP_PX) return;
+      const now = Date.now();
+      if (now - lastTriggeredAt < COOLDOWN_MS) return;
+      let control = findLoadOlderControl(scroller);
+      if (!control || !isVisible(control)) {
+        const global = findLoadOlderControl(document);
+        control = global && isVisible(global) ? global : control;
+      }
+      if (!control) return;
+      lastTriggeredAt = now;
+      logEvent("info", "chat", "auto-load-older", { scrollTop: Math.round(scroller.scrollTop) });
+      try {
+        control.click();
+      } catch (error) {
+        logEvent("warn", "chat", "auto-load-older-failed", {
+          message: String(error && error.message || error)
+        });
+      }
+    };
+    document.addEventListener("scroll", onScroll, true);
+    return () => document.removeEventListener("scroll", onScroll, true);
+  }
+
   // src/styles.ts
   var CSS = [
     ":root{--pbx-ease-standard:cubic-bezier(0.25,0.10,0.25,1);--pbx-ease-decelerate:cubic-bezier(0.00,0.00,0.20,1);--pbx-ease-accelerate:cubic-bezier(0.40,0.00,1.00,1);--pbx-ease-emphasized:cubic-bezier(0.20,0.00,0.00,1);--pbx-ease-breathe:cubic-bezier(0.45,0.00,0.55,1);--pbx-spring:cubic-bezier(0.34,1.56,0.64,1);--pbx-dur-micro:120ms;--pbx-dur-small:180ms;--pbx-dur-medium:240ms;--pbx-dur-large:320ms}",
@@ -1687,6 +1755,8 @@
     "settings.notifyEnabledDesc": "Notify on completion, questions, or approvals",
     "settings.notifySound": "Notification sound",
     "settings.notifySoundDesc": "Play a chime for in-app notifications",
+    "settings.chatAutoHistory": "Load history on scroll",
+    "settings.chatAutoHistoryDesc": 'When a conversation is scrolled to the top, load older messages automatically (same as clicking "Load earlier")',
     "notif.completeTitle": "Task complete",
     "notif.completeBody": 'Session "{title}" finished',
     "notif.questionTitle": "Waiting for your answer",
@@ -1965,6 +2035,8 @@
     "settings.notifyEnabledDesc": "会话完成、模型提问或权限请求时提醒",
     "settings.notifySound": "通知提示音",
     "settings.notifySoundDesc": "应用内通知播放提示音",
+    "settings.chatAutoHistory": "滚动到顶自动加载历史",
+    "settings.chatAutoHistoryDesc": "会话滚动到顶部时，自动加载更早的消息（等同点击「加载更早」）",
     "notif.completeTitle": "任务完成",
     "notif.completeBody": "会话「{title}」已完成",
     "notif.questionTitle": "等待回答",
@@ -5660,10 +5732,18 @@
         }
       }
     }, [config.shortcuts, shortcutsCatalog]);
-    const readSection = (section) => config[section];
+    const readSection = (section) => {
+      const live = config[section];
+      if (live && typeof live === "object") return live;
+      const fallback = DEFAULT_SETTINGS[section];
+      return fallback && typeof fallback === "object" ? fallback : {};
+    };
     const update = (section, patch) => {
       const next = cloneJson(config);
-      Object.assign(next[section], patch);
+      const current = next[section];
+      const base = current && typeof current === "object" ? current : cloneJson(DEFAULT_SETTINGS[section] || {});
+      Object.assign(base, patch);
+      next[section] = base;
       saveSettings(next);
     };
     const resetAll = () => {
@@ -6064,6 +6144,7 @@
         h("div", { className: "pbx-setHint" }, t("settings.projectColumnsHint")),
         toggleRow("notify", "enabled", "settings.notifyEnabled", "settings.notifyEnabledDesc"),
         toggleRow("notify", "sound", "settings.notifySound", "settings.notifySoundDesc"),
+        toggleRow("chat", "autoHistory", "settings.chatAutoHistory", "settings.chatAutoHistoryDesc"),
         rangeRow("palette", "blur", "settings.blur", 6, 32, 1)
       ),
       h(
@@ -7034,6 +7115,19 @@
       };
     }, "project-board: error hooks");
     ctx.effect(() => installChatScrollListeners(), "project-board: chat scroll listeners");
+    ctx.effect(
+      () => installChatHistoryAutoLoad({
+        enabled: () => {
+          try {
+            const chat = settingsStore.getSnapshot().chat;
+            return !chat || chat.autoHistory !== false;
+          } catch (error) {
+            return true;
+          }
+        }
+      }),
+      "project-board: chat history auto-load"
+    );
     ctx.effect(() => {
       const timer = window.setTimeout(() => {
         try {
