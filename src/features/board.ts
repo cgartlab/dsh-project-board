@@ -1219,8 +1219,11 @@ export function ProjectBoard(props: ProjectBoardProps): unknown {
                     className: 'pbx-pcard',
                     title: t('card.open'),
                     onClick: () => {
+                      /* The compact detail page reads `activeRows` (its own per-workspace
+                         slice), so it does not need `projectFilter`. Setting it here used to
+                         leak into the session tab: after opening and leaving a card, the
+                         session list stayed filtered to that one project. */
                       setCompactProjectId(project.workspaceId);
-                      setProjectFilter(project.workspaceId);
                       setStatusFilter('all');
                     }
                   },

@@ -3431,7 +3431,6 @@
                 title: t("card.open"),
                 onClick: () => {
                   setCompactProjectId(project.workspaceId);
-                  setProjectFilter(project.workspaceId);
                   setStatusFilter("all");
                 }
               },
