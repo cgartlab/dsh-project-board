@@ -290,24 +290,27 @@ export function beginHoldScroll(direction: number, code?: string): void {
   }, HOLD_SCROLL_DELAY);
 }
 
-/** Key/blur listeners that end a held scroll; installed once per plugin load. */
-export function installChatScrollListeners(): void {
-  window.addEventListener(
-    'keyup',
-    (event: KeyboardEvent) => {
-      const state = holdScrollState;
-      if (!state) return;
-      if (state.code && event.code !== state.code) return;
-      stopHoldScroll(true);
-    },
-    true
-  );
-  window.addEventListener('blur', () => { stopHoldScroll(false); }, true);
-  document.addEventListener(
-    'keydown',
-    (event: KeyboardEvent) => {
-      if (holdScrollState && event.key === 'Escape') stopHoldScroll(false);
-    },
-    true
-  );
+/** Key/blur listeners that end a held scroll; installed once per plugin load.
+ *  Returns a dispose function so the host can clean them up on hot-reload/unload. */
+export function installChatScrollListeners(): () => void {
+  const onKeyUp = (event: KeyboardEvent): void => {
+    const state = holdScrollState;
+    if (!state) return;
+    if (state.code && event.code !== state.code) return;
+    stopHoldScroll(true);
+  };
+  const onBlur = (): void => {
+    stopHoldScroll(false);
+  };
+  const onKeyDown = (event: KeyboardEvent): void => {
+    if (holdScrollState && event.key === 'Escape') stopHoldScroll(false);
+  };
+  window.addEventListener('keyup', onKeyUp, true);
+  window.addEventListener('blur', onBlur, true);
+  document.addEventListener('keydown', onKeyDown, true);
+  return () => {
+    window.removeEventListener('keyup', onKeyUp, true);
+    window.removeEventListener('blur', onBlur, true);
+    document.removeEventListener('keydown', onKeyDown, true);
+  };
 }

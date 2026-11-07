@@ -54,23 +54,50 @@ export function relTime(updatedAt: number | undefined, t: Translate): string {
   return t('time.day', { n: Math.floor(hours / 24) });
 }
 
-/** Project attributes that can be shown as columns in the board's project table. */
+/** Project attributes that can be shown as columns in the board's project table.
+ *  The four "repo meta" columns (issues/prs/localVersion/latestVersion) have no live
+ *  data source yet (the host does not expose them to client plugins); they render a
+ *  `—` placeholder and are the seam a future host capability can fill. */
 export interface ProjectColumn {
   key: string;
   labelKey: string;
   type: string;
+  hintKey: string;
 }
 
 export const PROJECT_COLUMNS: ProjectColumn[] = [
-  { key: 'total', labelKey: 'settings.pc.total', type: '#' },
-  { key: 'running', labelKey: 'settings.pc.running', type: '#' },
-  { key: 'attention', labelKey: 'settings.pc.attention', type: '#' },
-  { key: 'done', labelKey: 'settings.pc.done', type: '#' },
-  { key: 'idle', labelKey: 'settings.pc.idle', type: '#' },
-  { key: 'auto', labelKey: 'settings.pc.auto', type: '#' },
-  { key: 'presets', labelKey: 'settings.pc.presets', type: '#' },
-  { key: 'lastUpdated', labelKey: 'settings.pc.lastUpdated', type: '◷' }
+  { key: 'total', labelKey: 'settings.pc.total', type: '#', hintKey: 'col.hint.total' },
+  { key: 'issues', labelKey: 'settings.pc.issues', type: '#', hintKey: 'col.hint.issues' },
+  { key: 'prs', labelKey: 'settings.pc.prs', type: '#', hintKey: 'col.hint.prs' },
+  { key: 'localVersion', labelKey: 'settings.pc.localVersion', type: '#', hintKey: 'col.hint.localVersion' },
+  { key: 'latestVersion', labelKey: 'settings.pc.latestVersion', type: '#', hintKey: 'col.hint.latestVersion' },
+  { key: 'lastUpdated', labelKey: 'settings.pc.lastUpdated', type: '◷', hintKey: 'col.hint.lastUpdated' }
 ];
+
+/** Compare dotted version strings numerically, so `1.10` sorts after `1.9` (a plain
+ *  `localeCompare` would put `1.10` before `1.9`). Unknown/`—` sorts last. */
+export function compareVersions(a: string | null | undefined, b: string | null | undefined): number {
+  const aParts = parseVersion(a);
+  const bParts = parseVersion(b);
+  if (aParts === null && bParts === null) return 0;
+  if (aParts === null) return 1;
+  if (bParts === null) return -1;
+  const len = Math.max(aParts.length, bParts.length);
+  for (let i = 0; i < len; i += 1) {
+    const x = aParts[i] || 0;
+    const y = bParts[i] || 0;
+    if (x < y) return -1;
+    if (x > y) return 1;
+  }
+  return 0;
+}
+
+export function parseVersion(value: string | null | undefined): number[] | null {
+  if (!value) return null;
+  const match = /^[vV]?(\d+(?:\.\d+)*)/.exec(value.trim());
+  if (!match) return null;
+  return match[1].split('.').map((part) => Number(part) || 0);
+}
 
 export const SORT_DIR_DEFAULT: Record<string, 'asc' | 'desc'> = {
   title: 'asc',
@@ -84,9 +111,9 @@ export const SORT_DIR_DEFAULT: Record<string, 'asc' | 'desc'> = {
   name: 'asc',
   appearance: 'asc',
   total: 'desc',
-  auto: 'desc',
-  attention: 'desc',
-  done: 'desc',
-  idle: 'desc',
+  issues: 'desc',
+  prs: 'desc',
+  localVersion: 'desc',
+  latestVersion: 'desc',
   lastUpdated: 'desc'
 };

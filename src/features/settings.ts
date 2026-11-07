@@ -6,10 +6,12 @@ import { cloneJson } from '../core/json';
 import { logEvent } from '../core/log';
 import { fallbackHook } from '../core/schedule';
 import { shortcutState } from '../core/state';
+import { fetchRepoStats } from '../core/github';
 import { h, useEffect, useRef, useState } from '../runtime';
-import type { LogEntry, Settings, ShortcutAction } from '../types';
-import { type SaveSettings } from '../core/header-drag';
+import type { LogEntry, Settings, ShortcutAction, GithubRepoSetting } from '../types';
+import type { SaveSettings } from '../core/header-drag';
 import { PROJECT_COLUMNS } from './format';
+import type { WorkspaceSnapshot } from './board';
 
 export interface SettingsPageProps {
   useSettings?: UseHook<Settings>;
@@ -19,6 +21,8 @@ export interface SettingsPageProps {
   notify?: (payload: { tone: string; title: string; message: string; ttl?: number }) => void;
   findBuiltinConflict?: (combo: string) => { label: string } | null;
   useShortcutsCatalog?: UseHook<unknown>;
+  /** Host slot hook; when present the GitHub section lists real workspaces to map. */
+  useWorkspaces?: UseHook<WorkspaceSnapshot>;
   t: Translate;
 }
 
@@ -47,6 +51,11 @@ export function SettingsPage(props: SettingsPageProps): unknown {
   const [recordError, setRecordError] = useState('');
   const [builtinWarnings, setBuiltinWarnings] = useState<BuiltinWarning[]>([]);
   const scannedConflictsRef = useRef(new Set<string>());
+  const useWorkspaces = typeof props.useWorkspaces === 'function' ? props.useWorkspaces : fallbackHook<WorkspaceSnapshot>();
+  const wsSnap = useWorkspaces((value) => value);
+  const ghWorkspaces = ((wsSnap && wsSnap.items) || []).filter((item) => item && item.path);
+  const [ghTesting, setGhTesting] = useState(false);
+  const [ghTest, setGhTest] = useState<{ ok: boolean; text: string } | null>(null);
 
   useEffect(() => {
     if (!recording) return undefined;
@@ -145,6 +154,123 @@ export function SettingsPage(props: SettingsPageProps): unknown {
     } catch (error) {
       /* ignore */
     }
+  };
+  const githubRepos = (config.githubRepos || {}) as Record<string, GithubRepoSetting>;
+  const repoNameFromPath = (path: string): string => path.replace(/[\\/]+$/, '').split(/[\\/]/).pop() || '';
+  const setGithubToken = (value: string): void => {
+    const next = cloneJson(config);
+    if (value) next.githubToken = value;
+    else delete next.githubToken;
+    saveSettings(next);
+  };
+  const updateGithubRepo = (path: string, patch: Partial<GithubRepoSetting>): void => {
+    const next = cloneJson(config);
+    const repos = { ...(next.githubRepos || {}) };
+    const existing = repos[path] || { owner: '', repo: '' };
+    repos[path] = { ...existing, ...patch };
+    next.githubRepos = repos;
+    saveSettings(next);
+  };
+  const renameRepoPath = (oldPath: string, newPath: string): void => {
+    if (!oldPath || oldPath === newPath) return;
+    const next = cloneJson(config);
+    const repos = { ...(next.githubRepos || {}) };
+    const value = repos[oldPath];
+    if (!value) return;
+    delete repos[oldPath];
+    repos[newPath] = value;
+    next.githubRepos = repos;
+    saveSettings(next);
+  };
+  const removeGithubRepo = (path: string): void => {
+    const next = cloneJson(config);
+    const repos = { ...(next.githubRepos || {}) };
+    delete repos[path];
+    next.githubRepos = repos;
+    saveSettings(next);
+  };
+  const addGithubRepo = (): void => {
+    const next = cloneJson(config);
+    const repos = { ...(next.githubRepos || {}) };
+    const candidate = ghWorkspaces.find((item) => item.path && !repos[item.path]);
+    if (candidate && candidate.path) {
+      repos[candidate.path] = { owner: '', repo: repoNameFromPath(candidate.path) };
+    } else if (!repos['']) {
+      // No unmapped workspace available — allow one manual entry with an empty path
+      // (the user types the path in fallback mode), but never duplicate it.
+      repos[''] = { owner: '', repo: '' };
+    } else {
+      return;
+    }
+    next.githubRepos = repos;
+    saveSettings(next);
+  };
+  const githubErrorText = (code: string | undefined): string => {
+    if (code === 'token-invalid') return t('col.errTokenInvalid');
+    if (code === 'rate-limited') return t('col.errRateLimited');
+    if (code === 'repo-not-found') return t('col.errRepoNotFound');
+    return t('settings.githubTestFail');
+  };
+  const testGithub = async (): Promise<void> => {
+    setGhTesting(true);
+    setGhTest(null);
+    try {
+      const stats = await fetchRepoStats('octocat', 'hello-world', config.githubToken);
+      setGhTest(stats.status === 'ok' ? { ok: true, text: config.githubToken ? t('settings.githubTestOk') : t('settings.githubTestOkNoToken') } : { ok: false, text: githubErrorText(stats.error) });
+    } catch (error) {
+      setGhTest({ ok: false, text: t('settings.githubTestFail') });
+    } finally {
+      setGhTesting(false);
+    }
+  };
+  const renderGithubRepos = (): unknown[] => {
+    const listed = ghWorkspaces.length > 0 ? ghWorkspaces.map((item) => item.path as string) : Object.keys(githubRepos);
+    if (listed.length === 0) return [h('div', { className: 'pbx-setHint' }, t('settings.githubNone'))];
+    return listed.map((path) => {
+      const setting = githubRepos[path] || { owner: '', repo: repoNameFromPath(path) };
+      return h(
+        'div',
+        { className: 'pbx-githubRepo', key: 'gh-' + path },
+        ghWorkspaces.length > 0
+          ? h('div', { className: 'pbx-githubPath', title: path }, path)
+          : h('input', {
+              type: 'text',
+              className: 'pbx-setInput pbx-githubPathInput',
+              'aria-label': t('settings.githubPath'),
+              defaultValue: path,
+              onBlur: (event: Event) => renameRepoPath(path, (event.target as HTMLInputElement).value)
+            }),
+        h('input', {
+          type: 'text',
+          className: 'pbx-setInput pbx-githubOwner',
+          'aria-label': t('settings.githubOwner'),
+          placeholder: t('settings.githubOwner'),
+          value: setting.owner,
+          onInput: (event: Event) => updateGithubRepo(path, { owner: (event.target as HTMLInputElement).value })
+        }),
+        h('input', {
+          type: 'text',
+          className: 'pbx-setInput pbx-githubRepoName',
+          'aria-label': t('settings.githubPlaceholderRepo'),
+          placeholder: t('settings.githubPlaceholderRepo'),
+          value: setting.repo,
+          onInput: (event: Event) => updateGithubRepo(path, { repo: (event.target as HTMLInputElement).value })
+        }),
+        h('input', {
+          type: 'text',
+          className: 'pbx-setInput pbx-githubLocal',
+          'aria-label': t('settings.githubLocalVersion'),
+          placeholder: t('settings.githubLocalVersion'),
+          value: setting.localVersion || '',
+          onInput: (event: Event) => updateGithubRepo(path, { localVersion: (event.target as HTMLInputElement).value })
+        }),
+        h(
+          'button',
+          { type: 'button', className: 'pbx-setBtn pbx-githubRemove', 'aria-label': t('settings.githubRemoveRepo'), title: t('settings.githubRemoveRepo'), onClick: () => removeGithubRepo(path) },
+          '×'
+        )
+      );
+    });
   };
   const resetAppearance = (): void => {
     try {
@@ -435,6 +561,37 @@ export function SettingsPage(props: SettingsPageProps): unknown {
       toggleRow('notify', 'enabled', 'settings.notifyEnabled', 'settings.notifyEnabledDesc'),
       toggleRow('notify', 'sound', 'settings.notifySound', 'settings.notifySoundDesc'),
       rangeRow('palette', 'blur', 'settings.blur', 6, 32, 1)
+    ),
+
+    h(
+      'section',
+      { className: 'pbx-setSection' },
+      h('h3', { className: 'pbx-setSectionTitle' }, t('settings.githubTitle')),
+      h('div', { className: 'pbx-setHint' }, t('settings.githubDesc')),
+      row(
+        'gh-token',
+        'settings.githubToken',
+        'settings.githubTokenDesc',
+        h(
+          'div',
+          { className: 'pbx-githubToken' },
+          h('input', {
+            type: 'password',
+            className: 'pbx-setInput pbx-githubTokenInput',
+            'aria-label': t('settings.githubToken'),
+            value: config.githubToken || '',
+            placeholder: 'ghp_…',
+            onInput: (event: Event) => setGithubToken((event.target as HTMLInputElement).value)
+          }),
+          h('button', { type: 'button', className: 'pbx-setBtn', disabled: ghTesting, onClick: () => void testGithub() }, ghTesting ? t('settings.githubTesting') : t('settings.githubTest'))
+        )
+      ),
+      ghTest ? h('div', { role: 'status', className: 'pbx-setHint' + (ghTest.ok ? ' pbx-githubOk' : ' pbx-setError') }, ghTest.text) : null,
+      config.githubToken && config.githubToken.startsWith('{{') && config.githubToken.endsWith('}}') ? h('div', { className: 'pbx-setHint pbx-setError' }, t('settings.githubTokenPlaceholderWarn')) : null,
+      h('div', { className: 'pbx-setSubTitle' }, t('settings.githubReposTitle')),
+      h('div', { className: 'pbx-setHint' }, t('settings.githubReposHint')),
+      ...renderGithubRepos(),
+      h('div', { className: 'pbx-setActions' }, h('button', { type: 'button', className: 'pbx-setBtn', onClick: addGithubRepo }, t('settings.githubAddRepo')))
     ),
 
     h(

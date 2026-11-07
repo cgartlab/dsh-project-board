@@ -69,7 +69,11 @@
     notify: { enabled: true, sound: true },
     log: { enabled: true, level: "info", max: 200 },
     board: { enabled: true, wideThreshold: 520, defaultView: "projects" },
-    projectColumns: { total: true, running: true, attention: true, done: true, idle: true, auto: true, lastUpdated: true, presets: false }
+    projectColumnsVersion: 1,
+    projectColumns: { total: true, issues: true, prs: true, localVersion: true, latestVersion: true, lastUpdated: true },
+    githubVersion: 1,
+    githubToken: void 0,
+    githubRepos: {}
   };
 
   // src/core/json.ts
@@ -233,17 +237,27 @@
           out.headerButtons[id] = Object.assign({}, DEFAULT_SETTINGS.headerButtons[id], buttons[id] || {});
         }
       }
-      const migratingButtons = stored.headerButtonsVersion !== 3;
-      if (migratingButtons) {
-        out.headerButtons = cloneJson(DEFAULT_SETTINGS.headerButtons);
+      if (stored.headerButtonsVersion !== 3) {
         const header = stored.header;
         if (header && header.capsule === false) out.headerButtons.capsule.hidden = true;
       }
       if (stored.hintsVersion !== 1) out.hints = cloneJson(DEFAULT_SETTINGS.hints);
       if (stored.boardProjVersion !== 1) {
         out.board.defaultView = "projects";
-        out.board.boardProjVersion = 1;
+        out.boardProjVersion = 1;
       }
+      const columnKeys = Object.keys(DEFAULT_SETTINGS.projectColumns);
+      for (const key of Object.keys(out.projectColumns)) {
+        if (!columnKeys.includes(key)) delete out.projectColumns[key];
+      }
+      if (stored.projectColumnsVersion !== 1) {
+        out.projectColumnsVersion = 1;
+      }
+      if (typeof stored.githubToken === "string") out.githubToken = stored.githubToken;
+      if (stored.githubRepos && typeof stored.githubRepos === "object") {
+        out.githubRepos = cloneJson(stored.githubRepos);
+      }
+      if (stored.githubVersion !== 1) out.githubVersion = 1;
       for (const key of Object.keys(DEFAULT_SETTINGS.shortcuts)) {
         if (!comboHasModifier(out.shortcuts[key])) out.shortcuts[key] = DEFAULT_SETTINGS.shortcuts[key];
       }
@@ -277,7 +291,7 @@
   function loadSettings() {
     const raw = loadJson(SETTINGS_KEY, null);
     const merged = mergeSettings(DEFAULT_SETTINGS, raw);
-    if (raw && typeof raw === "object" && (raw.headerButtonsVersion !== 3 || raw.hintsVersion !== 1 || raw.shortcutsVersion !== 1 || raw.boardProjVersion !== 1)) {
+    if (raw && typeof raw === "object" && (raw.headerButtonsVersion !== 3 || raw.hintsVersion !== 1 || raw.shortcutsVersion !== 1 || raw.boardProjVersion !== 1 || raw.projectColumnsVersion !== 1 || raw.githubVersion !== 1)) {
       try {
         persistSettings(merged);
       } catch (error) {
@@ -1031,26 +1045,26 @@
     }, HOLD_SCROLL_DELAY);
   }
   function installChatScrollListeners() {
-    window.addEventListener(
-      "keyup",
-      (event) => {
-        const state = holdScrollState;
-        if (!state) return;
-        if (state.code && event.code !== state.code) return;
-        stopHoldScroll(true);
-      },
-      true
-    );
-    window.addEventListener("blur", () => {
+    const onKeyUp = (event) => {
+      const state = holdScrollState;
+      if (!state) return;
+      if (state.code && event.code !== state.code) return;
+      stopHoldScroll(true);
+    };
+    const onBlur = () => {
       stopHoldScroll(false);
-    }, true);
-    document.addEventListener(
-      "keydown",
-      (event) => {
-        if (holdScrollState && event.key === "Escape") stopHoldScroll(false);
-      },
-      true
-    );
+    };
+    const onKeyDown = (event) => {
+      if (holdScrollState && event.key === "Escape") stopHoldScroll(false);
+    };
+    window.addEventListener("keyup", onKeyUp, true);
+    window.addEventListener("blur", onBlur, true);
+    document.addEventListener("keydown", onKeyDown, true);
+    return () => {
+      window.removeEventListener("keyup", onKeyUp, true);
+      window.removeEventListener("blur", onBlur, true);
+      document.removeEventListener("keydown", onKeyDown, true);
+    };
   }
 
   // src/styles.ts
@@ -1094,6 +1108,8 @@
     ".pbx-tr td{padding:7px 10px;border-bottom:1px solid var(--dsw-alias-border-l1);font-size:13px;color:var(--dsw-alias-label-primary);vertical-align:middle}",
     ".pbx-tr-current td{background:color-mix(in srgb,var(--dsw-alias-brand-primary) 8%,transparent)}",
     ".pbx-tr-live td{background:color-mix(in srgb,var(--dsw-alias-brand-primary) 5%,transparent)}",
+    ".pbx-tr-selected td{background:color-mix(in srgb,var(--dsw-alias-brand-primary) 14%,transparent);box-shadow:inset 2px 0 0 var(--dsw-alias-brand-primary)}",
+    ".pbx-tr-selected:hover td{background:color-mix(in srgb,var(--dsw-alias-brand-primary) 18%,var(--dsw-alias-interactive-bg-hover))}",
     ".pbx-tr-current:hover td{background:color-mix(in srgb,var(--dsw-alias-brand-primary) 11%,var(--dsw-alias-interactive-bg-hover))}",
     ".pbx-tr-live:hover td{background:color-mix(in srgb,var(--dsw-alias-brand-primary) 8%,var(--dsw-alias-interactive-bg-hover))}",
     ".pbx-titleCell{display:flex;align-items:center;gap:8px;min-width:0}",
@@ -1108,8 +1124,8 @@
     '.pbx-runRing::after{content:"";position:absolute;inset:-1.6px;border-radius:50%;border:1.6px solid transparent;border-top-color:var(--dsw-alias-brand-primary);animation:pbxRunSpin .85s linear infinite}',
     "@keyframes pbxRunSpin{to{transform:rotate(360deg)}}",
     ".pbx-kdot{width:7px;height:7px;border-radius:50%;flex:none}",
-    ".pbx-rdot[data-tone=running],.pbx-kdot[data-tone=running]{background:#2f6fed;box-shadow:0 0 0 0 rgba(47,111,237,.55);animation:pbxRunningDotPulse 1.6s var(--pbx-ease-breathe) infinite}",
-    ".pbx-rdot[data-tone=attention],.pbx-kdot[data-tone=attention]{background:#f59e0b}",
+    ".pbx-rdot[data-tone=running],.pbx-kdot[data-tone=running]{background:var(--dsw-alias-brand-primary);box-shadow:0 0 0 0 color-mix(in srgb,var(--dsw-alias-brand-primary) 55%,transparent);animation:pbxRunningDotPulse 1.6s var(--pbx-ease-breathe) infinite}",
+    ".pbx-rdot[data-tone=attention],.pbx-kdot[data-tone=attention]{background:var(--dsw-alias-state-warn-primary)}",
     ".pbx-rdot[data-tone=done],.pbx-kdot[data-tone=done]{background:var(--dsw-alias-state-success-primary)}",
     ".pbx-rdot[data-tone=idle],.pbx-kdot[data-tone=idle]{background:var(--dsw-alias-state-idle-primary)}",
     ".pbx-chip{display:inline-flex;align-items:center;gap:6px;max-width:220px}",
@@ -1118,7 +1134,7 @@
     ".pbx-chipName{font-size:12.5px;color:var(--dsw-alias-label-secondary);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}",
     ".pbx-statusPill{display:inline-flex;align-items:center;gap:6px;padding:2px 9px;border-radius:999px;font-size:12px;font-weight:500;white-space:nowrap}",
     ".pbx-statusPill[data-tone=running]{background:color-mix(in srgb,var(--dsw-alias-brand-primary) 14%,transparent);color:var(--dsw-alias-brand-primary);animation:pbxPillBreathe 2.2s var(--pbx-ease-breathe) infinite}",
-    ".pbx-statusPill[data-tone=attention]{background:color-mix(in srgb,#f59e0b 16%,transparent);color:#f59e0b}",
+    ".pbx-statusPill[data-tone=attention]{background:color-mix(in srgb,var(--dsw-alias-state-warn-primary) 16%,transparent);color:var(--dsw-alias-state-warn-primary)}",
     ".pbx-statusPill[data-tone=done]{background:color-mix(in srgb,var(--dsw-alias-state-success-primary) 14%,transparent);color:var(--dsw-alias-state-success-primary)}",
     ".pbx-statusPill[data-tone=idle]{background:var(--dsw-alias-bg-layer-2);color:var(--dsw-alias-label-secondary)}",
     ".pbx-curTag{font-size:10.5px;color:var(--dsw-alias-brand-primary);border:1px solid color-mix(in srgb,var(--dsw-alias-brand-primary) 45%,transparent);border-radius:999px;padding:0 6px;line-height:16px;flex:none}",
@@ -1131,6 +1147,13 @@
     ".pbx-autoGlyph{display:inline-flex;color:var(--dsw-alias-state-warn-primary);flex:none}",
     ".pbx-num{text-align:right;font-variant-numeric:tabular-nums;color:var(--dsw-alias-label-secondary)}",
     ".pbx-num.pbx-strong{color:var(--dsw-alias-label-primary);font-weight:600}",
+    ".pbx-num.pbx-numZero{color:var(--dsw-alias-label-secondary);opacity:.65}",
+    ".pbx-num.pbx-numHot{color:var(--dsw-alias-label-primary);font-weight:600}",
+    ".pbx-num.pbx-na{color:var(--dsw-alias-label-secondary);opacity:.6}",
+    ".pbx-num.pbx-na.pbx-err{color:var(--dsw-alias-state-error-primary);opacity:.9}",
+    ".pbx-num.pbx-ver{font-family:var(--dsw-font-mono,ui-monospace,SFMono-Regular,Menlo,Consolas,monospace);font-size:12px}",
+    ".pbx-num.pbx-ver.pbx-verLag{color:var(--dsw-alias-state-warn-primary);font-weight:600}",
+    ".pbx-num.pbx-time{color:var(--dsw-alias-label-secondary)}",
     ".pbx-center{text-align:center}",
     ".pbx-openBtn{display:inline-flex;align-items:center;justify-content:center;width:26px;height:26px;border:none;background:transparent;color:var(--dsw-alias-label-secondary);border-radius:6px;cursor:pointer;opacity:0;transition:opacity var(--pbx-dur-micro) var(--pbx-ease-standard)}",
     ".pbx-tr:hover .pbx-openBtn{opacity:1}",
@@ -1139,6 +1162,15 @@
     ".pbx-groupRow:hover td{background:var(--dsw-alias-interactive-bg-hover)}",
     ".pbx-groupChevron{display:inline-flex;color:var(--dsw-alias-label-secondary);transition:transform var(--pbx-dur-micro) var(--pbx-ease-standard);margin-right:6px;vertical-align:middle}",
     ".pbx-groupChevron.open{transform:rotate(90deg)}",
+    ".pbx-chevron{display:inline-flex;flex:none;color:var(--dsw-alias-label-secondary);transition:transform var(--pbx-dur-micro) var(--pbx-ease-standard);margin-right:4px;align-self:center}",
+    ".pbx-chevron.open{transform:rotate(90deg)}",
+    ".pbx-tr-expanded td{background:color-mix(in srgb,var(--dsw-alias-brand-primary) 5%,transparent)}",
+    ".pbx-tr-inline td{padding:5px 10px 5px 32px;font-size:12.5px}",
+    ".pbx-tr-inline:hover td{background:var(--dsw-alias-interactive-bg-hover)}",
+    ".pbx-inlineSession{border-bottom:1px solid var(--dsw-alias-border-l1)}",
+    ".pbx-inlineRow{display:flex;align-items:center;gap:8px;min-width:0}",
+    ".pbx-inlineRow .pbx-titleText{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}",
+    ".pbx-inlineTime{flex:none;font-size:11px;color:var(--dsw-alias-label-secondary);white-space:nowrap}",
     ".pbx-groupCount{margin-left:8px;font-size:11.5px;color:var(--dsw-alias-label-secondary);font-weight:400}",
     ".pbx-appearCell{display:inline-flex;align-items:center;gap:7px}",
     ".pbx-iconField{display:inline-flex;align-items:center;flex:none}",
@@ -1213,10 +1245,10 @@
     ".pbx-capsule:hover{background:var(--dsw-alias-interactive-bg-hover);color:var(--dsw-alias-label-primary)}",
     ".pbx-capStat{display:inline-flex;align-items:center;gap:5px;color:var(--dsw-alias-label-secondary);font-variant-numeric:tabular-nums}",
     ".pbx-capStat.live{color:var(--dsw-alias-brand-primary)}",
-    ".pbx-capStat.attn{color:#f59e0b}",
+    ".pbx-capStat.attn{color:var(--dsw-alias-state-warn-primary)}",
     ".pbx-liveDot{width:7px;height:7px;border-radius:50%;background:var(--dsw-alias-state-idle-primary);flex:none}",
     ".pbx-capStat.live .pbx-liveDot{background:var(--dsw-alias-brand-primary);animation:pbxDotPulse 1.6s var(--pbx-ease-breathe) infinite}",
-    ".pbx-capDot{width:7px;height:7px;border-radius:50%;background:#f59e0b;flex:none}",
+    ".pbx-capDot{width:7px;height:7px;border-radius:50%;background:var(--dsw-alias-state-warn-primary);flex:none}",
     ".pbx-capBoard{display:inline-flex;align-items:center;gap:5px;padding-left:8px;border-left:1px solid var(--dsw-alias-border-l1);color:var(--dsw-alias-label-secondary)}",
     ".pbx-paletteBackdrop{position:fixed;inset:0;z-index:1300;background:rgba(8,10,14,.20);backdrop-filter:blur(15px) saturate(1.35);-webkit-backdrop-filter:blur(15px) saturate(1.35);display:flex;justify-content:center;align-items:flex-start;padding-top:12vh;pointer-events:auto;animation:pbxBackdropIn var(--pbx-dur-medium) var(--pbx-ease-decelerate) both}",
     ".pbx-palette{width:min(700px,92vw);max-height:72vh;display:flex;flex-direction:column;background:linear-gradient(180deg,color-mix(in srgb,var(--dsw-alias-bg-overlay) 74%,transparent),color-mix(in srgb,var(--dsw-alias-bg-overlay) 56%,transparent));backdrop-filter:blur(26px) saturate(1.55);-webkit-backdrop-filter:blur(26px) saturate(1.55);border:1px solid color-mix(in srgb,var(--dsw-alias-border-l2) 62%,rgba(255,255,255,.26));border-radius:16px;box-shadow:0 28px 90px rgba(0,0,0,.5),inset 0 1px 0 rgba(255,255,255,.09);overflow:hidden;animation:pbxPaletteIn var(--pbx-dur-large) var(--pbx-ease-emphasized) both}",
@@ -1265,12 +1297,12 @@
     ".pbx-hudRow.auto{background:color-mix(in srgb,var(--dsw-alias-state-warn-primary) 6%,transparent)}",
     ".pbx-hudRow.auto:hover{background:color-mix(in srgb,var(--dsw-alias-state-warn-primary) 12%,var(--dsw-alias-interactive-bg-hover))}",
     ".pbx-hudAuto{display:inline-flex;align-items:center;color:var(--dsw-alias-state-warn-primary);flex:none}",
-    ".pbx-hudRow.current{background:rgba(47,111,237,.07);box-shadow:none}",
-    ".pbx-hudRow.spotlight{box-shadow:inset 0 0 0 1px rgba(47,111,237,.35)}",
-    ".pbx-hudRow.current:hover{background:rgba(47,111,237,.12)}",
+    ".pbx-hudRow.current{background:color-mix(in srgb,var(--dsw-alias-brand-primary) 7%,transparent);box-shadow:none}",
+    ".pbx-hudRow.spotlight{box-shadow:inset 0 0 0 1px color-mix(in srgb,var(--dsw-alias-brand-primary) 35%,transparent)}",
+    ".pbx-hudRow.current:hover{background:color-mix(in srgb,var(--dsw-alias-brand-primary) 12%,transparent)}",
     ".pbx-hudRow:focus-visible{outline:2px solid var(--dsw-alias-brand-primary);outline-offset:-2px}",
-    "@keyframes pbxRunningDotPulse{0%{box-shadow:0 0 0 0 rgba(47,111,237,.55)}70%{box-shadow:0 0 0 6px rgba(47,111,237,0)}100%{box-shadow:0 0 0 0 rgba(47,111,237,0)}}",
-    ".pbx-hudRow.live .pbx-hudTimer{color:#2f6fed}",
+    "@keyframes pbxRunningDotPulse{0%{box-shadow:0 0 0 0 color-mix(in srgb,var(--dsw-alias-brand-primary) 55%,transparent)}70%{box-shadow:0 0 0 6px transparent}100%{box-shadow:0 0 0 0 transparent}}",
+    ".pbx-hudRow.live .pbx-hudTimer{color:var(--dsw-alias-brand-primary)}",
     ".pbx-hudRowMain{display:flex;flex-direction:column;min-width:0;flex:1;gap:2px}",
     ".pbx-hudRowTitle{font-size:12.8px;font-weight:500;line-height:17px;letter-spacing:.01em;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}",
     ".pbx-hudRowMeta{font-size:10.8px;line-height:15px;letter-spacing:.01em;color:var(--dsw-alias-label-secondary);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}",
@@ -1295,11 +1327,11 @@
     ".pbx-hudFootClose:hover{background:var(--dsw-alias-interactive-bg-hover);color:var(--dsw-alias-label-primary)}",
     ".pbx-hud.collapsed{display:inline-flex;align-items:center;gap:7px;width:auto;padding:6px 12px;border-radius:999px;background:color-mix(in srgb,var(--dsw-alias-bg-overlay) 88%,transparent);backdrop-filter:blur(24px) saturate(1.35);-webkit-backdrop-filter:blur(24px) saturate(1.35);border:1px solid var(--dsw-alias-border-l1);cursor:pointer;font:inherit;color:var(--dsw-alias-label-primary);transition:transform var(--pbx-dur-small) var(--pbx-ease-standard),box-shadow var(--pbx-dur-small) var(--pbx-ease-standard);animation:pbxHudPillIn var(--pbx-dur-small) var(--pbx-ease-decelerate) both}",
     ".pbx-hudPillIcon{width:19px;height:19px;border-radius:6px;display:inline-flex;align-items:center;justify-content:center;flex:none;background:color-mix(in srgb,var(--dsw-alias-label-secondary) 13%,transparent);color:var(--dsw-alias-label-secondary);transition:background var(--pbx-dur-small) var(--pbx-ease-standard),color var(--pbx-dur-small) var(--pbx-ease-standard),box-shadow var(--pbx-dur-small) var(--pbx-ease-standard)}",
-    ".pbx-hudPillIcon.live{background:rgba(47,111,237,.16);color:#2f6fed;box-shadow:0 0 0 0 rgba(47,111,237,.45);animation:pbxPillIconPulse 2.2s var(--pbx-ease-breathe) infinite}",
-    ".pbx-hudPillIcon.attention{background:color-mix(in srgb,#f59e0b 18%,transparent);color:#f59e0b}",
+    ".pbx-hudPillIcon.live{background:color-mix(in srgb,var(--dsw-alias-brand-primary) 16%,transparent);color:var(--dsw-alias-brand-primary);box-shadow:0 0 0 0 color-mix(in srgb,var(--dsw-alias-brand-primary) 45%,transparent);animation:pbxPillIconPulse 2.2s var(--pbx-ease-breathe) infinite}",
+    ".pbx-hudPillIcon.attention{background:color-mix(in srgb,var(--dsw-alias-state-warn-primary) 18%,transparent);color:var(--dsw-alias-state-warn-primary)}",
     ".pbx-hud.collapsed:hover .pbx-hudPillIcon{background:color-mix(in srgb,var(--dsw-alias-label-secondary) 20%,transparent)}",
-    ".pbx-hud.collapsed:hover .pbx-hudPillIcon.live{background:rgba(47,111,237,.24)}",
-    "@keyframes pbxPillIconPulse{0%{box-shadow:0 0 0 0 rgba(47,111,237,.42)}70%{box-shadow:0 0 0 5px rgba(47,111,237,0)}100%{box-shadow:0 0 0 0 rgba(47,111,237,0)}}",
+    ".pbx-hud.collapsed:hover .pbx-hudPillIcon.live{background:color-mix(in srgb,var(--dsw-alias-brand-primary) 24%,transparent)}",
+    "@keyframes pbxPillIconPulse{0%{box-shadow:0 0 0 0 color-mix(in srgb,var(--dsw-alias-brand-primary) 42%,transparent)}70%{box-shadow:0 0 0 5px transparent}100%{box-shadow:0 0 0 0 transparent}}",
     ".pbx-hudPillText{font-size:12px;font-weight:650;font-variant-numeric:tabular-nums;letter-spacing:.01em;color:var(--dsw-alias-label-primary)}",
     ".pbx-hudPillLabel{font-size:11px;letter-spacing:.01em;color:var(--dsw-alias-label-secondary)}",
     ".pbx-hud.collapsed:hover{transform:translateY(-1px)}",
@@ -1426,6 +1458,16 @@
     ".pbx-setBtn{height:32px;padding:0 12px;border-radius:8px;border:1px solid var(--dsw-alias-border-l1);background:var(--dsw-alias-bg-layer-1);color:var(--dsw-alias-label-primary);font:inherit;font-size:12.5px;cursor:pointer}",
     ".pbx-setBtn:hover{background:var(--dsw-alias-interactive-bg-hover)}",
     ".pbx-setBtn.danger{color:var(--dsw-alias-state-error-primary);border-color:color-mix(in srgb,var(--dsw-alias-state-error-primary) 40%,var(--dsw-alias-border-l1))}",
+    ".pbx-githubToken{display:flex;align-items:center;gap:8px;flex-wrap:wrap}",
+    ".pbx-githubTokenInput{flex:1;min-width:180px;width:auto}",
+    ".pbx-githubOk{color:var(--dsw-alias-state-success-primary)}",
+    ".pbx-githubRepo{display:flex;align-items:center;gap:8px;padding:6px 2px;border-bottom:1px solid var(--dsw-alias-border-l1);flex-wrap:wrap}",
+    ".pbx-githubPath{font-size:11.5px;color:var(--dsw-alias-label-secondary);font-family:var(--dsw-font-mono,ui-monospace,SFMono-Regular,Menlo,Consolas,monospace);min-width:140px;max-width:220px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}",
+    ".pbx-githubPathInput{min-width:140px;flex:1.2}",
+    ".pbx-githubOwner{width:90px}",
+    ".pbx-githubRepoName{width:110px}",
+    ".pbx-githubLocal{width:84px}",
+    ".pbx-githubRemove{width:30px;padding:0;flex:none}",
     ".pbx-disabled{display:flex;align-items:center;justify-content:center;padding:40px 16px;color:var(--dsw-alias-label-secondary);font-size:13px}",
     ".pbx-tab,.pbx-input,.pbx-select,.pbx-toggle,.pbx-setBtn,.pbx-setSelect,.pbx-setInput,.pbx-navSwitch,.pbx-prow,.pbx-hudRow{border-radius:var(--dsw-radius-md)}",
     ".pbx-navIconBtn,.pbx-navHistory,.pbx-hudCollapse,.pbx-openBtn,.pbx-appearBtn,.pbx-keycap,.pbx-dragGhost,.pbx-navGap,.pbx-modeTag{border-radius:var(--dsw-radius-sm)}",
@@ -1486,6 +1528,21 @@
     "col.total": "Sessions",
     "col.presets": "Presets",
     "col.path": "Path",
+    "col.na": "—",
+    "col.naHint": "No data source configured — set the GitHub repo for this project in Settings",
+    "col.loading": "Fetching from GitHub…",
+    "col.errRepoNotFound": "GitHub repo not found, or private without a valid token",
+    "col.errTokenInvalid": "GitHub token is invalid or expired",
+    "col.errRateLimited": "GitHub API rate limit reached — retry later or configure a token",
+    "col.errGeneric": "Failed to fetch GitHub data ({code})",
+    "col.localBehind": "Local {local}, behind latest {latest}",
+    "col.hint.name": "Project name, icon and color",
+    "col.hint.total": "Total sessions under this project",
+    "col.hint.issues": "Open issues in the repository",
+    "col.hint.prs": "Open pull requests in the repository",
+    "col.hint.localVersion": "Local internal version",
+    "col.hint.latestVersion": "Latest published GitHub version",
+    "col.hint.lastUpdated": "Most recent activity time for this project",
     "compact.allProjects": "All projects",
     "status.archived": "Archived",
     "col.kind": "Type",
@@ -1640,13 +1697,31 @@
     "settings.projectColumns": "Project board · visible attributes",
     "settings.projectColumnsHint": "Choose which project attributes appear as columns; name and icon/color always show.",
     "settings.pc.total": "Sessions",
-    "settings.pc.running": "Running",
-    "settings.pc.attention": "Pending",
-    "settings.pc.done": "Done",
-    "settings.pc.idle": "Idle",
-    "settings.pc.auto": "Automation",
-    "settings.pc.presets": "Presets used",
+    "settings.pc.issues": "Open Issues",
+    "settings.pc.prs": "Open PRs",
+    "settings.pc.localVersion": "Local version",
+    "settings.pc.latestVersion": "Latest release",
     "settings.pc.lastUpdated": "Last activity",
+    "settings.githubTitle": "GitHub data source",
+    "settings.githubDesc": 'Enter a token and map each project to a repo to show real Open Issue / Open PR / version data; unmapped projects still show a "—" placeholder.',
+    "settings.githubToken": "GitHub Personal Access Token",
+    "settings.githubTokenDesc": "Optional: public repos work without it; fill it for private repos or a higher rate limit. Used only to call api.github.com; the token stays on this machine, never syncs with the workspace and is never uploaded — clear it anytime.",
+    "settings.githubTokenPlaceholderWarn": "This looks like a DSH secret reference ({{...}}), not a GitHub PAT. The GitHub API needs a real ghp_... token — paste the PAT directly.",
+    "settings.githubTest": "Test connection",
+    "settings.githubTesting": "Testing…",
+    "settings.githubTestOk": "Connected, token valid",
+    "settings.githubTestOkNoToken": "Connected (public repos need no token)",
+    "settings.githubTestFail": "Connection failed",
+    "settings.githubReposTitle": "Project repository mapping",
+    "settings.githubReposHint": "For each project path, set the GitHub repo (owner/repo) and the local version; columns with owner and repo filled show real data, local version is filled separately.",
+    "settings.githubPath": "Project path",
+    "settings.githubOwner": "Owner",
+    "settings.githubRepo": "Repo",
+    "settings.githubLocalVersion": "Local version",
+    "settings.githubAddRepo": "Add project",
+    "settings.githubRemoveRepo": "Remove",
+    "settings.githubPlaceholderRepo": "owner/repo",
+    "settings.githubNone": "No project repo mapped yet",
     "settings.blur": "Search panel blur strength (px)",
     "settings.logging": "Logs & diagnostics",
     "settings.logEnabled": "Record logs",
@@ -1730,6 +1805,21 @@
     "col.total": "会话",
     "col.presets": "模式数",
     "col.path": "路径",
+    "col.na": "—",
+    "col.naHint": "未配置数据源，到设置里填写该项目的 GitHub 仓库",
+    "col.loading": "正在从 GitHub 获取…",
+    "col.errRepoNotFound": "GitHub 仓库不存在，或为私有且未提供有效 token",
+    "col.errTokenInvalid": "GitHub token 无效或已过期",
+    "col.errRateLimited": "触发 GitHub API 速率限制，请稍后重试或配置 token",
+    "col.errGeneric": "获取 GitHub 数据失败（{code}）",
+    "col.localBehind": "本地 {local}，落后于最新 {latest}",
+    "col.hint.name": "项目名称、图标与颜色",
+    "col.hint.total": "该项目下的会话总数",
+    "col.hint.issues": "仓库当前未关闭的 issue 数量",
+    "col.hint.prs": "仓库当前未合并的 PR 数量",
+    "col.hint.localVersion": "本地的内部版本号",
+    "col.hint.latestVersion": "GitHub 最新发布版本号",
+    "col.hint.lastUpdated": "项目最近一次活动时间",
     "compact.allProjects": "全部项目",
     "status.archived": "已归档",
     "col.kind": "类型",
@@ -1884,13 +1974,31 @@
     "settings.projectColumns": "项目看板 · 显示哪些项目属性",
     "settings.projectColumnsHint": "勾选要在项目表格里显示的项目属性；名称和图标/颜色始终显示。",
     "settings.pc.total": "会话总数",
-    "settings.pc.running": "运行中",
-    "settings.pc.attention": "待处理",
-    "settings.pc.done": "已完成",
-    "settings.pc.idle": "空闲",
-    "settings.pc.auto": "自动化任务",
-    "settings.pc.presets": "用到的模式数",
-    "settings.pc.lastUpdated": "最近活动",
+    "settings.pc.issues": "未关闭问题",
+    "settings.pc.prs": "未合并 PR",
+    "settings.pc.localVersion": "本地内部版本",
+    "settings.pc.latestVersion": "最新上线版本",
+    "settings.pc.lastUpdated": "最近活动时间",
+    "settings.githubTitle": "GitHub 数据源",
+    "settings.githubDesc": "填入 token 并为每个项目配置仓库，就能在看板显示真实的 Open Issue / Open PR / 版本数据；未配置的项目仍显示「—」占位。",
+    "settings.githubToken": "GitHub Personal Access Token",
+    "settings.githubTokenDesc": "可选：公开仓库可不填；私有仓库或需要更高速率限制时填写。仅用于调用 api.github.com；token 只保存在本机，不随工作区同步，也不会上传，随时可清除。",
+    "settings.githubTokenPlaceholderWarn": "当前值看起来是 DSH 密钥引用（{{...}}），不是 GitHub PAT。GitHub API 需要真实的 ghp_... 格式 token，请直接粘贴 PAT。",
+    "settings.githubTest": "测试连接",
+    "settings.githubTesting": "测试中…",
+    "settings.githubTestOk": "连接成功，token 有效",
+    "settings.githubTestOkNoToken": "连接成功（公开仓库无需 token）",
+    "settings.githubTestFail": "连接失败",
+    "settings.githubReposTitle": "项目仓库映射",
+    "settings.githubReposHint": "按项目路径为每个项目指定 GitHub 仓库（owner/repo）与本地版本；填了 owner 和 repo 的列会显示真实数据，本地版本单独填写。",
+    "settings.githubPath": "项目路径",
+    "settings.githubOwner": "拥有者",
+    "settings.githubRepo": "仓库名",
+    "settings.githubLocalVersion": "本地版本",
+    "settings.githubAddRepo": "添加项目",
+    "settings.githubRemoveRepo": "移除",
+    "settings.githubPlaceholderRepo": "owner/repo",
+    "settings.githubNone": "尚未配置任何项目仓库",
     "settings.blur": "搜索面板模糊强度（px）",
     "settings.logging": "日志与排查",
     "settings.logEnabled": "记录日志",
@@ -2209,15 +2317,34 @@
     return t("time.day", { n: Math.floor(hours / 24) });
   }
   var PROJECT_COLUMNS = [
-    { key: "total", labelKey: "settings.pc.total", type: "#" },
-    { key: "running", labelKey: "settings.pc.running", type: "#" },
-    { key: "attention", labelKey: "settings.pc.attention", type: "#" },
-    { key: "done", labelKey: "settings.pc.done", type: "#" },
-    { key: "idle", labelKey: "settings.pc.idle", type: "#" },
-    { key: "auto", labelKey: "settings.pc.auto", type: "#" },
-    { key: "presets", labelKey: "settings.pc.presets", type: "#" },
-    { key: "lastUpdated", labelKey: "settings.pc.lastUpdated", type: "◷" }
+    { key: "total", labelKey: "settings.pc.total", type: "#", hintKey: "col.hint.total" },
+    { key: "issues", labelKey: "settings.pc.issues", type: "#", hintKey: "col.hint.issues" },
+    { key: "prs", labelKey: "settings.pc.prs", type: "#", hintKey: "col.hint.prs" },
+    { key: "localVersion", labelKey: "settings.pc.localVersion", type: "#", hintKey: "col.hint.localVersion" },
+    { key: "latestVersion", labelKey: "settings.pc.latestVersion", type: "#", hintKey: "col.hint.latestVersion" },
+    { key: "lastUpdated", labelKey: "settings.pc.lastUpdated", type: "◷", hintKey: "col.hint.lastUpdated" }
   ];
+  function compareVersions(a, b) {
+    const aParts = parseVersion(a);
+    const bParts = parseVersion(b);
+    if (aParts === null && bParts === null) return 0;
+    if (aParts === null) return 1;
+    if (bParts === null) return -1;
+    const len = Math.max(aParts.length, bParts.length);
+    for (let i = 0; i < len; i += 1) {
+      const x = aParts[i] || 0;
+      const y = bParts[i] || 0;
+      if (x < y) return -1;
+      if (x > y) return 1;
+    }
+    return 0;
+  }
+  function parseVersion(value) {
+    if (!value) return null;
+    const match = /^[vV]?(\d+(?:\.\d+)*)/.exec(value.trim());
+    if (!match) return null;
+    return match[1].split(".").map((part) => Number(part) || 0);
+  }
   var SORT_DIR_DEFAULT = {
     title: "asc",
     project: "asc",
@@ -2230,12 +2357,73 @@
     name: "asc",
     appearance: "asc",
     total: "desc",
-    auto: "desc",
-    attention: "desc",
-    done: "desc",
-    idle: "desc",
+    issues: "desc",
+    prs: "desc",
+    localVersion: "desc",
+    latestVersion: "desc",
     lastUpdated: "desc"
   };
+
+  // src/core/github.ts
+  function stripV(tag) {
+    return tag.replace(/^v(?=\d)/, "");
+  }
+  function countFromLink(link) {
+    if (!link) return 0;
+    const match = /page=(\d+)>;\s*rel="last"/.exec(link);
+    return match ? Number(match[1]) || 0 : 0;
+  }
+  function errorFor(status) {
+    let message = `HTTP ${status}`;
+    if (status === 404) message = "repo-not-found";
+    else if (status === 401) message = "token-invalid";
+    else if (status === 403) message = "rate-limited";
+    return { status: "error", error: message };
+  }
+  function normalizeVersion(tag) {
+    if (!tag) return void 0;
+    return stripV(tag);
+  }
+  async function fetchRepoStats(owner, repo, token, fetchImpl = fetch) {
+    const headers = { Accept: "application/vnd.github+json" };
+    if (token) headers.Authorization = `Bearer ${token}`;
+    const base = `https://api.github.com/repos/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}`;
+    try {
+      const [repoRes, pullsRes, releaseRes] = await Promise.all([
+        fetchImpl(base, { headers }),
+        fetchImpl(`${base}/pulls?state=open&per_page=1`, { headers }),
+        fetchImpl(`${base}/releases/latest`, { headers })
+      ]);
+      if (!repoRes.ok) {
+        pullsRes.json().catch(() => void 0);
+        releaseRes.json().catch(() => void 0);
+        return errorFor(repoRes.status);
+      }
+      if (!pullsRes.ok) {
+        repoRes.json().catch(() => void 0);
+        releaseRes.json().catch(() => void 0);
+        return errorFor(pullsRes.status);
+      }
+      const repoData = await repoRes.json();
+      let prs = 0;
+      const lastPage = countFromLink(pullsRes.headers ? pullsRes.headers.get("link") : null);
+      if (lastPage > 0) {
+        prs = lastPage;
+      } else {
+        const pulls = await pullsRes.json();
+        prs = Array.isArray(pulls) ? pulls.length : 0;
+      }
+      let latestVersion;
+      if (releaseRes.ok) {
+        const release = await releaseRes.json();
+        latestVersion = normalizeVersion(release.tag_name);
+      }
+      const issues = Math.max(0, (repoData.open_issues_count ?? 0) - prs);
+      return { status: "ok", issues, prs, latestVersion };
+    } catch (error) {
+      return { status: "error", error: error instanceof Error ? error.message : "network" };
+    }
+  }
 
   // src/features/board.ts
   var BUILTIN_PRESET_COPY = {
@@ -2244,7 +2432,15 @@
     minimal: "preset.minimal",
     cordis: "preset.cordis"
   };
+  function versionSortKey(value) {
+    const parts = parseVersion(value);
+    if (!parts) return -1;
+    let key = 0;
+    for (let i = 0; i < 6; i += 1) key = key * 1e3 + (parts[i] || 0);
+    return key;
+  }
   var NO_AUTO2 = /* @__PURE__ */ new Set();
+  var EMPTY_REPOS = {};
   function ProjectBoard(props) {
     const { useWorkspaces, useSessions, useSessionStatus, openSession, t } = props;
     const useScheduleCatalog = typeof props.useScheduleCatalog === "function" ? props.useScheduleCatalog : fallbackHook();
@@ -2272,10 +2468,23 @@
       return () => window.removeEventListener("pbx-appearance-reset", handler);
     }, []);
     const [editingProject, setEditingProject] = useState(null);
+    const [expandedProject, setExpandedProject] = useState(null);
     const popRef = useRef(null);
     const [view, setView] = useState(
       () => config.board.defaultView === "projects" ? "projects" : "sessions"
     );
+    const [viewReqSeq, setViewReqSeq] = useState(0);
+    useEffect(() => {
+      const store = props.viewRequestStore;
+      if (!store) return void 0;
+      setViewReqSeq(store.getSnapshot().seq);
+      return store.subscribe(() => setViewReqSeq(store.getSnapshot().seq));
+    }, [props.viewRequestStore]);
+    useEffect(() => {
+      if (viewReqSeq > 0 && props.viewRequestStore) {
+        setView(props.viewRequestStore.getSnapshot().view);
+      }
+    }, [viewReqSeq]);
     const [sessionSorts, setSessionSorts] = useState([{ key: "updatedAt", dir: "desc" }]);
     const [projectSorts, setProjectSorts] = useState([{ key: "lastUpdated", dir: "desc" }]);
     const sorts = view === "sessions" ? sessionSorts : projectSorts;
@@ -2287,6 +2496,33 @@
     const [collapsed, setCollapsed] = useState({});
     const [compactProjectId, setCompactProjectId] = useState(null);
     const [popoverPos, setPopoverPos] = useState(null);
+    const githubRepos = config.githubRepos || EMPTY_REPOS;
+    const repoFingerprint = Object.keys(githubRepos).map((path) => `${path}\0${githubRepos[path] ? githubRepos[path].owner || "" : ""}\0${githubRepos[path] ? githubRepos[path].repo || "" : ""}`).sort().join("\n");
+    const [repoStats, setRepoStats] = useState({});
+    useEffect(() => {
+      let cancelled = false;
+      const targets = Object.keys(githubRepos).filter((path) => {
+        const cfg = githubRepos[path];
+        return cfg && cfg.owner && cfg.repo;
+      });
+      if (targets.length === 0) {
+        setRepoStats({});
+        return void 0;
+      }
+      const loading = {};
+      for (const path of targets) loading[path] = { status: "loading" };
+      setRepoStats(loading);
+      for (const path of targets) {
+        const cfg = githubRepos[path];
+        fetchRepoStats(cfg.owner, cfg.repo, config.githubToken).then((stats) => {
+          if (cancelled) return;
+          setRepoStats((prev) => ({ ...prev, [path]: stats }));
+        });
+      }
+      return () => {
+        cancelled = true;
+      };
+    }, [repoFingerprint, config.githubToken]);
     useEffect(() => {
       if (editingProject === null) return void 0;
       const onDown = (event) => {
@@ -2375,6 +2611,14 @@
           last = Math.max(last, row.updatedAt);
         }
         if (!last) last = Date.parse(workspace.updatedAt || "") || 0;
+        const pathKey = workspace.path || "";
+        const repoSetting = githubRepos[pathKey];
+        const stats = repoSetting ? repoStats[pathKey] : void 0;
+        const seam = workspace;
+        const issues = stats?.status === "ok" ? stats.issues : typeof seam.openIssues === "number" ? seam.openIssues : void 0;
+        const prs = stats?.status === "ok" ? stats.prs : typeof seam.openPRs === "number" ? seam.openPRs : void 0;
+        const latestVersion = stats?.status === "ok" ? stats.latestVersion : seam.latestVersion;
+        const localVersion = repoSetting?.localVersion || seam.localVersion;
         const model = {
           workspaceId: workspace.workspaceId,
           name: workspaceLabel(workspace.title, t),
@@ -2382,11 +2626,17 @@
           counts,
           presets,
           hasCurrent,
-          lastUpdated: last
+          lastUpdated: last,
+          issues,
+          prs,
+          localVersion,
+          latestVersion,
+          repo: repoSetting,
+          repoStats: stats
         };
         return model;
       });
-    }, [workspaces, allSessions, t]);
+    }, [workspaces, allSessions, t, githubRepos, repoStats]);
     const compactStatusRank = (row) => row.archived ? 9 : row.info.tone === "running" ? 0 : row.info.tone === "attention" ? 1 : row.info.tone === "done" ? 2 : 3;
     const compactSessionsOf = (workspaceId) => {
       const workspace = workspaces.find((item) => item.workspaceId === workspaceId);
@@ -2451,6 +2701,10 @@
     const projectSortValue = (project, key) => {
       if (key === "name") return project.name.toLowerCase();
       if (key === "lastUpdated") return project.lastUpdated;
+      if (key === "issues") return project.issues ?? -1;
+      if (key === "prs") return project.prs ?? -1;
+      if (key === "localVersion") return versionSortKey(project.localVersion);
+      if (key === "latestVersion") return versionSortKey(project.latestVersion);
       if (key === "presets") return project.presets ? project.presets.size : 0;
       return project.counts[key] !== void 0 ? project.counts[key] : 0;
     };
@@ -2566,11 +2820,12 @@
       const position = sorts.findIndex((entry) => entry.key === key);
       const active = position >= 0;
       const direction = active ? sorts[position].dir : null;
+      const title = opts.sortable === false ? opts.hint : opts.hint ? opts.hint + " · " + t("sort.hint") : t("sort.hint");
       return h(
         "th",
         {
           className: "pbx-th" + (opts.sortable === false ? "" : " sortable") + (active ? " active" : "") + (opts.num ? " num" : ""),
-          title: opts.sortable === false ? void 0 : t("sort.hint"),
+          title,
           "aria-sort": opts.sortable === false ? void 0 : active ? direction === "asc" ? "ascending" : "descending" : "none",
           tabIndex: opts.sortable === false ? void 0 : 0,
           onClick: opts.sortable === false ? void 0 : (event) => sortBy(key, Boolean(event.shiftKey)),
@@ -2582,7 +2837,7 @@
         },
         h("span", { className: "pbx-thType", "aria-hidden": "true" }, type || ""),
         h("span", { className: "pbx-thLabel" }, label),
-        active ? h("span", { className: "pbx-sortMark" }, (sorts.length > 1 ? String(position + 1) : "") + (direction === "asc" ? "↑" : "↓")) : null
+        active ? h("span", { className: "pbx-sortMark", "aria-hidden": "true" }, direction === "asc" ? "↑" : "↓") : null
       );
     };
     const renderSessionRow = (row) => h(
@@ -2668,31 +2923,112 @@
       return rows;
     };
     const projectCols = PROJECT_COLUMNS.filter((def) => !config.projectColumns || config.projectColumns[def.key] !== false);
-    const projectCell = (project, def) => {
-      if (def.key === "lastUpdated") return relTime(project.lastUpdated, t);
-      if (def.key === "presets") return String(project.presets ? project.presets.size : 0);
-      const value = project.counts[def.key] ?? 0;
-      const style = def.key === "running" ? { color: value > 0 ? "var(--dsw-alias-brand-primary)" : void 0 } : def.key === "attention" ? { color: value > 0 ? "#f59e0b" : void 0 } : def.key === "auto" ? { color: value > 0 ? "var(--dsw-alias-state-warn-primary)" : void 0 } : void 0;
-      return h("td", { className: "pbx-num" + (def.key === "total" ? " pbx-strong" : ""), style }, String(value));
+    const cellRepoState = (project) => {
+      if (!project.repo || !project.repo.owner || !project.repo.repo) return null;
+      const stats = project.repoStats;
+      if (!stats || stats.status === "loading") return "loading";
+      if (stats.status === "error") return "error";
+      return null;
     };
+    const repoErrorText = (code) => {
+      if (code === "repo-not-found") return t("col.errRepoNotFound");
+      if (code === "token-invalid") return t("col.errTokenInvalid");
+      if (code === "rate-limited") return t("col.errRateLimited");
+      return t("col.errGeneric", { code: code || "?" });
+    };
+    const projectCell = (project, def) => {
+      if (def.key === "lastUpdated") {
+        const absolute = project.lastUpdated ? new Date(project.lastUpdated).toLocaleString() : "";
+        return h("td", { className: "pbx-num pbx-time", title: absolute }, relTime(project.lastUpdated, t));
+      }
+      if (def.key === "issues" || def.key === "prs") {
+        const value2 = def.key === "issues" ? project.issues : project.prs;
+        const state = cellRepoState(project);
+        if (state === "loading") return h("td", { className: "pbx-num pbx-na", "aria-busy": true, title: t("col.loading") }, "…");
+        if (state === "error") return h("td", { className: "pbx-num pbx-na pbx-err", "aria-label": repoErrorText(project.repoStats?.error), title: repoErrorText(project.repoStats?.error) }, "⚠");
+        if (value2 === void 0) {
+          return h("td", { className: "pbx-num pbx-na", title: t("col.naHint") }, t("col.na"));
+        }
+        const cls2 = "pbx-num" + (value2 > 0 ? " pbx-numHot" : " pbx-numZero");
+        return h("td", { className: cls2 }, String(value2));
+      }
+      if (def.key === "localVersion" || def.key === "latestVersion") {
+        const value2 = def.key === "localVersion" ? project.localVersion : project.latestVersion;
+        const state = cellRepoState(project);
+        if (state === "loading") return h("td", { className: "pbx-num pbx-ver pbx-na", "aria-busy": true, title: t("col.loading") }, "…");
+        if (state === "error") return h("td", { className: "pbx-num pbx-ver pbx-na pbx-err", "aria-label": repoErrorText(project.repoStats?.error), title: repoErrorText(project.repoStats?.error) }, "⚠");
+        if (!value2) return h("td", { className: "pbx-num pbx-ver pbx-na", title: t("col.naHint") }, t("col.na"));
+        const latest = project.latestVersion;
+        const lagging = def.key === "localVersion" && !!latest && compareVersions(value2, latest) < 0;
+        const cls2 = "pbx-num pbx-ver" + (lagging ? " pbx-verLag" : "");
+        const title = lagging ? t("col.localBehind", { local: value2, latest: latest || "" }) : value2;
+        return h("td", { className: cls2, title }, h("span", null, value2));
+      }
+      const value = project.counts[def.key] ?? 0;
+      const cls = "pbx-num" + (def.key === "total" ? " pbx-strong" : "");
+      return h("td", { className: cls }, String(value));
+    };
+    const renderInlineSessionRow = (row) => h(
+      "tr",
+      {
+        key: "s-" + row.id,
+        className: "pbx-tr pbx-tr-inline" + (row.running ? " pbx-tr-live" : "") + (row.current ? " pbx-tr-current" : ""),
+        onClick: () => open(row.id),
+        tabIndex: 0,
+        onKeyDown: (e) => {
+          if (e.key === "Enter" || e.key === " ") {
+            e.preventDefault();
+            open(row.id);
+          }
+        }
+      },
+      h(
+        "td",
+        { colSpan: 1 + projectCols.length, className: "pbx-inlineSession" },
+        h(
+          "div",
+          { className: "pbx-inlineRow" },
+          row.info.tone === "running" ? h(RunRing, { size: 9 }) : h("span", { className: "pbx-rdot", "data-tone": row.info.tone }),
+          h("span", { className: "pbx-titleText" }, row.title),
+          row.current ? h("span", { className: "pbx-curTag" }, t("card.current")) : null,
+          h("span", { className: "pbx-inlineTime" }, relTime(row.updatedAt, t)),
+          h(
+            "button",
+            {
+              type: "button",
+              className: "pbx-openBtn",
+              title: t("open"),
+              "aria-label": t("open"),
+              onClick: (e) => {
+                e.stopPropagation();
+                open(row.id);
+              }
+            },
+            h(Icon, { name: "arrow", size: 14 })
+          )
+        )
+      )
+    );
     const renderProjectRow = (project) => {
       const spec = specOf(project.workspaceId);
       const isEditing = editingProject === project.workspaceId;
-      return h(
+      const isExpanded = expandedProject === project.workspaceId;
+      const projectRow = h(
         "tr",
         {
           key: project.workspaceId,
-          className: "pbx-tr",
+          className: "pbx-tr" + (isExpanded ? " pbx-tr-expanded" : "") + (projectFilter === project.workspaceId ? " pbx-tr-selected" : ""),
+          "aria-current": projectFilter === project.workspaceId ? "true" : void 0,
+          "aria-selected": projectFilter === project.workspaceId ? "true" : "false",
+          "aria-expanded": isExpanded ? "true" : "false",
           tabIndex: 0,
           onClick: () => {
-            setProjectFilter(project.workspaceId);
-            setView("sessions");
-            setStatusFilter("all");
+            setExpandedProject(isExpanded ? null : project.workspaceId);
           },
           onKeyDown: (e) => {
-            if (e.key === "Enter") {
-              setProjectFilter(project.workspaceId);
-              setView("sessions");
+            if (e.key === "Enter" || e.key === " ") {
+              e.preventDefault();
+              setExpandedProject(isExpanded ? null : project.workspaceId);
             }
           }
         },
@@ -2702,6 +3038,7 @@
           h(
             "div",
             { className: "pbx-titleCell" },
+            h("span", { className: "pbx-chevron" + (isExpanded ? " open" : "") }, h(Icon, { name: "chevron", size: 13 })),
             h(
               "span",
               { className: "pbx-iconField", style: { position: "relative" } },
@@ -2742,6 +3079,10 @@
         ),
         projectCols.map((def) => projectCell(project, def))
       );
+      if (!isExpanded) return projectRow;
+      const projectSessions = allSessions.filter((s) => s.workspaceId === project.workspaceId).sort((a, b) => b.updatedAt - a.updatedAt);
+      if (projectSessions.length === 0) return projectRow;
+      return [projectRow, ...projectSessions.map(renderInlineSessionRow)];
     };
     const header = h(
       "div",
@@ -2760,7 +3101,7 @@
           { className: "pbx-totals" },
           h("span", { className: "pbx-total" }, h("strong", null, String(totals.workspaces)), t("stat.workspaces")),
           h("span", { className: "pbx-total" }, h("strong", null, String(totals.sessions)), t("stat.sessions")),
-          totals.attention > 0 ? h("span", { className: "pbx-total" }, h("strong", { style: { color: "#f59e0b" } }, String(totals.attention)), t("stat.attention")) : null,
+          totals.attention > 0 ? h("span", { className: "pbx-total" }, h("strong", { style: { color: "var(--dsw-alias-state-warn-primary)" } }, String(totals.attention)), t("stat.attention")) : null,
           totals.running > 0 ? h(
             "span",
             { className: "pbx-total" },
@@ -2795,7 +3136,10 @@
             role: "tab",
             "aria-selected": view === "sessions" ? "true" : "false",
             className: "pbx-tab" + (view === "sessions" ? " active" : ""),
-            onClick: () => setView("sessions")
+            onClick: () => {
+              setView("sessions");
+              setExpandedProject(null);
+            }
           },
           t("view.sessions"),
           h("span", { className: "pbx-tabCount" }, String(allSessions.length))
@@ -2900,12 +3244,12 @@
           h(
             "thead",
             null,
-            h("tr", null, th("name", t("col.project"), "Aa"), projectCols.map((def) => th(def.key, t(def.labelKey), def.type, { num: true })))
+            h("tr", null, th("name", t("col.project"), "Aa", { hint: t("col.hint.name") }), projectCols.map((def) => th(def.key, t(def.labelKey), def.type, { num: true, hint: t(def.hintKey) })))
           ),
           h(
             "tbody",
             null,
-            filteredProjects.length === 0 ? h("tr", null, h("td", { colSpan: 1 + projectCols.length, className: "pbx-emptyCell" }, t("empty.filtered"))) : filteredProjects.map(renderProjectRow)
+            filteredProjects.length === 0 ? h("tr", null, h("td", { colSpan: 1 + projectCols.length, className: "pbx-emptyCell" }, t("empty.filtered"))) : filteredProjects.map(renderProjectRow).flat()
           )
         ),
         h("div", { className: "pbx-dbFoot" }, t("count.rows", { n: filteredProjects.length }))
@@ -3012,7 +3356,7 @@
                 "span",
                 { className: "pbx-pcardStats" },
                 statChip(t("stat.running"), project.counts.running, "var(--dsw-alias-brand-primary)"),
-                statChip(t("stat.attention"), project.counts.attention, "#f59e0b"),
+                statChip(t("stat.attention"), project.counts.attention, "var(--dsw-alias-state-warn-primary)"),
                 statChip(t("status.done"), project.counts.done, "var(--dsw-alias-state-success-primary)"),
                 statChip(t("stat.auto"), project.counts.auto, "var(--dsw-alias-state-warn-primary)")
               )
@@ -3635,8 +3979,16 @@
           event.stopPropagation();
           stopHoldScroll(false);
           if (paletteOpenRef.current && palette) palette.set({ open: false });
+          if (event.pbxBoardActed === true) {
+            logEvent("info", "shortcut", "board:duplicate", {});
+            return;
+          }
           if (typeof props.toggleBoard === "function") {
             props.toggleBoard(isSidebarBoard ? "narrow" : isPanelHalf ? "half" : "full");
+          }
+          try {
+            event.pbxBoardActed = true;
+          } catch (error) {
           }
           return;
         }
@@ -4518,14 +4870,20 @@
       };
       window.addEventListener("resize", schedule);
       let observer = null;
+      let mutationObserver = null;
       const column = document.querySelector('[class*="_centerCol"]');
       if (column && typeof ResizeObserver !== "undefined") {
         observer = new ResizeObserver(schedule);
         observer.observe(column);
       }
+      if (column && typeof MutationObserver !== "undefined") {
+        mutationObserver = new MutationObserver(() => apply2());
+        mutationObserver.observe(column, { childList: true, subtree: true });
+      }
       return () => {
         window.removeEventListener("resize", schedule);
         if (observer) observer.disconnect();
+        if (mutationObserver) mutationObserver.disconnect();
         if (frame) cancelAnimationFrame(frame);
         clear();
       };
@@ -5109,6 +5467,11 @@
     const [recordError, setRecordError] = useState("");
     const [builtinWarnings, setBuiltinWarnings] = useState([]);
     const scannedConflictsRef = useRef(/* @__PURE__ */ new Set());
+    const useWorkspaces = typeof props.useWorkspaces === "function" ? props.useWorkspaces : fallbackHook();
+    const wsSnap = useWorkspaces((value) => value);
+    const ghWorkspaces = (wsSnap && wsSnap.items || []).filter((item) => item && item.path);
+    const [ghTesting, setGhTesting] = useState(false);
+    const [ghTest, setGhTest] = useState(null);
     useEffect(() => {
       if (!recording) return void 0;
       shortcutState.suppressed = true;
@@ -5203,6 +5566,119 @@
         window.dispatchEvent(new Event("pbx-hud-reset"));
       } catch (error) {
       }
+    };
+    const githubRepos = config.githubRepos || {};
+    const repoNameFromPath = (path) => path.replace(/[\\/]+$/, "").split(/[\\/]/).pop() || "";
+    const setGithubToken = (value) => {
+      const next = cloneJson(config);
+      if (value) next.githubToken = value;
+      else delete next.githubToken;
+      saveSettings(next);
+    };
+    const updateGithubRepo = (path, patch) => {
+      const next = cloneJson(config);
+      const repos = { ...next.githubRepos || {} };
+      const existing = repos[path] || { owner: "", repo: "" };
+      repos[path] = { ...existing, ...patch };
+      next.githubRepos = repos;
+      saveSettings(next);
+    };
+    const renameRepoPath = (oldPath, newPath) => {
+      if (!oldPath || oldPath === newPath) return;
+      const next = cloneJson(config);
+      const repos = { ...next.githubRepos || {} };
+      const value = repos[oldPath];
+      if (!value) return;
+      delete repos[oldPath];
+      repos[newPath] = value;
+      next.githubRepos = repos;
+      saveSettings(next);
+    };
+    const removeGithubRepo = (path) => {
+      const next = cloneJson(config);
+      const repos = { ...next.githubRepos || {} };
+      delete repos[path];
+      next.githubRepos = repos;
+      saveSettings(next);
+    };
+    const addGithubRepo = () => {
+      const next = cloneJson(config);
+      const repos = { ...next.githubRepos || {} };
+      const candidate = ghWorkspaces.find((item) => item.path && !repos[item.path]);
+      if (candidate && candidate.path) {
+        repos[candidate.path] = { owner: "", repo: repoNameFromPath(candidate.path) };
+      } else if (!repos[""]) {
+        repos[""] = { owner: "", repo: "" };
+      } else {
+        return;
+      }
+      next.githubRepos = repos;
+      saveSettings(next);
+    };
+    const githubErrorText = (code) => {
+      if (code === "token-invalid") return t("col.errTokenInvalid");
+      if (code === "rate-limited") return t("col.errRateLimited");
+      if (code === "repo-not-found") return t("col.errRepoNotFound");
+      return t("settings.githubTestFail");
+    };
+    const testGithub = async () => {
+      setGhTesting(true);
+      setGhTest(null);
+      try {
+        const stats = await fetchRepoStats("octocat", "hello-world", config.githubToken);
+        setGhTest(stats.status === "ok" ? { ok: true, text: config.githubToken ? t("settings.githubTestOk") : t("settings.githubTestOkNoToken") } : { ok: false, text: githubErrorText(stats.error) });
+      } catch (error) {
+        setGhTest({ ok: false, text: t("settings.githubTestFail") });
+      } finally {
+        setGhTesting(false);
+      }
+    };
+    const renderGithubRepos = () => {
+      const listed = ghWorkspaces.length > 0 ? ghWorkspaces.map((item) => item.path) : Object.keys(githubRepos);
+      if (listed.length === 0) return [h("div", { className: "pbx-setHint" }, t("settings.githubNone"))];
+      return listed.map((path) => {
+        const setting = githubRepos[path] || { owner: "", repo: repoNameFromPath(path) };
+        return h(
+          "div",
+          { className: "pbx-githubRepo", key: "gh-" + path },
+          ghWorkspaces.length > 0 ? h("div", { className: "pbx-githubPath", title: path }, path) : h("input", {
+            type: "text",
+            className: "pbx-setInput pbx-githubPathInput",
+            "aria-label": t("settings.githubPath"),
+            defaultValue: path,
+            onBlur: (event) => renameRepoPath(path, event.target.value)
+          }),
+          h("input", {
+            type: "text",
+            className: "pbx-setInput pbx-githubOwner",
+            "aria-label": t("settings.githubOwner"),
+            placeholder: t("settings.githubOwner"),
+            value: setting.owner,
+            onInput: (event) => updateGithubRepo(path, { owner: event.target.value })
+          }),
+          h("input", {
+            type: "text",
+            className: "pbx-setInput pbx-githubRepoName",
+            "aria-label": t("settings.githubPlaceholderRepo"),
+            placeholder: t("settings.githubPlaceholderRepo"),
+            value: setting.repo,
+            onInput: (event) => updateGithubRepo(path, { repo: event.target.value })
+          }),
+          h("input", {
+            type: "text",
+            className: "pbx-setInput pbx-githubLocal",
+            "aria-label": t("settings.githubLocalVersion"),
+            placeholder: t("settings.githubLocalVersion"),
+            value: setting.localVersion || "",
+            onInput: (event) => updateGithubRepo(path, { localVersion: event.target.value })
+          }),
+          h(
+            "button",
+            { type: "button", className: "pbx-setBtn pbx-githubRemove", "aria-label": t("settings.githubRemoveRepo"), title: t("settings.githubRemoveRepo"), onClick: () => removeGithubRepo(path) },
+            "×"
+          )
+        );
+      });
     };
     const resetAppearance = () => {
       try {
@@ -5480,6 +5956,36 @@
         toggleRow("notify", "enabled", "settings.notifyEnabled", "settings.notifyEnabledDesc"),
         toggleRow("notify", "sound", "settings.notifySound", "settings.notifySoundDesc"),
         rangeRow("palette", "blur", "settings.blur", 6, 32, 1)
+      ),
+      h(
+        "section",
+        { className: "pbx-setSection" },
+        h("h3", { className: "pbx-setSectionTitle" }, t("settings.githubTitle")),
+        h("div", { className: "pbx-setHint" }, t("settings.githubDesc")),
+        row(
+          "gh-token",
+          "settings.githubToken",
+          "settings.githubTokenDesc",
+          h(
+            "div",
+            { className: "pbx-githubToken" },
+            h("input", {
+              type: "password",
+              className: "pbx-setInput pbx-githubTokenInput",
+              "aria-label": t("settings.githubToken"),
+              value: config.githubToken || "",
+              placeholder: "ghp_…",
+              onInput: (event) => setGithubToken(event.target.value)
+            }),
+            h("button", { type: "button", className: "pbx-setBtn", disabled: ghTesting, onClick: () => void testGithub() }, ghTesting ? t("settings.githubTesting") : t("settings.githubTest"))
+          )
+        ),
+        ghTest ? h("div", { role: "status", className: "pbx-setHint" + (ghTest.ok ? " pbx-githubOk" : " pbx-setError") }, ghTest.text) : null,
+        config.githubToken && config.githubToken.startsWith("{{") && config.githubToken.endsWith("}}") ? h("div", { className: "pbx-setHint pbx-setError" }, t("settings.githubTokenPlaceholderWarn")) : null,
+        h("div", { className: "pbx-setSubTitle" }, t("settings.githubReposTitle")),
+        h("div", { className: "pbx-setHint" }, t("settings.githubReposHint")),
+        ...renderGithubRepos(),
+        h("div", { className: "pbx-setActions" }, h("button", { type: "button", className: "pbx-setBtn", onClick: addGithubRepo }, t("settings.githubAddRepo")))
       ),
       h(
         "section",
@@ -5795,9 +6301,10 @@
       const previous = stateRef.current;
       if (previous.id === currentId) return void 0;
       const want = previous.id === null ? api.boardStateNow() : previous.state;
-      stateRef.current = { id: currentId, state: want, settleUntil: Date.now() + 1600 };
+      stateRef.current = { id: currentId, state: want, settleUntil: Date.now() + 3e3 };
       if (previous.id === null) return void 0;
       let attempts = 0;
+      let enforceTimer = 0;
       const enforce = () => {
         const live = propsRef.current;
         if (typeof live.intentRecent === "function" && live.intentRecent()) {
@@ -5809,12 +6316,12 @@
           return;
         }
         attempts += 1;
-        if (attempts === 1) logEvent("debug", "board", "restore after switch", want);
+        if (attempts === 1) logEvent("info", "board", "restore after switch", want);
         live.setBoardState(want);
-        if (attempts < 10) window.setTimeout(enforce, 140);
+        if (attempts < 20) enforceTimer = window.setTimeout(enforce, 120);
       };
-      const timer = window.setTimeout(enforce, 60);
-      return () => window.clearTimeout(timer);
+      enforceTimer = window.setTimeout(enforce, 60);
+      return () => window.clearTimeout(enforceTimer);
     }, [currentId]);
     useEffect(() => {
       const timer = window.setInterval(() => {
@@ -6006,8 +6513,7 @@
       try {
         const sidebarRight = ctx.sidebarRight;
         if (!sidebarRight) return;
-        const expanded = typeof sidebarRight.isExpanded === "function" ? sidebarRight.isExpanded() : false;
-        if (expanded && rightBoardActive()) sidebarRight.toggleExpanded();
+        if (boardPanelVisible() && rightBoardActive()) sidebarRight.toggleExpanded();
       } catch (error) {
       }
     };
@@ -6111,6 +6617,11 @@
       } catch (error) {
       }
     };
+    const boardViewStore = createUiStore({ seq: 0, view: "projects" });
+    const requestBoardView = (view) => {
+      const snap = boardViewStore.getSnapshot();
+      boardViewStore.set({ seq: snap.seq + 1, view });
+    };
     const boardStateNow = () => {
       try {
         if (!boardOpenNow()) return { open: false, mode: null };
@@ -6147,6 +6658,7 @@
       }
     };
     const showNativeBoard = (mode) => {
+      requestBoardView("projects");
       try {
         const sidebarRight = ctx.sidebarRight;
         if (!sidebarRight) return;
@@ -6245,6 +6757,7 @@
       }
     };
     const openBoard = () => {
+      requestBoardView("projects");
       try {
         const sidebarRight = ctx.sidebarRight;
         if (!sidebarRight) return;
@@ -6261,6 +6774,7 @@
       }
     };
     const openFullBoard = () => {
+      requestBoardView("projects");
       collapseRightBoard();
       try {
         ctx.layout.selectPanel("project-board");
@@ -6283,7 +6797,7 @@
         return { ok: false, error: { message: String(error && error.message || error) } };
       }
     };
-    const boardInject = () => ({ openSession, openBoard, openFullBoard, hooks: boardHooks() });
+    const boardInject = () => ({ openSession, openBoard, openFullBoard, hooks: boardHooks(), viewRequestStore: boardViewStore });
     const sessionMenuStore = createUiStore({ sessionId: null, title: "", at: 0 });
     const requestSessionMenu = (sessionId, title) => {
       if (sessionId) sessionMenuStore.set({ sessionId, title: title || "", at: Date.now() });
@@ -6335,33 +6849,36 @@
         return { ok: false, error: { message: String(error && error.message || error) } };
       }
     };
-    window.setTimeout(() => {
-      try {
-        const snapshot = settingsStore.getSnapshot();
-        const frame = document.querySelector('[class*="_frame"][style*="grid-template-columns"]') || document.querySelector("[data-sidebar-collapsed]");
-        logEvent("info", "init", "plugin ready", {
-          shortcuts: Object.keys(snapshot.shortcuts || {}).length,
-          hud: Boolean(snapshot.hud && snapshot.hud.enabled),
-          board: Boolean(snapshot.board && snapshot.board.enabled),
-          leftSidebar: snapshot.shortcuts && snapshot.shortcuts.leftSidebar,
-          windowWidth: window.innerWidth || 0,
-          frameWidth: frame ? Math.round(frame.getBoundingClientRect().width) : null,
-          sidebar: sidebarSignature()
-        });
-        for (const key of Object.keys(snapshot.shortcuts || {})) {
-          const conflict = findBuiltinConflict(snapshot.shortcuts[key]);
-          if (conflict) {
-            logEvent("warn", "shortcuts", "also used by a built-in command", {
-              key,
-              combo: snapshot.shortcuts[key],
-              builtin: conflict.label
-            });
+    ctx.effect(() => {
+      const timer = window.setTimeout(() => {
+        try {
+          const snapshot = settingsStore.getSnapshot();
+          const frame = document.querySelector('[class*="_frame"][style*="grid-template-columns"]') || document.querySelector("[data-sidebar-collapsed]");
+          logEvent("info", "init", "plugin ready", {
+            shortcuts: Object.keys(snapshot.shortcuts || {}).length,
+            hud: Boolean(snapshot.hud && snapshot.hud.enabled),
+            board: Boolean(snapshot.board && snapshot.board.enabled),
+            leftSidebar: snapshot.shortcuts && snapshot.shortcuts.leftSidebar,
+            windowWidth: window.innerWidth || 0,
+            frameWidth: frame ? Math.round(frame.getBoundingClientRect().width) : null,
+            sidebar: sidebarSignature()
+          });
+          for (const key of Object.keys(snapshot.shortcuts || {})) {
+            const conflict = findBuiltinConflict(snapshot.shortcuts[key]);
+            if (conflict) {
+              logEvent("warn", "shortcuts", "also used by a built-in command", {
+                key,
+                combo: snapshot.shortcuts[key],
+                builtin: conflict.label
+              });
+            }
           }
+        } catch (error) {
+          logEvent("warn", "init", "diagnostics failed", { reason: String(error && error.message || error) });
         }
-      } catch (error) {
-        logEvent("warn", "init", "diagnostics failed", { reason: String(error && error.message || error) });
-      }
-    }, 1500);
+      }, 1500);
+      return () => window.clearTimeout(timer);
+    }, "project-board: startup diagnostics");
     ctx.effect(() => {
       const onError = (event) => logEvent("error", "window", String(event && event.message || "script error"), {
         source: String(event && event.filename || "").slice(-120),
@@ -6379,7 +6896,7 @@
         window.removeEventListener("unhandledrejection", onRejection);
       };
     }, "project-board: error hooks");
-    installChatScrollListeners();
+    ctx.effect(() => installChatScrollListeners(), "project-board: chat scroll listeners");
     ctx.effect(() => {
       const timer = window.setTimeout(() => {
         try {
@@ -6425,7 +6942,7 @@
     ctx.slots.inject(
       "main",
       () => ctx.slots.register(
-        { name: "main", key: "project-board", locale: NS, inject: () => ({ openSession, hooks: boardHooks() }) },
+        { name: "main", key: "project-board", locale: NS, inject: boardInject },
         ProjectBoard
       )
     );

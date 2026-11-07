@@ -6,12 +6,14 @@
 import { DEFAULT_SETTINGS } from '../constants';
 import type { Translate, UseHook } from '../host';
 import { h, useEffect, useMemo, useRef, useState } from '../runtime';
-import type { Settings } from '../types';
+import type { Settings, UiStore } from '../types';
 import type { AppearanceMap } from '../ui/appearance';
 import { ICONS, PALETTE, hexToRgba, loadAppearance, paletteFor, saveAppearance } from '../ui/appearance';
 import { Icon, RunRing } from '../ui/icons';
 import { fallbackHook, type PresetSnapshot, type ScheduleSnapshot } from '../core/schedule';
-import { PROJECT_COLUMNS, SORT_DIR_DEFAULT, type ProjectColumn, relTime, sessionTitleOf, statusInfo, workspaceLabel, type SessionStatusLike, type StatusInfo } from './format';
+import { PROJECT_COLUMNS, SORT_DIR_DEFAULT, compareVersions, parseVersion, relTime, sessionTitleOf, statusInfo, workspaceLabel, type ProjectColumn, type SessionStatusLike, type StatusInfo } from './format';
+import { fetchRepoStats, type RepoStats } from '../core/github';
+import type { GithubRepoSetting } from '../types';
 
 export interface WorkspaceView {
   workspaceId: string;
@@ -57,6 +59,11 @@ export interface ProjectBoardProps {
   openFullBoard?: () => void;
   t: Translate;
   compact?: boolean;
+  /** External request to switch the board to a view (e.g. opening it via a shortcut
+   *  should land on "projects"). The board subscribes to this store; when `seq` changes
+   *  it switches the view — reliable even when the component stays mounted, because a
+   *  store `set()` produces a new snapshot that triggers the subscription. */
+  viewRequestStore?: UiStore<{ seq: number; view: 'projects' | 'sessions' }>;
 }
 
 interface SortEntry {
@@ -86,6 +93,18 @@ interface ProjectModel {
   presets: Set<string>;
   hasCurrent: boolean;
   lastUpdated: number;
+  /** Open issue count; `undefined` means no source yet (renders `—`). */
+  issues?: number;
+  /** Open pull-request count; `undefined` means no source yet (renders `—`). */
+  prs?: number;
+  /** Local package version; `undefined` when unknown (renders `—`). */
+  localVersion?: string;
+  /** Latest published version; `undefined` when unknown (renders `—`). */
+  latestVersion?: string;
+  /** GitHub mapping configured for this workspace (owner/repo/localVersion). */
+  repo?: GithubRepoSetting;
+  /** Live GitHub stats; `undefined` when no repo is configured or it has not been fetched. */
+  repoStats?: RepoStats;
 }
 
 const BUILTIN_PRESET_COPY: Record<string, string> = {
@@ -95,7 +114,20 @@ const BUILTIN_PRESET_COPY: Record<string, string> = {
   cordis: 'preset.cordis'
 };
 
+/** Numeric sort key for a dotted version string, so `1.10` sorts after `1.9` (a plain
+ *  string comparison would not). Segments are padded to a fixed count so different-length
+ *  versions compare numerically (missing segments count as 0, matching compareVersions).
+ *  Unknown/`—` maps to -1 and sinks to the bottom. Pre-release suffixes are ignored. */
+function versionSortKey(value: string | undefined): number {
+  const parts = parseVersion(value);
+  if (!parts) return -1;
+  let key = 0;
+  for (let i = 0; i < 6; i += 1) key = key * 1000 + (parts[i] || 0);
+  return key;
+}
+
 const NO_AUTO = new Set<string>();
+const EMPTY_REPOS: Record<string, GithubRepoSetting> = {};
 
 interface PopoverPosition {
   left: number;
@@ -139,10 +171,28 @@ export function ProjectBoard(props: ProjectBoardProps): unknown {
     return () => window.removeEventListener('pbx-appearance-reset', handler);
   }, []);
   const [editingProject, setEditingProject] = useState<string | null>(null);
+  const [expandedProject, setExpandedProject] = useState<string | null>(null);
   const popRef = useRef<HTMLElement | null>(null);
   const [view, setView] = useState<'projects' | 'sessions'>(() =>
     config.board.defaultView === 'projects' ? 'projects' : 'sessions'
   );
+  // Subscribe to an external view-request store. When the board is opened via a
+  // shortcut, requestBoardView() calls store.set() which produces a new snapshot and
+  // fires the subscriber — reliably re-rendering even though the component stays mounted.
+  const [viewReqSeq, setViewReqSeq] = useState(0);
+  useEffect(() => {
+    const store = props.viewRequestStore;
+    if (!store) return undefined;
+    setViewReqSeq(store.getSnapshot().seq);
+    return store.subscribe(() => setViewReqSeq(store.getSnapshot().seq));
+  }, [props.viewRequestStore]);
+  useEffect(() => {
+    // seq === 0 is the untouched initial value: do not override the configured default
+    // view on mount. Only an actual open request (seq >= 1) forces the project view.
+    if (viewReqSeq > 0 && props.viewRequestStore) {
+      setView(props.viewRequestStore.getSnapshot().view);
+    }
+  }, [viewReqSeq]);
   const [sessionSorts, setSessionSorts] = useState<SortEntry[]>([{ key: 'updatedAt', dir: 'desc' }]);
   const [projectSorts, setProjectSorts] = useState<SortEntry[]>([{ key: 'lastUpdated', dir: 'desc' }]);
   const sorts = view === 'sessions' ? sessionSorts : projectSorts;
@@ -154,6 +204,41 @@ export function ProjectBoard(props: ProjectBoardProps): unknown {
   const [collapsed, setCollapsed] = useState<Record<string, boolean>>({});
   const [compactProjectId, setCompactProjectId] = useState<string | null>(null);
   const [popoverPos, setPopoverPos] = useState<PopoverPosition | null>(null);
+
+  const githubRepos = (config.githubRepos || EMPTY_REPOS) as Record<string, GithubRepoSetting>;
+  // Stable fingerprint of the owner/repo mappings. `githubRepos` itself is a fresh object
+  // reference on every settings save (mergeSettings clones it), so depending on it directly
+  // would re-fetch every configured repo on ANY settings change. Only owner/repo affect the
+  // fetch (localVersion does not), so they are the fingerprint's content.
+  const repoFingerprint = Object.keys(githubRepos)
+    .map((path) => `${path}\u0000${githubRepos[path] ? githubRepos[path].owner || '' : ''}\u0000${githubRepos[path] ? githubRepos[path].repo || '' : ''}`)
+    .sort()
+    .join('\n');
+  const [repoStats, setRepoStats] = useState<Record<string, RepoStats>>({});
+  useEffect(() => {
+    let cancelled = false;
+    const targets = Object.keys(githubRepos).filter((path) => {
+      const cfg = githubRepos[path];
+      return cfg && cfg.owner && cfg.repo;
+    });
+    if (targets.length === 0) {
+      setRepoStats({});
+      return undefined;
+    }
+    const loading: Record<string, RepoStats> = {};
+    for (const path of targets) loading[path] = { status: 'loading' };
+    setRepoStats(loading);
+    for (const path of targets) {
+      const cfg = githubRepos[path];
+      fetchRepoStats(cfg.owner, cfg.repo, config.githubToken).then((stats) => {
+        if (cancelled) return;
+        setRepoStats((prev) => ({ ...prev, [path]: stats }));
+      });
+    }
+    return () => {
+      cancelled = true;
+    };
+  }, [repoFingerprint, config.githubToken]);
 
   useEffect(() => {
     if (editingProject === null) return undefined;
@@ -251,6 +336,22 @@ export function ProjectBoard(props: ProjectBoardProps): unknown {
         last = Math.max(last, row.updatedAt);
       }
       if (!last) last = Date.parse(workspace.updatedAt || '') || 0;
+      // Repo-meta fields: the user-configured GitHub mapping (settings.githubRepos, keyed by
+      // workspace path) wins; if none is configured we fall back to the workspace-snapshot
+      // seam so a future host that adds these fields lights up without a plugin change.
+      const pathKey = workspace.path || '';
+      const repoSetting = githubRepos[pathKey];
+      const stats = repoSetting ? repoStats[pathKey] : undefined;
+      const seam = workspace as unknown as {
+        openIssues?: number;
+        openPRs?: number;
+        localVersion?: string;
+        latestVersion?: string;
+      };
+      const issues = stats?.status === 'ok' ? stats.issues : typeof seam.openIssues === 'number' ? seam.openIssues : undefined;
+      const prs = stats?.status === 'ok' ? stats.prs : typeof seam.openPRs === 'number' ? seam.openPRs : undefined;
+      const latestVersion = stats?.status === 'ok' ? stats.latestVersion : seam.latestVersion;
+      const localVersion = repoSetting?.localVersion || seam.localVersion;
       const model: ProjectModel = {
         workspaceId: workspace.workspaceId,
         name: workspaceLabel(workspace.title, t),
@@ -258,11 +359,17 @@ export function ProjectBoard(props: ProjectBoardProps): unknown {
         counts: counts,
         presets: presets,
         hasCurrent: hasCurrent,
-        lastUpdated: last
+        lastUpdated: last,
+        issues: issues,
+        prs: prs,
+        localVersion: localVersion,
+        latestVersion: latestVersion,
+        repo: repoSetting,
+        repoStats: stats
       };
       return model;
     });
-  }, [workspaces, allSessions, t]);
+  }, [workspaces, allSessions, t, githubRepos, repoStats]);
 
   const compactStatusRank = (row: CompactRow): number =>
     row.archived ? 9 : row.info.tone === 'running' ? 0 : row.info.tone === 'attention' ? 1 : row.info.tone === 'done' ? 2 : 3;
@@ -334,6 +441,10 @@ export function ProjectBoard(props: ProjectBoardProps): unknown {
   const projectSortValue = (project: ProjectModel, key: string): string | number => {
     if (key === 'name') return project.name.toLowerCase();
     if (key === 'lastUpdated') return project.lastUpdated;
+    if (key === 'issues') return project.issues ?? -1;
+    if (key === 'prs') return project.prs ?? -1;
+    if (key === 'localVersion') return versionSortKey(project.localVersion);
+    if (key === 'latestVersion') return versionSortKey(project.latestVersion);
     if (key === 'presets') return project.presets ? project.presets.size : 0;
     return project.counts[key] !== undefined ? project.counts[key] : 0;
   };
@@ -453,16 +564,17 @@ export function ProjectBoard(props: ProjectBoardProps): unknown {
       t(info.labelKey)
     );
 
-  const th = (key: string, label: string, type: string, options?: { num?: boolean; sortable?: boolean }): unknown => {
+  const th = (key: string, label: string, type: string, options?: { num?: boolean; sortable?: boolean; hint?: string }): unknown => {
     const opts = options || {};
     const position = sorts.findIndex((entry) => entry.key === key);
     const active = position >= 0;
     const direction = active ? sorts[position].dir : null;
+    const title = opts.sortable === false ? opts.hint : opts.hint ? opts.hint + ' · ' + t('sort.hint') : t('sort.hint');
     return h(
       'th',
       {
         className: 'pbx-th' + (opts.sortable === false ? '' : ' sortable') + (active ? ' active' : '') + (opts.num ? ' num' : ''),
-        title: opts.sortable === false ? undefined : t('sort.hint'),
+        title: title,
         'aria-sort': opts.sortable === false ? undefined : active ? (direction === 'asc' ? 'ascending' : 'descending') : 'none',
         tabIndex: opts.sortable === false ? undefined : 0,
         onClick: opts.sortable === false ? undefined : (event: MouseEvent) => sortBy(key, Boolean(event.shiftKey)),
@@ -477,7 +589,7 @@ export function ProjectBoard(props: ProjectBoardProps): unknown {
       },
       h('span', { className: 'pbx-thType', 'aria-hidden': 'true' }, type || ''),
       h('span', { className: 'pbx-thLabel' }, label),
-      active ? h('span', { className: 'pbx-sortMark' }, (sorts.length > 1 ? String(position + 1) : '') + (direction === 'asc' ? '↑' : '↓')) : null
+      active ? h('span', { className: 'pbx-sortMark', 'aria-hidden': 'true' }, direction === 'asc' ? '↑' : '↓') : null
     );
   };
 
@@ -570,38 +682,117 @@ export function ProjectBoard(props: ProjectBoardProps): unknown {
   };
 
   const projectCols: ProjectColumn[] = PROJECT_COLUMNS.filter((def) => !config.projectColumns || (config.projectColumns as unknown as Record<string, boolean>)[def.key] !== false);
-  const projectCell = (project: ProjectModel, def: ProjectColumn): unknown => {
-    if (def.key === 'lastUpdated') return relTime(project.lastUpdated, t);
-    if (def.key === 'presets') return String(project.presets ? project.presets.size : 0);
-    const value = project.counts[def.key] ?? 0;
-    const style =
-      def.key === 'running'
-        ? { color: value > 0 ? 'var(--dsw-alias-brand-primary)' : undefined }
-        : def.key === 'attention'
-          ? { color: value > 0 ? '#f59e0b' : undefined }
-          : def.key === 'auto'
-            ? { color: value > 0 ? 'var(--dsw-alias-state-warn-primary)' : undefined }
-            : undefined;
-    return h('td', { className: 'pbx-num' + (def.key === 'total' ? ' pbx-strong' : ''), style: style }, String(value));
+  const cellRepoState = (project: ProjectModel): 'loading' | 'error' | null => {
+    // A mapped path with an empty owner/repo is not a real target: treat it as unconfigured
+    // (show "—") instead of leaving the cell stuck at "loading" forever.
+    if (!project.repo || !project.repo.owner || !project.repo.repo) return null;
+    const stats = project.repoStats;
+    if (!stats || stats.status === 'loading') return 'loading';
+    if (stats.status === 'error') return 'error';
+    return null;
   };
+  const repoErrorText = (code: string | undefined): string => {
+    if (code === 'repo-not-found') return t('col.errRepoNotFound');
+    if (code === 'token-invalid') return t('col.errTokenInvalid');
+    if (code === 'rate-limited') return t('col.errRateLimited');
+    return t('col.errGeneric', { code: code || '?' });
+  };
+  const projectCell = (project: ProjectModel, def: ProjectColumn): unknown => {
+    if (def.key === 'lastUpdated') {
+      const absolute = project.lastUpdated ? new Date(project.lastUpdated).toLocaleString() : '';
+      return h('td', { className: 'pbx-num pbx-time', title: absolute }, relTime(project.lastUpdated, t));
+    }
+    if (def.key === 'issues' || def.key === 'prs') {
+      const value = def.key === 'issues' ? project.issues : project.prs;
+      const state = cellRepoState(project);
+      if (state === 'loading') return h('td', { className: 'pbx-num pbx-na', 'aria-busy': true, title: t('col.loading') }, '…');
+      if (state === 'error') return h('td', { className: 'pbx-num pbx-na pbx-err', 'aria-label': repoErrorText(project.repoStats?.error), title: repoErrorText(project.repoStats?.error) }, '⚠');
+      if (value === undefined) {
+        return h('td', { className: 'pbx-num pbx-na', title: t('col.naHint') }, t('col.na'));
+      }
+      const cls = 'pbx-num' + (value > 0 ? ' pbx-numHot' : ' pbx-numZero');
+      return h('td', { className: cls }, String(value));
+    }
+    if (def.key === 'localVersion' || def.key === 'latestVersion') {
+      const value = def.key === 'localVersion' ? project.localVersion : project.latestVersion;
+      const state = cellRepoState(project);
+      if (state === 'loading') return h('td', { className: 'pbx-num pbx-ver pbx-na', 'aria-busy': true, title: t('col.loading') }, '…');
+      if (state === 'error') return h('td', { className: 'pbx-num pbx-ver pbx-na pbx-err', 'aria-label': repoErrorText(project.repoStats?.error), title: repoErrorText(project.repoStats?.error) }, '⚠');
+      if (!value) return h('td', { className: 'pbx-num pbx-ver pbx-na', title: t('col.naHint') }, t('col.na'));
+      const latest = project.latestVersion;
+      const lagging = def.key === 'localVersion' && !!latest && compareVersions(value, latest) < 0;
+      const cls = 'pbx-num pbx-ver' + (lagging ? ' pbx-verLag' : '');
+      const title = lagging ? t('col.localBehind', { local: value, latest: latest || '' }) : value;
+      return h('td', { className: cls, title: title }, h('span', null, value));
+    }
+    // `total` and any future numeric count column.
+    const value = project.counts[def.key] ?? 0;
+    const cls = 'pbx-num' + (def.key === 'total' ? ' pbx-strong' : '');
+    return h('td', { className: cls }, String(value));
+  };
+  const renderInlineSessionRow = (row: SessionRow): unknown =>
+    h(
+      'tr',
+      {
+        key: 's-' + row.id,
+        className: 'pbx-tr pbx-tr-inline' + (row.running ? ' pbx-tr-live' : '') + (row.current ? ' pbx-tr-current' : ''),
+        onClick: () => open(row.id),
+        tabIndex: 0,
+        onKeyDown: (e: KeyboardEvent) => {
+          if (e.key === 'Enter' || e.key === ' ') {
+            e.preventDefault();
+            open(row.id);
+          }
+        }
+      },
+      h(
+        'td',
+        { colSpan: 1 + projectCols.length, className: 'pbx-inlineSession' },
+        h(
+          'div',
+          { className: 'pbx-inlineRow' },
+          row.info.tone === 'running' ? h(RunRing, { size: 9 }) : h('span', { className: 'pbx-rdot', 'data-tone': row.info.tone }),
+          h('span', { className: 'pbx-titleText' }, row.title),
+          row.current ? h('span', { className: 'pbx-curTag' }, t('card.current')) : null,
+          h('span', { className: 'pbx-inlineTime' }, relTime(row.updatedAt, t)),
+          h(
+            'button',
+            {
+              type: 'button',
+              className: 'pbx-openBtn',
+              title: t('open'),
+              'aria-label': t('open'),
+              onClick: (e: Event) => {
+                e.stopPropagation();
+                open(row.id);
+              }
+            },
+            h(Icon, { name: 'arrow', size: 14 })
+          )
+        )
+      )
+    );
+
   const renderProjectRow = (project: ProjectModel): unknown => {
     const spec = specOf(project.workspaceId);
     const isEditing = editingProject === project.workspaceId;
-    return h(
+    const isExpanded = expandedProject === project.workspaceId;
+    const projectRow = h(
       'tr',
       {
         key: project.workspaceId,
-        className: 'pbx-tr',
+        className: 'pbx-tr' + (isExpanded ? ' pbx-tr-expanded' : '') + (projectFilter === project.workspaceId ? ' pbx-tr-selected' : ''),
+        'aria-current': projectFilter === project.workspaceId ? 'true' : undefined,
+        'aria-selected': projectFilter === project.workspaceId ? 'true' : 'false',
+        'aria-expanded': isExpanded ? 'true' : 'false',
         tabIndex: 0,
         onClick: () => {
-          setProjectFilter(project.workspaceId);
-          setView('sessions');
-          setStatusFilter('all');
+          setExpandedProject(isExpanded ? null : project.workspaceId);
         },
         onKeyDown: (e: KeyboardEvent) => {
-          if (e.key === 'Enter') {
-            setProjectFilter(project.workspaceId);
-            setView('sessions');
+          if (e.key === 'Enter' || e.key === ' ') {
+            e.preventDefault();
+            setExpandedProject(isExpanded ? null : project.workspaceId);
           }
         }
       },
@@ -611,6 +802,7 @@ export function ProjectBoard(props: ProjectBoardProps): unknown {
         h(
           'div',
           { className: 'pbx-titleCell' },
+          h('span', { className: 'pbx-chevron' + (isExpanded ? ' open' : '') }, h(Icon, { name: 'chevron', size: 13 })),
           h(
             'span',
             { className: 'pbx-iconField', style: { position: 'relative' } },
@@ -651,6 +843,12 @@ export function ProjectBoard(props: ProjectBoardProps): unknown {
       ),
       projectCols.map((def) => projectCell(project, def))
     );
+    if (!isExpanded) return projectRow;
+    const projectSessions = allSessions
+      .filter((s) => s.workspaceId === project.workspaceId)
+      .sort((a, b) => b.updatedAt - a.updatedAt);
+    if (projectSessions.length === 0) return projectRow;
+    return [projectRow, ...projectSessions.map(renderInlineSessionRow)];
   };
 
   const header = h(
@@ -671,7 +869,7 @@ export function ProjectBoard(props: ProjectBoardProps): unknown {
         h('span', { className: 'pbx-total' }, h('strong', null, String(totals.workspaces)), t('stat.workspaces')),
         h('span', { className: 'pbx-total' }, h('strong', null, String(totals.sessions)), t('stat.sessions')),
         totals.attention > 0
-          ? h('span', { className: 'pbx-total' }, h('strong', { style: { color: '#f59e0b' } }, String(totals.attention)), t('stat.attention'))
+          ? h('span', { className: 'pbx-total' }, h('strong', { style: { color: 'var(--dsw-alias-state-warn-primary)' } }, String(totals.attention)), t('stat.attention'))
           : null,
         totals.running > 0
           ? h(
@@ -710,7 +908,7 @@ export function ProjectBoard(props: ProjectBoardProps): unknown {
           role: 'tab',
           'aria-selected': view === 'sessions' ? 'true' : 'false',
           className: 'pbx-tab' + (view === 'sessions' ? ' active' : ''),
-          onClick: () => setView('sessions')
+          onClick: () => { setView('sessions'); setExpandedProject(null); }
         },
         t('view.sessions'),
         h('span', { className: 'pbx-tabCount' }, String(allSessions.length))
@@ -824,14 +1022,14 @@ export function ProjectBoard(props: ProjectBoardProps): unknown {
         h(
           'thead',
           null,
-          h('tr', null, th('name', t('col.project'), 'Aa'), projectCols.map((def) => th(def.key, t(def.labelKey), def.type, { num: true })))
+          h('tr', null, th('name', t('col.project'), 'Aa', { hint: t('col.hint.name') }), projectCols.map((def) => th(def.key, t(def.labelKey), def.type, { num: true, hint: t(def.hintKey) })))
         ),
         h(
           'tbody',
           null,
           filteredProjects.length === 0
             ? h('tr', null, h('td', { colSpan: 1 + projectCols.length, className: 'pbx-emptyCell' }, t('empty.filtered')))
-            : filteredProjects.map(renderProjectRow)
+            : filteredProjects.map(renderProjectRow).flat()
         )
       ),
       h('div', { className: 'pbx-dbFoot' }, t('count.rows', { n: filteredProjects.length }))
@@ -958,7 +1156,7 @@ export function ProjectBoard(props: ProjectBoardProps): unknown {
                     'span',
                     { className: 'pbx-pcardStats' },
                     statChip(t('stat.running'), project.counts.running, 'var(--dsw-alias-brand-primary)'),
-                    statChip(t('stat.attention'), project.counts.attention, '#f59e0b'),
+                    statChip(t('stat.attention'), project.counts.attention, 'var(--dsw-alias-state-warn-primary)'),
                     statChip(t('status.done'), project.counts.done, 'var(--dsw-alias-state-success-primary)'),
                     statChip(t('stat.auto'), project.counts.auto, 'var(--dsw-alias-state-warn-primary)')
                   )

@@ -769,14 +769,28 @@ export function FloatingStatus(props: FloatingStatusProps): unknown {
     };
     window.addEventListener('resize', schedule);
     let observer: ResizeObserver | null = null;
+    let mutationObserver: MutationObserver | null = null;
     const column = document.querySelector('[class*="_centerCol"]');
     if (column && typeof ResizeObserver !== 'undefined') {
       observer = new ResizeObserver(schedule);
       observer.observe(column);
     }
+    /* A session switch replaces the conversation scroller inside the center column.
+       The ResizeObserver only fires on column size changes, so a content swap that
+       keeps the same column width leaves the new scroller unpadded — the HUD then
+       overlaps the conversation. Watch childList too and apply padding directly in
+       the callback (a microtask, runs before the next paint) so there is no 1-frame
+       flash where the new scroller has no padding. apply() is idempotent, so calling
+       it on every mutation is safe; ResizeObserver still uses schedule() (rAF) for
+       column-size changes which are less urgent. */
+    if (column && typeof MutationObserver !== 'undefined') {
+      mutationObserver = new MutationObserver((): void => apply());
+      mutationObserver.observe(column, { childList: true, subtree: true });
+    }
     return () => {
       window.removeEventListener('resize', schedule);
       if (observer) observer.disconnect();
+      if (mutationObserver) mutationObserver.disconnect();
       if (frame) cancelAnimationFrame(frame);
       clear();
     };

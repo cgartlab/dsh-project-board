@@ -20,7 +20,7 @@ import type { PaletteSnapshot, PaletteStore } from './header';
 import type { SessionListSnapshot, SessionStatusMap, WorkspaceSnapshot } from './board';
 
 /** Native keydown events carrying the plugin's own "this press was handled" marker. */
-type PluginKeyEvent = KeyboardEvent & { pbxSidebarActed?: boolean };
+type PluginKeyEvent = KeyboardEvent & { pbxSidebarActed?: boolean; pbxBoardActed?: boolean };
 
 export interface FocusStore {
   set(patch: { id?: string | null; at?: number }): void;
@@ -297,8 +297,20 @@ export function Palette(props: PaletteProps): unknown {
         event.stopPropagation();
         stopHoldScroll(false);
         if (paletteOpenRef.current && palette) palette.set({ open: false });
+        /* A second live listener (a leaked instance after a client-plugin hot reload) would
+           toggle the same panel twice and cancel itself out. The listener that really acted
+           owns the press. */
+        if (event.pbxBoardActed === true) {
+          logEvent('info', 'shortcut', 'board:duplicate', {});
+          return;
+        }
         if (typeof props.toggleBoard === 'function') {
           props.toggleBoard(isSidebarBoard ? 'narrow' : isPanelHalf ? 'half' : 'full');
+        }
+        try {
+          event.pbxBoardActed = true;
+        } catch (error) {
+          /* frozen event */
         }
         return;
       }

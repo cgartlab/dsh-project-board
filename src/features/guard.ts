@@ -54,9 +54,10 @@ export function BoardSessionGuard(props: BoardSessionGuardProps): unknown {
     const previous = stateRef.current;
     if (previous.id === currentId) return undefined;
     const want = previous.id === null ? api.boardStateNow() : previous.state;
-    stateRef.current = { id: currentId, state: want, settleUntil: Date.now() + 1600 };
+    stateRef.current = { id: currentId, state: want, settleUntil: Date.now() + 3000 };
     if (previous.id === null) return undefined;
     let attempts = 0;
+    let enforceTimer = 0;
     const enforce = (): void => {
       const live = propsRef.current;
       if (typeof live.intentRecent === 'function' && live.intentRecent()) {
@@ -68,12 +69,12 @@ export function BoardSessionGuard(props: BoardSessionGuardProps): unknown {
         return;
       }
       attempts += 1;
-      if (attempts === 1) logEvent('debug', 'board', 'restore after switch', want as unknown as Record<string, unknown>);
+      if (attempts === 1) logEvent('info', 'board', 'restore after switch', want as unknown as Record<string, unknown>);
       live.setBoardState(want);
-      if (attempts < 10) window.setTimeout(enforce, 140);
+      if (attempts < 20) enforceTimer = window.setTimeout(enforce, 120);
     };
-    const timer = window.setTimeout(enforce, 60);
-    return () => window.clearTimeout(timer);
+    enforceTimer = window.setTimeout(enforce, 60);
+    return () => window.clearTimeout(enforceTimer);
   }, [currentId]);
 
   /* Refresh the remembered state from real user toggles while the session is stable. */

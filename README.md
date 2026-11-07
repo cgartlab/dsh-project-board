@@ -14,7 +14,10 @@ reading, and desktop-class task notifications.
 
 - **Project board** — session and project database views with search, status/type/project
   filters, grouping, multi-column sorting, archive-aware rows, and per-project color and
-  icon. Opens at narrow (380 px), medium (50 vw) or native fullscreen; the same key closes it.
+  icon. The project view has 6 attribute columns (session count / Open Issue / Open PR /
+  local version / latest release / last activity). **Click a project row to expand its
+  session list inline below** (accordion-style, no page flip). Opens at narrow (380 px),
+  medium (50 vw) or native fullscreen; the same key closes it.
   The pane's open state and size belong to the workspace, not to each conversation:
   switching sessions only switches the conversation and never re-opens, closes or resizes
   the board.
@@ -38,6 +41,7 @@ reading, and desktop-class task notifications.
   a built-in DSH command is rejected inline, and saved conflicts are reported at startup.
 - **Logs & diagnostics** — optional local logs (error / warn / info / debug) with a bounded ring buffer, copy and clear actions in settings, startup checks for shortcut collisions with built-in commands, and captured window errors and rejected promises.
 - **Archive from the HUD** — hovering a session row swaps its timer for an archive button; the search palette can include archived sessions (marked "Archived"), controlled by a setting that is on by default.
+- **GitHub data source** — map each project to its GitHub repo (owner/repo) and a local version in **Settings → GitHub 数据源**; the board's Open Issue / Open PR / latest-release columns then show live numbers read straight from api.github.com (a Personal Access Token is optional for public repos). Unmapped projects keep a "—" placeholder.
 
 ## Keyboard shortcuts
 

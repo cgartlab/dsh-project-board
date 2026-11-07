@@ -70,19 +70,25 @@ export interface BoardSettings {
   enabled: boolean;
   wideThreshold: number;
   defaultView: string;
-  /** Set by the settings migration; older builds stored a board view without it. */
-  boardProjVersion?: number;
 }
 
 export interface ProjectColumnsSettings {
   total: boolean;
-  running: boolean;
-  attention: boolean;
-  done: boolean;
-  idle: boolean;
-  auto: boolean;
+  issues: boolean;
+  prs: boolean;
+  localVersion: boolean;
+  latestVersion: boolean;
   lastUpdated: boolean;
-  presets: boolean;
+}
+
+/** GitHub repository metadata for one project. Keyed by the workspace path in `Settings.githubRepos`. */
+export interface GithubRepoSetting {
+  /** GitHub owner, e.g. `cgartlab`. */
+  owner: string;
+  /** Repository name, e.g. `dsh-tac`. */
+  repo: string;
+  /** Local package version the user knows the checkout is on; optional. */
+  localVersion?: string;
 }
 
 export interface Settings {
@@ -95,12 +101,20 @@ export interface Settings {
   headerButtonsVersion: number;
   /** Migration marker for the project-first board view. */
   boardProjVersion?: number;
+  /** Migration marker for the project-column visibility set (column keys changed over time). */
+  projectColumnsVersion?: number;
+  /** Migration marker for the GitHub data source settings. */
+  githubVersion?: number;
   headerButtons: Record<string, HeaderButtonSetting>;
   hud: HudSettings;
   notify: NotifySettings;
   log: LogConfig;
   board: BoardSettings;
   projectColumns: ProjectColumnsSettings;
+  /** GitHub Personal Access Token (stored locally, never sent anywhere but api.github.com). */
+  githubToken?: string;
+  /** Per-workspace GitHub repository mapping, keyed by workspace path. */
+  githubRepos?: Record<string, GithubRepoSetting>;
 }
 
 /** Minimal observable store used for the plugin's own UI state. */

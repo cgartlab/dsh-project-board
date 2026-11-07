@@ -26,17 +26,40 @@ export function mergeSettings(base: Settings, raw: unknown): Settings {
         out.headerButtons[id] = Object.assign({}, DEFAULT_SETTINGS.headerButtons[id], buttons[id] || {});
       }
     }
-    const migratingButtons = stored.headerButtonsVersion !== 3;
-    if (migratingButtons) {
-      out.headerButtons = cloneJson(DEFAULT_SETTINGS.headerButtons);
+    if (stored.headerButtonsVersion !== 3) {
+      // Keep the per-button merge above (user side/hidden/order survive), only apply the
+      // one-off legacy "capsule hidden" signal on top. Do NOT replace the whole group with
+      // the defaults here: that would wipe every user tweak on upgrade to version 3.
       const header = stored.header as { capsule?: boolean } | undefined;
       if (header && header.capsule === false) out.headerButtons.capsule.hidden = true;
     }
     if (stored.hintsVersion !== 1) out.hints = cloneJson(DEFAULT_SETTINGS.hints);
     if (stored.boardProjVersion !== 1) {
       out.board.defaultView = 'projects';
-      out.board.boardProjVersion = 1;
+      out.boardProjVersion = 1;
     }
+    // Column visibility keys change as columns are added/removed. Older builds stored
+    // keys (running/attention/done/idle/auto/presets) that no longer exist; keep only
+    // the current columns so the settings page and project table never leak dead keys.
+    const columnKeys = Object.keys(DEFAULT_SETTINGS.projectColumns);
+    for (const key of Object.keys(out.projectColumns)) {
+      if (!columnKeys.includes(key)) delete (out.projectColumns as unknown as Record<string, boolean>)[key];
+    }
+    if (stored.projectColumnsVersion !== 1) {
+      // First cutover to the 6-column set: any key that was never stored defaults to the
+      // shipped value (the new repo-meta columns are on by default), so a user's stored
+      // "columns" object only overrides keys it actually wrote.
+      out.projectColumnsVersion = 1;
+    }
+    // GitHub data source: the token is a sensitive scalar (copy as-is), and githubRepos is
+    // the user's authoritative mapping — replace it wholesale so a deleted path is actually
+    // removed (a shallow Object.assign would leave stale entries). githubVersion is only a
+    // one-time migration marker.
+    if (typeof stored.githubToken === 'string') out.githubToken = stored.githubToken;
+    if (stored.githubRepos && typeof stored.githubRepos === 'object') {
+      out.githubRepos = cloneJson(stored.githubRepos as Record<string, unknown>) as Settings['githubRepos'];
+    }
+    if (stored.githubVersion !== 1) out.githubVersion = 1;
     for (const key of Object.keys(DEFAULT_SETTINGS.shortcuts) as (keyof ShortcutMap)[]) {
       if (!comboHasModifier(out.shortcuts[key])) out.shortcuts[key] = DEFAULT_SETTINGS.shortcuts[key];
     }
@@ -77,7 +100,7 @@ export function loadSettings(): Settings {
   if (
     raw &&
     typeof raw === 'object' &&
-    (raw.headerButtonsVersion !== 3 || raw.hintsVersion !== 1 || raw.shortcutsVersion !== 1 || raw.boardProjVersion !== 1)
+    (raw.headerButtonsVersion !== 3 || raw.hintsVersion !== 1 || raw.shortcutsVersion !== 1 || raw.boardProjVersion !== 1 || raw.projectColumnsVersion !== 1 || raw.githubVersion !== 1)
   ) {
     try {
       persistSettings(merged);
