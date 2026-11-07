@@ -56,24 +56,41 @@ export function BoardSessionGuard(props: BoardSessionGuardProps): unknown {
     const want = previous.id === null ? api.boardStateNow() : previous.state;
     stateRef.current = { id: currentId, state: want, settleUntil: Date.now() + 3000 };
     if (previous.id === null) return undefined;
-    let attempts = 0;
     let enforceTimer = 0;
+    /* Restoring may only toggle the pane ONCE. Every extra attempt is a second toggle, and
+       the host's own per-session state can move the pane between our probe and our action —
+       that pair of toggles is exactly the visible "bouncing" on session switches. One
+       action, one confirmation probe, then accept whatever the host decided. */
+    let acted = false;
     const enforce = (): void => {
       const live = propsRef.current;
       if (typeof live.intentRecent === 'function' && live.intentRecent()) {
         stateRef.current = { id: currentId, state: live.boardStateNow(), settleUntil: Date.now() + 500 };
         return;
       }
-      if (sameState(live.boardStateNow(), want)) {
+      const observed = live.boardStateNow();
+      if (sameState(observed, want)) {
         stateRef.current = { id: currentId, state: want, settleUntil: Date.now() + 500 };
         return;
       }
-      attempts += 1;
-      if (attempts === 1) logEvent('info', 'board', 'restore after switch', want as unknown as Record<string, unknown>);
+      if (acted) {
+        /* We already moved it once and the host overrode us. Chasing it further is the
+           bounce; keep the observed state so the next real toggle restarts from truth. */
+        logEvent('info', 'board', 'restore kept host state', {
+          want: want as unknown as Record<string, unknown>,
+          observed: observed as unknown as Record<string, unknown>
+        });
+        stateRef.current = { id: currentId, state: observed, settleUntil: Date.now() + 500 };
+        return;
+      }
+      acted = true;
+      logEvent('info', 'board', 'restore after switch', want as unknown as Record<string, unknown>);
       live.setBoardState(want);
-      if (attempts < 20) enforceTimer = window.setTimeout(enforce, 120);
+      /* One confirmation probe far enough out for the host's own transition to settle. */
+      enforceTimer = window.setTimeout(enforce, 260);
     };
-    enforceTimer = window.setTimeout(enforce, 60);
+    /* Wait for the host to finish its own session-switch work before touching the pane. */
+    enforceTimer = window.setTimeout(enforce, 320);
     return () => window.clearTimeout(enforceTimer);
   }, [currentId]);
 

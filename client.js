@@ -6400,24 +6400,33 @@
       const want = previous.id === null ? api.boardStateNow() : previous.state;
       stateRef.current = { id: currentId, state: want, settleUntil: Date.now() + 3e3 };
       if (previous.id === null) return void 0;
-      let attempts = 0;
       let enforceTimer = 0;
+      let acted = false;
       const enforce = () => {
         const live = propsRef.current;
         if (typeof live.intentRecent === "function" && live.intentRecent()) {
           stateRef.current = { id: currentId, state: live.boardStateNow(), settleUntil: Date.now() + 500 };
           return;
         }
-        if (sameState(live.boardStateNow(), want)) {
+        const observed = live.boardStateNow();
+        if (sameState(observed, want)) {
           stateRef.current = { id: currentId, state: want, settleUntil: Date.now() + 500 };
           return;
         }
-        attempts += 1;
-        if (attempts === 1) logEvent("info", "board", "restore after switch", want);
+        if (acted) {
+          logEvent("info", "board", "restore kept host state", {
+            want,
+            observed
+          });
+          stateRef.current = { id: currentId, state: observed, settleUntil: Date.now() + 500 };
+          return;
+        }
+        acted = true;
+        logEvent("info", "board", "restore after switch", want);
         live.setBoardState(want);
-        if (attempts < 20) enforceTimer = window.setTimeout(enforce, 120);
+        enforceTimer = window.setTimeout(enforce, 260);
       };
-      enforceTimer = window.setTimeout(enforce, 60);
+      enforceTimer = window.setTimeout(enforce, 320);
       return () => window.clearTimeout(enforceTimer);
     }, [currentId]);
     useEffect(() => {
@@ -6623,7 +6632,16 @@
     };
     const boardPanelVisible = () => {
       try {
-        return Boolean(document.querySelector('[class*="_panel"][data-sidebar-right-open]'));
+        const panel = document.querySelector('[class*="_panel"][data-sidebar-right-open]');
+        let attrOpen = false;
+        if (panel) {
+          const value = panel.getAttribute("data-sidebar-right-open");
+          if (value !== null) {
+            const normalized = value.trim().toLowerCase();
+            attrOpen = normalized !== "false" && normalized !== "0" && normalized !== "off";
+          }
+        }
+        return attrOpen || rightbarWidthNow() > 0;
       } catch (error) {
         return false;
       }

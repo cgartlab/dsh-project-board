@@ -256,7 +256,23 @@ export function apply(ctx: HostContext): void {
   };
   const boardPanelVisible = (): boolean => {
     try {
-      return Boolean(document.querySelector('[class*="_panel"][data-sidebar-right-open]'));
+      const panel = document.querySelector('[class*="_panel"][data-sidebar-right-open]');
+      let attrOpen = false;
+      if (panel) {
+        const value = panel.getAttribute('data-sidebar-right-open');
+        if (value !== null) {
+          /* Absence means closed; the common truthy encodings mean expanded. Only an
+             explicit falsy value should read as closed — a bare `data-…` (empty string)
+             is how React renders a true boolean attribute. */
+          const normalized = value.trim().toLowerCase();
+          attrOpen = normalized !== 'false' && normalized !== '0' && normalized !== 'off';
+        }
+      }
+      /* The attribute is the declaration; the pane's real width is the ground truth. OR
+         (not AND) on purpose: during the host's open/close animation one of the two lags,
+         and treating that lag as "closed" is what made the guard toggle a second time and
+         bounce the pane. A pane that is merely animating still counts as visible. */
+      return attrOpen || rightbarWidthNow() > 0;
     } catch (error) {
       return false;
     }
