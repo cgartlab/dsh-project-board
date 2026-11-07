@@ -62,6 +62,10 @@
 - 失误：设置页 `readSection` 直接返回 `config[section]`——旧版本存的设置没有新加的 section 键，`values[key]` 于是在渲染时抛错，整页打不开 → 规则：设置页读 section 必须回退到 `DEFAULT_SETTINGS[section]`，写入时也要以默认值为基底再合并；新增 section 时先确认旧配置能渲染（0.4.0）
 - 失误：给宿主聊天区做"滚动自动加载"时，最初按 `scrollHeight > clientHeight` + 最小高度筛滚动容器，实测不触发——宿主的对话用限高组拼装，分页状态的容器 `scrollHeight` 可能等于 `clientHeight` → 规则：判定"读者滚到顶"只依赖 `scrollTop <= 阈值`，不要用可滚动高度/容器高度做前置筛选；wheel 滚动可能以 document 为目标，要先用 `document.scrollingElement` 归一（0.4.0）
 - 失误：想复用宿主的分页能力时，第一反应是找内部 controller 的 `loadOlder()` → 规则：优先**点宿主自己的控件**（文本匹配多语言文案），这样加载指示、错误提示、滚动锚点补偿全都由宿主负责；只有在找不到控件时才考虑公开 API（`ctx.sessions.binding(id).session.loadOlder()`）（0.4.0）
+- 失误：宿主内部 DOM 选择器（`_frame`/`_centerCol`/`_panel`/`_rightbarCol`/`data-sidebar-*`）散落在 `apply.ts`、`header.ts`、`hud.ts`，一处宿主改名要改三四个文件，每个点还各自 try/catch → 规则：**所有宿主 DOM 探测只允许出现在 `src/core/dom.ts`**，统一回落到安全默认值（`false`/`0`/`null`）；`features/chat-dom.ts` 例外（它读官方 `data-slot` 契约）。官方文档明确不鼓励靠宿主 DOM 做布局，新需求先找 slot props 或服务（0.4.0）
+- 失误：`features/board.ts` 逐渐变成全插件的类型枢纽，guard/header/hud/notifications/palette/settings 都从它 import 宿主快照类型，`settings.ts` 还跨 feature 借类型 → 规则：宿主快照形状放 `src/core/snapshot.ts`，feature 之间不互相借类型；「最小契约」（如 `SessionSummaryLike`）留在用它做判定的那个模块（0.4.0）
+- 失误：延时补做（等宿主动画结束再设面板宽度、再退出全屏）用裸 `window.setTimeout`，插件卸载后仍会执行，于是可能在"已经没有这个插件"的会话里改面板状态 → 规则：会把副作用施加到宿主/全局的定时器必须登记到统一集合，由一个 `ctx.effect` 在卸载时全部 `clearTimeout`；「toast 自动消失」这类只操作插件自身 store 的定时器反而**不该**清（清了会留下僵尸 toast）（0.4.0）
+- 失误：可选服务 `shortcuts`/`workspaces` 直接塞进 `INJECT` 会让缺少该服务的 profile **整个插件不激活**（看板/HUD 一起失效），而不声明又违反官方「optional services 放 inject」的建议 → 规则：INJECT 只放"没有它插件就没意义"的服务；纯增强型可选服务用 `optionalService()` 每次使用时探测，缺了只降级该功能，并把理由写在 INJECT 旁边（0.4.0）
 
 ## React 组件纪律
 
